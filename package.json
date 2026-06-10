@@ -62,7 +62,7 @@
     "files": [
       "dist/**/*",
       "src-electron/**/*",
-      "public/icon.*"
+      "public/**/*"
     ],
     "publish": {
       "provider": "github",

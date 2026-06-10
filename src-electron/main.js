@@ -32,7 +32,13 @@ function createWindow() {
   if (process.env.NODE_ENV === 'development') {
     win.loadURL('http://localhost:5173')
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'))
+    const indexPath = path.join(__dirname, '../dist/index.html')
+    win.loadFile(indexPath)
+
+    win.webContents.on('did-fail-load', (event, code, desc) => {
+      log.error('Failed to load:', code, desc)
+      setTimeout(() => win.loadFile(indexPath), 1000)
+    })
   }
 
   // ── IPC handlers ────────────────────────────────────────────────────────────
@@ -45,9 +51,13 @@ function createWindow() {
   // ── Auto-update events → renderer ───────────────────────────────────────────
   if (process.env.NODE_ENV !== 'development') {
     setTimeout(() => {
-      autoUpdater.checkForUpdates().catch(err => {
-        log.error('Update check failed:', err)
-      })
+      try {
+        autoUpdater.checkForUpdates().catch(err => {
+          log.info('Update check failed silently:', err.message)
+        })
+      } catch (e) {
+        log.info('Update check failed silently:', e.message)
+      }
     }, 3000)
   }
 
@@ -79,7 +89,18 @@ function createWindow() {
 
   autoUpdater.on('error', (err) => {
     log.error('Auto-updater error:', err)
-    win.webContents.send('update-status', { status: 'error', message: err.message })
+    const msg = err.message || ''
+    if (
+      msg.includes('No releases') ||
+      msg.includes('404') ||
+      msg.includes('Cannot find') ||
+      msg.includes('HttpError') ||
+      msg.includes('net::')
+    ) {
+      log.info('No hay releases disponibles aún — ignorando')
+      return
+    }
+    win.webContents.send('update-status', { status: 'error', message: 'Error de actualización' })
   })
 
   return win

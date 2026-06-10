@@ -1,17 +1,17 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, net } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const log = require('electron-log')
 const path = require('path')
 
-// ── Logging ───────────────────────────────────────────────────────────────────
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true } },
+])
+
 autoUpdater.logger = log
 autoUpdater.logger.transports.file.level = 'info'
-
-// ── Auto-update settings ──────────────────────────────────────────────────────
 autoUpdater.autoDownload = true
 autoUpdater.autoInstallOnAppQuit = true
 
-// ── Window ────────────────────────────────────────────────────────────────────
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
@@ -32,23 +32,16 @@ function createWindow() {
   if (process.env.NODE_ENV === 'development') {
     win.loadURL('http://localhost:5173')
   } else {
-    const indexPath = path.join(__dirname, '../dist/index.html')
-    win.loadFile(indexPath)
-
+    win.loadURL('app://localhost/index.html')
     win.webContents.on('did-fail-load', (event, code, desc) => {
       log.error('Failed to load:', code, desc)
-      setTimeout(() => win.loadFile(indexPath), 1000)
+      setTimeout(() => win.loadURL('app://localhost/index.html'), 1000)
     })
   }
 
-  // ── IPC handlers ────────────────────────────────────────────────────────────
   ipcMain.handle('get-version', () => app.getVersion())
+  ipcMain.on('install-update', () => { autoUpdater.quitAndInstall() })
 
-  ipcMain.on('install-update', () => {
-    autoUpdater.quitAndInstall()
-  })
-
-  // ── Auto-update events → renderer ───────────────────────────────────────────
   if (process.env.NODE_ENV !== 'development') {
     setTimeout(() => {
       try {
@@ -64,15 +57,12 @@ function createWindow() {
   autoUpdater.on('checking-for-update', () => {
     win.webContents.send('update-status', { status: 'checking' })
   })
-
   autoUpdater.on('update-available', (info) => {
     win.webContents.send('update-status', { status: 'available', version: info.version })
   })
-
   autoUpdater.on('update-not-available', () => {
     win.webContents.send('update-status', { status: 'up-to-date' })
   })
-
   autoUpdater.on('download-progress', (progress) => {
     win.setProgressBar(progress.percent / 100)
     win.webContents.send('update-status', {
@@ -81,12 +71,10 @@ function createWindow() {
       speed: progress.bytesPerSecond,
     })
   })
-
   autoUpdater.on('update-downloaded', () => {
     win.setProgressBar(-1)
     win.webContents.send('update-status', { status: 'downloaded' })
   })
-
   autoUpdater.on('error', (err) => {
     log.error('Auto-updater error:', err)
     const msg = err.message || ''
@@ -95,19 +83,27 @@ function createWindow() {
       msg.includes('404') ||
       msg.includes('Cannot find') ||
       msg.includes('HttpError') ||
-      msg.includes('net::')
+      msg.includes('net::') ||
+      msg.includes('ENOTFOUND') ||
+      msg.includes('ECONNREFUSED')
     ) {
-      log.info('No hay releases disponibles aún — ignorando')
+      log.info('No hay releases disponibles aun — ignorando')
       return
     }
-    win.webContents.send('update-status', { status: 'error', message: 'Error de actualización' })
+    win.webContents.send('update-status', { status: 'error', message: 'Error de actualizacion' })
   })
 
   return win
 }
 
-// ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  protocol.handle('app', (request) => {
+    const urlPath = request.url.slice('app://localhost/'.length)
+    const decoded = decodeURIComponent(urlPath || 'index.html')
+    const filePath = path.join(__dirname, '..', 'dist', decoded)
+    return net.fetch(`file:///${filePath.replace(/\\/g, '/')}`)
+  })
+
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

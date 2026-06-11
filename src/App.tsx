@@ -4,6 +4,7 @@ import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import Sidebar from './components/Sidebar';
 import ProtectedRoute from './components/ProtectedRoute';
+import SplashScreen from './components/SplashScreen';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import HomePage from './pages/HomePage';
@@ -27,7 +28,7 @@ import { UpdateNotification } from './components/UpdateNotification';
 function AppSpinner() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#003DA5]">
-      <div className="text-white font-bold text-3xl tracking-widest mb-1">ELARED</div>
+      <div className="text-white font-bold text-3xl tracking-widest mb-1">EFICIENCIA</div>
       <div className="text-blue-200 text-sm mb-8">Sistema de Reportes</div>
       <div className="w-9 h-9 border-4 border-white border-t-transparent rounded-full animate-spin" />
     </div>
@@ -117,6 +118,7 @@ function AppLayout() {
 export default function App() {
   const [checking, setChecking] = useState(true);
   const [hasAdmin, setHasAdmin] = useState(false);
+  const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('splash_visto'));
 
   useEffect(() => {
     Promise.all([
@@ -130,10 +132,18 @@ export default function App() {
       .catch(() => setChecking(false));
   }, []);
 
-  if (checking) return <AppSpinner />;
+  useEffect(() => {
+    if (!showSplash) return;
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+      sessionStorage.setItem('splash_visto', '1');
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [showSplash]);
 
-  return (
-    <>
+  const mainContent = checking ? (
+    <AppSpinner />
+  ) : (
     <BrowserRouter>
       <Routes>
         <Route
@@ -162,7 +172,15 @@ export default function App() {
         />
       </Routes>
     </BrowserRouter>
-    <UpdateNotification />
+  );
+
+  return (
+    <>
+      {showSplash && <SplashScreen />}
+      <div style={{ opacity: showSplash ? 0 : 1, transition: 'opacity 0.4s ease' }}>
+        {mainContent}
+        <UpdateNotification />
+      </div>
     </>
   );
 }

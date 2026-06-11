@@ -24,7 +24,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
     icon: path.join(__dirname, '../public/icon.png'),
-    title: 'Elared · Sistema de Reportes',
+    title: 'Eficiencia · Sistema de Reportes',
     autoHideMenuBar: true,
     backgroundColor: '#003DA5',
   })

@@ -2,6 +2,7 @@ interface ElectronAPI {
   onUpdateStatus: (callback: (data: UpdateStatusData) => void) => void
   installUpdate: () => void
   getVersion: () => Promise<string>
+  checkForUpdates: () => void
 }
 
 interface UpdateStatusData {

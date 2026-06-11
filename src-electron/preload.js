@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('install-update'),
   getVersion: () =>
     ipcRenderer.invoke('get-version'),
+  checkForUpdates: () =>
+    ipcRenderer.send('check-updates'),
 })

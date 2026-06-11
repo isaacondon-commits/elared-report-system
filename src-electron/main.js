@@ -8,9 +8,23 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 autoUpdater.logger = log
-autoUpdater.logger.transports.file.level = 'info'
+autoUpdater.logger.transports.file.level = 'debug'
 autoUpdater.autoDownload = true
 autoUpdater.autoInstallOnAppQuit = true
+autoUpdater.allowDowngrade = false
+autoUpdater.allowPrerelease = false
+
+log.info('App starting. Version:', app.getVersion())
+
+function doCheckForUpdates() {
+  try {
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      log.info('Update check failed silently:', err.message)
+    })
+  } catch (e) {
+    log.info('Update check exception silently:', e.message)
+  }
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -41,26 +55,21 @@ function createWindow() {
 
   ipcMain.handle('get-version', () => app.getVersion())
   ipcMain.on('install-update', () => { autoUpdater.quitAndInstall() })
-
-  if (process.env.NODE_ENV !== 'development') {
-    setTimeout(() => {
-      try {
-        autoUpdater.checkForUpdates().catch(err => {
-          log.info('Update check failed silently:', err.message)
-        })
-      } catch (e) {
-        log.info('Update check failed silently:', e.message)
-      }
-    }, 3000)
-  }
+  ipcMain.on('check-updates', () => {
+    log.info('Manual update check requested')
+    doCheckForUpdates()
+  })
 
   autoUpdater.on('checking-for-update', () => {
+    log.info('Checking for update...')
     win.webContents.send('update-status', { status: 'checking' })
   })
   autoUpdater.on('update-available', (info) => {
+    log.info('Update available:', info.version)
     win.webContents.send('update-status', { status: 'available', version: info.version })
   })
-  autoUpdater.on('update-not-available', () => {
+  autoUpdater.on('update-not-available', (info) => {
+    log.info('Update not available. Current version:', info.version)
     win.webContents.send('update-status', { status: 'up-to-date' })
   })
   autoUpdater.on('download-progress', (progress) => {
@@ -71,7 +80,8 @@ function createWindow() {
       speed: progress.bytesPerSecond,
     })
   })
-  autoUpdater.on('update-downloaded', () => {
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info('Update downloaded:', info.version)
     win.setProgressBar(-1)
     win.webContents.send('update-status', { status: 'downloaded' })
   })
@@ -87,7 +97,7 @@ function createWindow() {
       msg.includes('ENOTFOUND') ||
       msg.includes('ECONNREFUSED')
     ) {
-      log.info('No hay releases disponibles aun — ignorando')
+      log.info('Update check: no releases found or network unavailable — ignorando')
       return
     }
     win.webContents.send('update-status', { status: 'error', message: 'Error de actualizacion' })
@@ -105,6 +115,12 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  if (process.env.NODE_ENV !== 'development') {
+    doCheckForUpdates()
+    setInterval(doCheckForUpdates, 30 * 60 * 1000)
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

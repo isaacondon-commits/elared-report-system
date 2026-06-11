@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import PptxGenJS from 'pptxgenjs';
 import type { EmpleadoData, RelojData, EstadoDia } from './relojParser';
 import { minsToHHMM } from './relojParser';
 
@@ -394,4 +395,144 @@ export async function exportRelojPDF(emp: EmpleadoData, empresa: string): Promis
   }
 
   doc.save(`Reloj_${emp.nombre.replace(/\s+/g, '_')}_${fmtNow.replace(/\//g, '-')}.pdf`);
+}
+
+// ─── PPTX export ──────────────────────────────────────────────────────────────
+
+export async function exportRelojPPTX(data: RelojData, empresa: string): Promise<void> {
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_16x9';
+  pptx.author = 'Elared S.A.';
+  pptx.title = 'Reporte de Asistencia';
+  const now = new Date().toLocaleDateString('es-UY');
+
+  type S = ReturnType<typeof pptx.addSlide>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type ST = any;
+
+  function r(s: S, x: number, y: number, w: number, h: number, c: string) {
+    s.addShape('rect' as ST, { x, y, w, h, fill: { color: c }, line: { type: 'none' } });
+  }
+  function hdr(s: S, titulo: string) {
+    r(s, 0, 0, 10, 0.72, '003DA5');
+    r(s, 0, 0.72, 10, 0.05, 'E3000F');
+    s.addText(titulo, { x: 0.3, y: 0.12, w: 7.5, h: 0.5, fontSize: 17, bold: true, color: 'FFFFFF', fontFace: 'Calibri', valign: 'middle' });
+    s.addText('Elared S.A.', { x: 8.2, y: 0.12, w: 1.6, h: 0.5, fontSize: 10, color: 'CADCFC', fontFace: 'Calibri', align: 'right', valign: 'middle' });
+    r(s, 0, 5.55, 10, 0.08, 'E8F0FE');
+    s.addText(`${empresa} · Asistencia · ${now}`, { x: 0.3, y: 5.55, w: 9.4, h: 0.08, fontSize: 8, color: '4A4A6A', fontFace: 'Calibri', valign: 'middle' });
+  }
+
+  // Slide 1 — Portada
+  {
+    const s = pptx.addSlide();
+    s.background = { color: '003DA5' };
+    r(s, 0, 0, 3, 5.63, '0052CC');
+    r(s, 3, 0.3, 0.06, 5, 'E3000F');
+    s.addText('ELARED', { x: 0.3, y: 0.4, w: 2.4, h: 0.6, fontSize: 22, bold: true, color: 'FFFFFF', fontFace: 'Calibri' });
+    s.addText('Agente Oficial Antel', { x: 0.3, y: 1.0, w: 2.4, h: 0.35, fontSize: 10, color: 'CADCFC', fontFace: 'Calibri' });
+    s.addText('Reporte de Asistencia', { x: 3.3, y: 1.2, w: 6.4, h: 1.0, fontSize: 32, bold: true, color: 'FFFFFF', fontFace: 'Calibri', valign: 'middle' });
+    s.addText(empresa, { x: 3.3, y: 2.3, w: 6.4, h: 0.45, fontSize: 16, color: 'CADCFC', fontFace: 'Calibri' });
+    const kpis = [
+      { l: 'Empleados', v: String(data.empleados.length) },
+      { l: 'Con tardanzas', v: String(data.empleados.filter(e => e.tardanzas > 0).length) },
+      { l: 'Con ausencias', v: String(data.empleados.filter(e => e.ausencias > 0).length) },
+    ];
+    kpis.forEach((k, i) => {
+      const bx = 3.3 + i * 2.1;
+      s.addShape('rect' as ST, { x: bx, y: 3.1, w: 2.0, h: 1.3, fill: { color: '0A4B8C', transparency: 40 }, line: { color: '2970C2', pt: 1 } });
+      s.addText(k.v, { x: bx, y: 3.15, w: 2.0, h: 0.7, fontSize: 28, bold: true, color: 'FFFFFF', fontFace: 'Calibri', align: 'center', valign: 'middle' });
+      s.addText(k.l, { x: bx, y: 3.85, w: 2.0, h: 0.45, fontSize: 9, color: 'CADCFC', fontFace: 'Calibri', align: 'center' });
+    });
+    s.addText(`Generado el ${now}`, { x: 3.3, y: 5.1, w: 6.4, h: 0.3, fontSize: 10, color: '8899BB', fontFace: 'Calibri' });
+  }
+
+  // Slide 2 — Resumen general (tabla)
+  {
+    const s = pptx.addSlide();
+    s.background = { color: 'F5F7FA' };
+    hdr(s, 'Resumen General de Empleados');
+
+    const rows = data.empleados.map(e => {
+      const pct = e.diasLaborables > 0 ? Math.round((e.diasPresentes / e.diasLaborables) * 100) : 0;
+      return [e.nombre, `${e.diasPresentes}/${e.diasLaborables}`, `${pct}%`, String(e.tardanzas), String(e.ausencias), `${e.puntualidadPct}%`];
+    });
+    const hRow = ['Empleado', 'Presencias', 'Asistencia', 'Tardanzas', 'Ausencias', 'Puntualidad'].map(h => ({
+      text: h, options: { bold: true, fontSize: 9, color: 'FFFFFF', fill: { color: '003DA5' }, align: 'center' as const, valign: 'middle' as const },
+    }));
+    const dRows = rows.map((row, ri) => row.map((cell, ci) => ({
+      text: cell, options: {
+        fontSize: 8.5, color: '1A1A2E',
+        fill: { color: ri % 2 === 0 ? 'FFFFFF' : 'E8F0FE' },
+        align: (ci === 0 ? 'left' : 'center') as 'left' | 'center', valign: 'middle' as const,
+      },
+    })));
+    s.addTable([hRow, ...dRows], {
+      x: 0.25, y: 0.88, w: 9.5,
+      colW: [2.8, 1.1, 1.1, 1.1, 1.1, 1.3],
+      rowH: [0.35, ...rows.map(() => 0.28)],
+      border: { type: 'solid', color: 'E2E8F0', pt: 0.5 },
+      fontFace: 'Calibri',
+    });
+  }
+
+  // Slide 3 — Tardanzas (top 10)
+  {
+    const s = pptx.addSlide();
+    s.background = { color: 'F5F7FA' };
+    hdr(s, 'Tardanzas por Empleado');
+
+    const sorted = [...data.empleados].sort((a, b) => b.tardanzas - a.tardanzas).filter(e => e.tardanzas > 0).slice(0, 10);
+    if (sorted.length === 0) {
+      s.addText('Sin tardanzas registradas.', { x: 1, y: 2.5, w: 8, h: 0.5, fontSize: 14, color: '28a745', align: 'center', fontFace: 'Calibri' });
+    } else {
+      const maxT = sorted[0]?.tardanzas ?? 1;
+      sorted.forEach((e, i) => {
+        const y = 0.95 + i * 0.42;
+        r(s, 0.3, y + 0.09, 2.5, 0.26, 'FFFFFF');
+        s.addText(e.nombre.split(' ').slice(0, 2).join(' '), { x: 0.3, y, w: 2.5, h: 0.42, fontSize: 9, color: '1A1A2E', fontFace: 'Calibri', valign: 'middle' });
+        const bw = Math.max(0.1, (e.tardanzas / maxT) * 5.5);
+        r(s, 2.9, y + 0.1, 5.5, 0.22, 'E8F0FE');
+        r(s, 2.9, y + 0.1, bw, 0.22, 'E3000F');
+        s.addText(`${e.tardanzas} tard. · ${e.minutosTardanzaTotal > 0 ? minsToHHMM(e.minutosTardanzaTotal) : '0m'}`, { x: 8.5, y, w: 1.5, h: 0.42, fontSize: 8.5, color: '4A4A6A', fontFace: 'Calibri', valign: 'middle' });
+      });
+    }
+  }
+
+  // Slide 4 — Ausencias
+  {
+    const s = pptx.addSlide();
+    s.background = { color: 'F5F7FA' };
+    hdr(s, 'Ausencias por Empleado');
+
+    const ausRows = data.empleados.filter(e => e.ausencias > 0).map(e => ({
+      text: e.nombre, options: { fontSize: 9, color: '1A1A2E' },
+    }));
+    if (ausRows.length === 0) {
+      s.addText('Sin ausencias registradas.', { x: 1, y: 2.5, w: 8, h: 0.5, fontSize: 14, color: '28a745', align: 'center', fontFace: 'Calibri' });
+    } else {
+      const maxA = Math.max(...data.empleados.filter(e => e.ausencias > 0).map(e => e.ausencias), 1);
+      data.empleados.filter(e => e.ausencias > 0).slice(0, 10).forEach((e, i) => {
+        const y = 0.95 + i * 0.42;
+        s.addText(e.nombre.split(' ').slice(0, 2).join(' '), { x: 0.3, y, w: 2.5, h: 0.42, fontSize: 9, color: '1A1A2E', fontFace: 'Calibri', valign: 'middle' });
+        const bw = Math.max(0.1, (e.ausencias / maxA) * 5.5);
+        r(s, 2.9, y + 0.1, 5.5, 0.22, 'E8F0FE');
+        r(s, 2.9, y + 0.1, bw, 0.22, '1A1A2E');
+        s.addText(`${e.ausencias} aus.`, { x: 8.5, y, w: 1.5, h: 0.42, fontSize: 8.5, color: '4A4A6A', fontFace: 'Calibri', valign: 'middle' });
+      });
+    }
+  }
+
+  // Slide 5 — Cierre
+  {
+    const s = pptx.addSlide();
+    s.background = { color: '003DA5' };
+    r(s, 0, 0, 3, 5.63, '0052CC');
+    r(s, 0, 5.2, 10, 0.15, 'E3000F');
+    s.addText('Elared S.A.', { x: 3.3, y: 1.8, w: 6.4, h: 0.8, fontSize: 30, bold: true, color: 'FFFFFF', fontFace: 'Calibri', align: 'center' });
+    s.addText('Agente Oficial Antel', { x: 3.3, y: 2.7, w: 6.4, h: 0.4, fontSize: 14, color: 'CADCFC', fontFace: 'Calibri', align: 'center' });
+    r(s, 3.3, 3.2, 6.4, 0.04, 'E3000F');
+    s.addText(`Generado el ${now}`, { x: 3.3, y: 3.4, w: 6.4, h: 0.3, fontSize: 11, color: '8899BB', fontFace: 'Calibri', align: 'center' });
+  }
+
+  await pptx.writeFile({ fileName: `Reloj_${empresa.replace(/\s+/g, '_')}_${now.replace(/\//g, '-')}.pptx` });
 }

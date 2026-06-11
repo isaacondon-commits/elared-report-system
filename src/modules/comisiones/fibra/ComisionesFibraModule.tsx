@@ -11,7 +11,7 @@ import {
   type ResultadoVendedorFibra, type ResultadosFibra, type VendedorFibraInput,
 } from './ComisionesFibraConfig';
 import { RankingFibraChart, CondicionesFibraDonut, FranjaFibraChart, ModalidadFibraChart } from './ComisionesFibraCharts';
-import { exportarExcelFibra, exportarPPTXFibra } from './ComisionesFibraExport';
+import { exportarExcelFibra, exportarPPTXFibra, exportarPDFFibra } from './ComisionesFibraExport';
 
 const ACCENT = '#003DA5';
 
@@ -500,6 +500,7 @@ function ResultsView({
 }) {
   const [exportXls, setExportXls]   = useState(false);
   const [exportPptx, setExportPptx] = useState(false);
+  const [exportPdf,  setExportPdf]  = useState(false);
 
   return (
     <div className="flex flex-col h-full">
@@ -515,19 +516,28 @@ function ResultsView({
             </div>
             <div className="flex gap-2 flex-wrap">
               <button
+                onClick={async () => { setExportPptx(true); try { await exportarPPTXFibra(resultados, fileName); } finally { setExportPptx(false); } }}
+                disabled={exportPptx}
+                className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
+                style={{ background: '#C43B1C' }}>
+                <DownloadCloud size={15} />
+                {exportPptx ? 'Exportando…' : 'PowerPoint'}
+              </button>
+              <button
                 onClick={() => { setExportXls(true); setTimeout(() => { exportarExcelFibra(resultados, fileName); setExportXls(false); }, 50); }}
                 disabled={exportXls}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-60 transition-colors">
+                className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
+                style={{ background: '#1D6F42' }}>
                 <FileSpreadsheet size={15} />
                 {exportXls ? 'Exportando…' : 'Excel'}
               </button>
               <button
-                onClick={async () => { setExportPptx(true); try { await exportarPPTXFibra(resultados, fileName); } finally { setExportPptx(false); } }}
-                disabled={exportPptx}
-                className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:bg-blue-800 disabled:opacity-60 transition-colors"
-                style={{ background: ACCENT }}>
+                onClick={() => { setExportPdf(true); setTimeout(() => { exportarPDFFibra(resultados, fileName); setExportPdf(false); }, 50); }}
+                disabled={exportPdf}
+                className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
+                style={{ background: '#E3000F' }}>
                 <DownloadCloud size={15} />
-                {exportPptx ? 'Exportando…' : 'PowerPoint'}
+                {exportPdf ? 'Generando…' : 'PDF'}
               </button>
               <button onClick={onReset}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-500 hover:bg-gray-50 transition-colors">

@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import PptxGenJS from 'pptxgenjs';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { ResultadosComisiones, ResultadoVendedor, ComisionesConfig } from './ComisionesConfig';
 import { fmtPesos, TIPO_LABELS } from './ComisionesConfig';
 
@@ -310,4 +312,57 @@ export function exportarExcelProyeccion(
   ws['!cols'] = [{ wch: 32 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Proyección');
   XLSX.writeFile(wb, `proyeccion_${titulo.toLowerCase().replace(/\s+/g, '_')}.xlsx`);
+}
+
+// ─── PDF export ───────────────────────────────────────────────────────────────
+
+export function exportarPDFComisiones(resultados: ResultadosComisiones, titulo: string): void {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = 297; const fecha = new Date().toLocaleDateString('es-UY');
+
+  function hdr(t: string) {
+    doc.setFillColor(0, 61, 165); doc.rect(0, 0, W, 15, 'F');
+    doc.setFillColor(227, 0, 15); doc.rect(0, 15, W, 1.5, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text(`ELARED · ${titulo}`, 7, 10);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(202, 220, 252);
+    doc.text(t, W / 2, 10, { align: 'center' });
+    doc.text(fecha, W - 7, 10, { align: 'right' });
+  }
+  function ftr(p: number, t: number) {
+    doc.setFillColor(232, 240, 254); doc.rect(0, 200, W, 10, 'F');
+    doc.setFontSize(7); doc.setTextColor(74, 74, 106); doc.setFont('helvetica', 'normal');
+    doc.text('Elared S.A. · Confidencial', 7, 207);
+    doc.text(`Pág. ${p}/${t}`, W - 7, 207, { align: 'right' });
+  }
+
+  hdr('Liquidación de Comisiones');
+  autoTable(doc, {
+    startY: 20,
+    head: [['Vendedor', 'Ventas', 'Faltas', 'Condición', 'Renov.', 'Altas', 'Cambios', 'Comisión']],
+    body: resultados.vendedores.map(v => [
+      v.nombre, v.totalVentas, v.faltas, v.nombreCondicion,
+      v.desglose.renovaciones.cantidad, v.desglose.altas.cantidad, v.desglose.cambios.cantidad,
+      fmtPesos(v.comisionTotal),
+    ]),
+    foot: [['TOTALES', resultados.vendedores.reduce((s, v) => s + v.totalVentas, 0),
+      resultados.vendedores.reduce((s, v) => s + v.faltas, 0), '', '', '', '',
+      fmtPesos(resultados.totalAPagar)]],
+    headStyles: { fillColor: [0, 61, 165], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8.5 },
+    footStyles: { fillColor: [74, 74, 106], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+    alternateRowStyles: { fillColor: [232, 240, 254] },
+    didParseCell: (d) => {
+      if (d.section === 'body') {
+        const v = resultados.vendedores[d.row.index];
+        if (v?.noLlegoAlMinimo) d.cell.styles.fillColor = [254, 202, 202];
+        else if (v?.bajoPorFalta) d.cell.styles.fillColor = [253, 215, 170];
+      }
+    },
+    margin: { left: 7, right: 7 },
+  });
+
+  const pg = doc.getNumberOfPages();
+  for (let i = 1; i <= pg; i++) { doc.setPage(i); ftr(i, pg); }
+  doc.save(`comisiones_${titulo.toLowerCase().replace(/\s+/g, '_')}_${fecha.replace(/\//g, '-')}.pdf`);
 }

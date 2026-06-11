@@ -12,7 +12,7 @@ import {
   GenericPausaBarChart, getHandledKeys,
 } from './VicidialCharts';
 import { VicidialAlertas } from './VicidialAlertas';
-import { exportarExcel, exportarPPTX } from './VicidialExport';
+import { exportarExcel, exportarPPTX, exportarPDF } from './VicidialExport';
 import Header from '../../components/Header';
 import { recordActivity } from '../../utils/activityTracker';
 import { useAnalisisStore, formatFechaCarga } from '../../store/analisisStore';
@@ -395,6 +395,7 @@ export default function VicidialModule() {
   const [error, setError] = useState<string | null>(null);
   const [exportingXlsx, setExportingXlsx] = useState(false);
   const [exportingPptx, setExportingPptx] = useState(false);
+  const [exportingPdf,  setExportingPdf]  = useState(false);
 
   const handleFile = useCallback(async (file: File) => {
     setStage('loading');
@@ -421,6 +422,12 @@ export default function VicidialModule() {
     if (!data) return;
     setExportingPptx(true);
     try { await exportarPPTX(data); } finally { setExportingPptx(false); }
+  }, [data]);
+
+  const handlePdfExport = useCallback(() => {
+    if (!data) return;
+    setExportingPdf(true);
+    try { exportarPDF(data); } finally { setExportingPdf(false); }
   }, [data]);
 
   if (stage === 'loading') {
@@ -481,9 +488,18 @@ export default function VicidialModule() {
       <button
         onClick={handlePptxExport}
         disabled={exportingPptx}
-        className="flex items-center gap-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-3 py-1.5 transition-colors"
+        className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50 text-white rounded-lg px-3 py-1.5 transition-colors hover:opacity-90"
+        style={{ background: '#C43B1C' }}
       >
         <Presentation size={13} /> {exportingPptx ? 'Exportando...' : 'PowerPoint'}
+      </button>
+      <button
+        onClick={handlePdfExport}
+        disabled={exportingPdf}
+        className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50 text-white rounded-lg px-3 py-1.5 transition-colors hover:opacity-90"
+        style={{ background: '#E3000F' }}
+      >
+        <Download size={13} /> {exportingPdf ? 'Generando...' : 'PDF'}
       </button>
     </div>
   );

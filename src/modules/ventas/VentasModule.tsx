@@ -10,7 +10,7 @@ import Header from '../../components/Header';
 import { parseExcel, normalizeEstado, normalizeFechaVenta, type ParseResult, type EstadoVenta } from '../../utils/smartParser';
 import VentasCharts, { TemporalChart } from './VentasCharts';
 import VentasPerformanceTable from './VentasPerformanceTable';
-import { exportVentasPptx } from './VentasExport';
+import { exportVentasPptx, exportVentasExcel, exportVentasPDF } from './VentasExport';
 import { useConfig } from '../../hooks/useConfig';
 import { recordActivity } from '../../utils/activityTracker';
 import { useAnalisisStore, formatFechaCarga } from '../../store/analisisStore';
@@ -575,6 +575,16 @@ export default function VentasModule() {
     exportVentasPptx(stats, config, empresaActiva);
   }, [stats, config, empresaActiva]);
 
+  const handleExportExcel = useCallback(() => {
+    if (!stats) return;
+    exportVentasExcel(stats, empresaActiva);
+  }, [stats, empresaActiva]);
+
+  const handleExportPDF = useCallback(() => {
+    if (!stats) return;
+    exportVentasPDF(stats, config, empresaActiva);
+  }, [stats, config, empresaActiva]);
+
   const reset = () => {
     clearVentas();
     setSessionKey(k => k + 1);
@@ -603,8 +613,19 @@ export default function VentasModule() {
                 Cargar otro archivo
               </button>
               <button onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-1.5 text-sm bg-[#003DA5] text-white rounded-lg hover:bg-blue-800">
-                <Download size={15} /> Exportar PowerPoint
+                className="flex items-center gap-2 px-4 py-1.5 text-sm text-white rounded-lg hover:opacity-90"
+                style={{ background: '#C43B1C' }}>
+                <Download size={15} /> PowerPoint
+              </button>
+              <button onClick={handleExportExcel}
+                className="flex items-center gap-2 px-4 py-1.5 text-sm text-white rounded-lg hover:opacity-90"
+                style={{ background: '#1D6F42' }}>
+                <Download size={15} /> Excel
+              </button>
+              <button onClick={handleExportPDF}
+                className="flex items-center gap-2 px-4 py-1.5 text-sm text-white rounded-lg hover:opacity-90"
+                style={{ background: '#E3000F' }}>
+                <Download size={15} /> PDF
               </button>
             </div>
           ) : null

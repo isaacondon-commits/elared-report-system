@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import PptxGenJS from 'pptxgenjs';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { VicidialData } from './vicidialParser';
 import { fmtMins, getNombreLegible, findAlmuerzoKey, findVtamovKey } from './vicidialParser';
 import { generarAlertas } from './VicidialAlertas';
@@ -233,6 +235,72 @@ function slide7Closing(prs: PptxGenJS, data: VicidialData) {
   if (data.fecha) {
     s.addText(data.fecha, { x: 0.5, y: 3.3, w: 9, h: 0.4, fontSize: 12, color: '93C5FD', align: 'center' });
   }
+}
+
+// ─── PDF ──────────────────────────────────────────────────────────────────────
+
+export function exportarPDF(data: VicidialData): void {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = 297; const fecha = data.fecha || new Date().toLocaleDateString('es-UY');
+
+  function hdr(titulo: string) {
+    doc.setFillColor(0, 61, 165); doc.rect(0, 0, W, 15, 'F');
+    doc.setFillColor(227, 0, 15); doc.rect(0, 15, W, 1.5, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text('ELARED · Vicidial Pausas', 7, 10);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(202, 220, 252);
+    doc.text(titulo, W / 2, 10, { align: 'center' });
+    doc.text(fecha, W - 7, 10, { align: 'right' });
+  }
+  function ftr(p: number, t: number) {
+    doc.setFillColor(232, 240, 254); doc.rect(0, 200, W, 10, 'F');
+    doc.setFontSize(7); doc.setTextColor(74, 74, 106); doc.setFont('helvetica', 'normal');
+    doc.text('Elared S.A. · Confidencial', 7, 207);
+    doc.text(`Pág. ${p}/${t}`, W - 7, 207, { align: 'right' });
+  }
+
+  hdr('Resumen de Agentes');
+  autoTable(doc, {
+    startY: 20,
+    head: [['Agente', 'Llamadas', 'Hablando', '% Hab.', 'Eficiencia %', 'Pausa total', '% Pausa', 'Ociosa']],
+    body: data.agentes.map(a => [
+      a.usuario, a.llamadas, fmtMins(a.hablando), `${a.pctHablando.toFixed(1)}%`,
+      `${a.eficiencia.toFixed(1)}%`, fmtMins(a.pausaTotal), `${a.pctPausa.toFixed(1)}%`, fmtMins(a.pausaOciosa),
+    ]),
+    foot: [['TOTALES', data.totales.llamadas, fmtMins(data.totales.hablando), `${data.totales.pctHablando.toFixed(1)}%`,
+      `${data.totales.eficiencia.toFixed(1)}%`, fmtMins(data.totales.pausaTotal), `${data.totales.pctPausa.toFixed(1)}%`, fmtMins(data.totales.pausaOciosa)]],
+    headStyles: { fillColor: [0, 61, 165], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8.5 },
+    footStyles: { fillColor: [74, 74, 106], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+    alternateRowStyles: { fillColor: [232, 240, 254] },
+    margin: { left: 7, right: 7 },
+  });
+
+  const alertas = generarAlertas(data);
+  if (alertas.length > 0) {
+    doc.addPage();
+    hdr('Alertas');
+    autoTable(doc, {
+      startY: 20,
+      head: [['Nivel', 'Agente', 'Mensaje']],
+      body: alertas.map(a => [a.nivel.toUpperCase(), a.agente, a.mensaje]),
+      headStyles: { fillColor: [0, 61, 165], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8.5 },
+      columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 50 } },
+      didParseCell: (d) => {
+        if (d.section === 'body' && d.column.index === 0) {
+          const v = String(d.cell.raw);
+          if (v === 'CRITICO') d.cell.styles.textColor = [200, 30, 20];
+          else if (v === 'ADVERTENCIA') d.cell.styles.textColor = [180, 100, 0];
+        }
+      },
+      margin: { left: 7, right: 7 },
+    });
+  }
+
+  const pg = doc.getNumberOfPages();
+  for (let i = 1; i <= pg; i++) { doc.setPage(i); ftr(i, pg); }
+  doc.save(`vicidial_${fecha}.pdf`);
 }
 
 export async function exportarPPTX(data: VicidialData) {

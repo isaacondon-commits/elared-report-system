@@ -16,7 +16,7 @@ import {
 import RelojCalendar from './RelojCalendar';
 import RelojTimeline from './RelojTimeline';
 import { IngresosLineChart, JornadaLineChart, CompositionChart, RankingBarChart, JornadaBarChart, HeatmapChart, HorasExtrasBarChart } from './RelojCharts';
-import { exportRelojExcel, exportRelojPDF } from './RelojExport';
+import { exportRelojExcel, exportRelojPDF, exportRelojPPTX } from './RelojExport';
 import { useConfig } from '../../hooks/useConfig';
 import { useAnalisisStore, formatFechaCarga } from '../../store/analisisStore';
 
@@ -813,7 +813,8 @@ export default function RelojModule() {
   const [empleados, setEmpleados]       = useState<EmpleadoData[]>(() => storeEntry?.empleados ?? []);
   const [selected, setSelected]         = useState<string>('ALL');
   const [editingEmp, setEditingEmp]     = useState<string | null>(null);
-  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingPdf, setExportingPdf]   = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
 
   // Filter state
   const [searchQuery, setSearchQuery]           = useState('');
@@ -895,6 +896,12 @@ export default function RelojModule() {
     exportRelojExcel({ ...data, empleados });
   }, [data, empleados]);
 
+  const handleExportPPTX = useCallback(async () => {
+    if (!data) return;
+    setExportingPptx(true);
+    try { await exportRelojPPTX({ ...data, empleados }, config.nombreEmpresa); } finally { setExportingPptx(false); }
+  }, [data, empleados, config]);
+
   const handleExportPDF = useCallback(async () => {
     if (!data) return;
     const emp = empleados.find(e => e.nombre === selected);
@@ -942,21 +949,30 @@ export default function RelojModule() {
                 className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                 Cargar otro
               </button>
+              <button
+                onClick={handleExportPPTX}
+                disabled={exportingPptx}
+                className="flex items-center gap-2 px-4 py-1.5 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors"
+                style={{ background: '#C43B1C' }}>
+                <Download size={14} />
+                {exportingPptx ? 'Generando…' : 'PowerPoint'}
+              </button>
+              <button onClick={handleExportExcel}
+                className="flex items-center gap-2 px-4 py-1.5 text-sm text-white rounded-lg hover:opacity-90 transition-colors"
+                style={{ background: '#1D6F42' }}>
+                <Download size={14} />
+                Excel
+              </button>
               {selected !== 'ALL' && selectedEmp && (
                 <button
                   onClick={handleExportPDF}
                   disabled={exportingPdf}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm border border-[#003DA5] text-[#003DA5] rounded-lg hover:bg-blue-50 disabled:opacity-50 transition-colors"
-                >
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors"
+                  style={{ background: '#E3000F' }}>
                   <FileText size={14} />
                   {exportingPdf ? 'Generando…' : 'PDF'}
                 </button>
               )}
-              <button onClick={handleExportExcel}
-                className="flex items-center gap-2 px-4 py-1.5 text-sm bg-[#003DA5] text-white rounded-lg hover:bg-blue-800 transition-colors">
-                <Download size={14} />
-                Exportar Excel
-              </button>
             </div>
           ) : null
         }

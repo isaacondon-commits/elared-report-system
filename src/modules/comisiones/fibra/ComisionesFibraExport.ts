@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import PptxGenJS from 'pptxgenjs';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { ResultadosFibra, ResultadoVendedorFibra } from './ComisionesFibraConfig';
 import { fmtPesos } from './ComisionesFibraConfig';
 
@@ -248,4 +250,60 @@ export async function exportarPPTXFibra(resultados: ResultadosFibra, fileName: s
   }
 
   await pptx.writeFile({ fileName: `comisiones-fibra-${fileName.replace(/\.\w+$/, '')}.pptx` });
+}
+
+// ─── PDF export ───────────────────────────────────────────────────────────────
+
+export function exportarPDFFibra(resultados: ResultadosFibra, fileName: string): void {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = 297; const fecha = new Date().toLocaleDateString('es-UY');
+
+  function hdr(t: string) {
+    doc.setFillColor(0, 61, 165); doc.rect(0, 0, W, 15, 'F');
+    doc.setFillColor(227, 0, 15); doc.rect(0, 15, W, 1.5, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text('ELARED · Comisiones Fibra', 7, 10);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(202, 220, 252);
+    doc.text(t, W / 2, 10, { align: 'center' });
+    doc.text(fecha, W - 7, 10, { align: 'right' });
+  }
+  function ftr(p: number, t: number) {
+    doc.setFillColor(232, 240, 254); doc.rect(0, 200, W, 10, 'F');
+    doc.setFontSize(7); doc.setTextColor(74, 74, 106); doc.setFont('helvetica', 'normal');
+    doc.text('Elared S.A. · Confidencial', 7, 207);
+    doc.text(`Pág. ${p}/${t}`, W - 7, 207, { align: 'right' });
+  }
+
+  hdr('Liquidación de Comisiones Fibra');
+  autoTable(doc, {
+    startY: 20,
+    head: [['Vendedor', 'Ventas', 'Faltas', 'Franja', 'Condición', 'TM', 'Internet', 'No Renov.', 'Comisión']],
+    body: resultados.vendedores.map(v => [
+      v.nombre, v.totalVentas, v.faltas,
+      v.franja === '50_200' ? 'F1' : v.franja === '201_250' ? 'F2' : 'F3',
+      v.noLlegoAlMinimo ? 'Bajo mín.' : v.condicion === '80_sin_falta' ? '80 S/F' : '50/Falta',
+      v.ventasTelemarketing, v.ventasInternet, v.noRenovables,
+      fmtPesos(v.comisionTotal),
+    ]),
+    foot: [['TOTALES',
+      resultados.vendedores.reduce((s, v) => s + v.totalVentas, 0),
+      resultados.vendedores.reduce((s, v) => s + v.faltas, 0),
+      '', '', '', '', resultados.totalNoRenovables, fmtPesos(resultados.totalAPagar)]],
+    headStyles: { fillColor: [0, 61, 165], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8.5 },
+    footStyles: { fillColor: [74, 74, 106], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+    alternateRowStyles: { fillColor: [232, 240, 254] },
+    didParseCell: (d) => {
+      if (d.section === 'body') {
+        const v = resultados.vendedores[d.row.index];
+        if (v?.noLlegoAlMinimo) d.cell.styles.fillColor = [254, 202, 202];
+        else if (v?.bajoPorFalta) d.cell.styles.fillColor = [253, 215, 170];
+      }
+    },
+    margin: { left: 7, right: 7 },
+  });
+
+  const pg = doc.getNumberOfPages();
+  for (let i = 1; i <= pg; i++) { doc.setPage(i); ftr(i, pg); }
+  doc.save(`comisiones-fibra-${fileName.replace(/\.\w+$/, '')}_${fecha.replace(/\//g, '-')}.pdf`);
 }

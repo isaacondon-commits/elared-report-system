@@ -1,4 +1,7 @@
 import PptxGenJS from 'pptxgenjs';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { VentasStats } from './VentasModule';
 import type { AppConfig } from '../../types';
 
@@ -724,4 +727,151 @@ export function exportVentasPptx(
   ].filter(Boolean).join('_');
 
   pptx.writeFile({ fileName: `Ventas_${safeName || 'Reporte'}.pptx` });
+}
+
+// ── Excel export ──────────────────────────────────────────────────────────────
+
+export function exportVentasExcel(stats: VentasStats, empresaActiva = 'Todas'): void {
+  const wb = XLSX.utils.book_new();
+
+  function aw(rows: (string | number)[][]): XLSX.ColInfo[] {
+    if (!rows.length) return [];
+    const w = Array.from({ length: rows[0]?.length ?? 0 }, () => 8);
+    for (const r of rows) r.forEach((c, i) => { const l = String(c ?? '').length + 2; if (l > (w[i] ?? 8)) w[i] = l; });
+    return w.map(v => ({ wch: Math.min(v, 42) }));
+  }
+
+  // Sheet 1: Resumen KPIs
+  const resData: (string | number)[][] = [
+    ['Indicador', 'Valor'],
+    ['Total Gestiones', stats.total],
+    ['Renovaciones', stats.renovaciones],
+    ['Altas Nuevas', stats.altas],
+    ['Cambios de Plan', stats.cambios],
+    ['Vendedores activos', stats.totalVendedores],
+    ['Días con datos', stats.diasConDatos],
+    ['Promedio diario', Math.round(stats.promedio)],
+    ['Mejor vendedor', stats.mejor],
+    ['Empresa', empresaActiva],
+  ];
+  if (stats.hasEstado && stats.tasaRechazoEquipo !== null) {
+    resData.push(['Tasa rechazo equipo', `${stats.tasaRechazoEquipo.toFixed(1)}%`]);
+  }
+  const ws1 = XLSX.utils.aoa_to_sheet(resData);
+  ws1['!cols'] = [{ wch: 26 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
+
+  // Sheet 2: Ranking vendedores
+  const rankHeaders = ['#', 'Vendedor', 'Total', 'Renovaciones', 'Altas', 'Cambios', 'Otros', '% Renov.', '% Altas', '% Cambios', 'Prom./día'];
+  const rankRows: (string | number)[][] = stats.byFuncionario.map((f, i) => [
+    i + 1, f.nombre, f.total, f.renovaciones, f.altas, f.cambios, f.otros,
+    f.total > 0 ? `${Math.round((f.renovaciones / f.total) * 100)}%` : '0%',
+    f.total > 0 ? `${Math.round((f.altas / f.total) * 100)}%` : '0%',
+    f.total > 0 ? `${Math.round((f.cambios / f.total) * 100)}%` : '0%',
+    stats.diasConDatos > 0 ? (f.total / stats.diasConDatos).toFixed(1) : '—',
+  ]);
+  const ws2 = XLSX.utils.aoa_to_sheet([rankHeaders, ...rankRows]);
+  ws2['!cols'] = aw([rankHeaders, ...rankRows]);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Ranking Vendedores');
+
+  // Sheet 3: Por tipo de gestión
+  const tipoHeaders = ['Tipo', 'Cantidad', '% del total'];
+  const tipoRows: (string | number)[][] = stats.byMotivo.map(m => [
+    m.motivo, m.count, stats.total > 0 ? `${Math.round((m.count / stats.total) * 100)}%` : '0%',
+  ]);
+  const ws3 = XLSX.utils.aoa_to_sheet([tipoHeaders, ...tipoRows]);
+  ws3['!cols'] = aw([tipoHeaders, ...tipoRows]);
+  XLSX.utils.book_append_sheet(wb, ws3, 'Por Tipo');
+
+  // Sheet 4: Top planes
+  const planHeaders = ['Plan', 'Ventas', '% del total'];
+  const planRows: (string | number)[][] = stats.byPlan.map(p => [
+    p.nombre, p.ventas, stats.total > 0 ? `${Math.round((p.ventas / stats.total) * 100)}%` : '0%',
+  ]);
+  const ws4 = XLSX.utils.aoa_to_sheet([planHeaders, ...planRows]);
+  ws4['!cols'] = aw([planHeaders, ...planRows]);
+  XLSX.utils.book_append_sheet(wb, ws4, 'Top Planes');
+
+  // Sheet 5: Estado (condicional)
+  if (stats.hasEstado && stats.estadoKpis) {
+    const { estadoKpis } = stats;
+    const estHeaders = ['Estado', 'Cantidad', '%'];
+    const estRows: (string | number)[][] = [
+      ['Vendidos', estadoKpis.vendido, `${estadoKpis.vendidoPct}%`],
+      ['En Control', estadoKpis.control, `${stats.total > 0 ? Math.round((estadoKpis.control / stats.total) * 100) : 0}%`],
+      ['A Activar', estadoKpis.activar, `${stats.total > 0 ? Math.round((estadoKpis.activar / stats.total) * 100) : 0}%`],
+      ['Rechazos', estadoKpis.rechazo, `${estadoKpis.rechazoPct}%`],
+    ];
+    const ws5 = XLSX.utils.aoa_to_sheet([estHeaders, ...estRows]);
+    ws5['!cols'] = aw([estHeaders, ...estRows]);
+    XLSX.utils.book_append_sheet(wb, ws5, 'Estado Calidad');
+  }
+
+  const fn = empresaActiva !== 'Todas' ? `Ventas_${empresaActiva}_` : 'Ventas_';
+  XLSX.writeFile(wb, `${fn}${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}.xlsx`);
+}
+
+// ── PDF export ────────────────────────────────────────────────────────────────
+
+export function exportVentasPDF(stats: VentasStats, config: AppConfig, empresaActiva = 'Todas'): void {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = 297; const fecha = new Date().toLocaleDateString('es-UY');
+
+  function hdr(titulo: string) {
+    doc.setFillColor(0, 61, 165); doc.rect(0, 0, W, 15, 'F');
+    doc.setFillColor(227, 0, 15); doc.rect(0, 15, W, 1.5, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text('ELARED · Reporte de Ventas', 7, 10);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(202, 220, 252);
+    doc.text(titulo, W / 2, 10, { align: 'center' });
+    doc.text(fecha, W - 7, 10, { align: 'right' });
+  }
+  function ftr(page: number, total: number) {
+    doc.setFillColor(232, 240, 254); doc.rect(0, 200, W, 10, 'F');
+    doc.setFontSize(7); doc.setTextColor(74, 74, 106); doc.setFont('helvetica', 'normal');
+    doc.text(`${config.nombreEmpresa}${empresaActiva !== 'Todas' ? ' · ' + empresaActiva : ''} · Confidencial`, 7, 207);
+    doc.text(`Pág. ${page}/${total}`, W - 7, 207, { align: 'right' });
+  }
+
+  hdr('Resumen General');
+  autoTable(doc, {
+    startY: 20,
+    head: [['Indicador', 'Valor']],
+    body: [
+      ['Total gestiones', stats.total.toLocaleString()],
+      ['Renovaciones', `${stats.renovaciones.toLocaleString()} (${stats.total > 0 ? Math.round((stats.renovaciones / stats.total) * 100) : 0}%)`],
+      ['Altas nuevas', `${stats.altas.toLocaleString()} (${stats.total > 0 ? Math.round((stats.altas / stats.total) * 100) : 0}%)`],
+      ['Cambios de plan', `${stats.cambios.toLocaleString()} (${stats.total > 0 ? Math.round((stats.cambios / stats.total) * 100) : 0}%)`],
+      ['Vendedores activos', stats.totalVendedores],
+      ['Mejor vendedor', stats.mejor],
+      ['Promedio diario', Math.round(stats.promedio).toLocaleString()],
+    ],
+    headStyles: { fillColor: [0, 61, 165], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 9 },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+    margin: { left: 7, right: 7 },
+  });
+
+  doc.addPage();
+  hdr('Ranking de Vendedores');
+  autoTable(doc, {
+    startY: 20,
+    head: [['#', 'Vendedor', 'Total', 'Renov.', 'Altas', 'Cambios', '% Renov.', '% Altas']],
+    body: stats.byFuncionario.slice(0, 25).map((f, i) => [
+      i + 1, f.nombre, f.total, f.renovaciones, f.altas, f.cambios,
+      f.total > 0 ? `${Math.round((f.renovaciones / f.total) * 100)}%` : '0%',
+      f.total > 0 ? `${Math.round((f.altas / f.total) * 100)}%` : '0%',
+    ]),
+    headStyles: { fillColor: [0, 61, 165], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8.5 },
+    alternateRowStyles: { fillColor: [232, 240, 254] },
+    columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 60 } },
+    margin: { left: 7, right: 7 },
+  });
+
+  const pg = doc.getNumberOfPages();
+  for (let i = 1; i <= pg; i++) { doc.setPage(i); ftr(i, pg); }
+
+  const fn = empresaActiva !== 'Todas' ? `Ventas_${empresaActiva}_` : 'Ventas_';
+  doc.save(`${fn}${fecha.replace(/\//g, '-')}.pdf`);
 }

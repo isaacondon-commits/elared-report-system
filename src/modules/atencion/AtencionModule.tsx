@@ -6,7 +6,7 @@ import { parseAtencion, fmtSecs, agregarHorasTodos } from './atencionParser';
 import type { AtencionData, GrupoAtencion } from './atencionParser';
 import { LlamadasBarChart, HeatmapGrid, MultiLineChart, ColaBarChart, GaugeChart } from './AtencionCharts';
 import { AtencionAlertas } from './AtencionAlertas';
-import { exportarExcel, exportarPPTX } from './AtencionExport';
+import { exportarExcel, exportarPPTX, exportarPDF } from './AtencionExport';
 import { useAnalisisStore } from '../../store/analisisStore';
 
 // ─── Upload stage ──────────────────────────────────────────────────────────────
@@ -289,8 +289,9 @@ function SeccionCalidad({ data }: { data: AtencionData }) {
 // ─── Analysis stage ───────────────────────────────────────────────────────────
 
 function AnalysisStage({ data, fileName, onReset }: { data: AtencionData; fileName: string; onReset: () => void }) {
-  const [exportingXls, setExportingXls] = useState(false);
+  const [exportingXls, setExportingXls]   = useState(false);
   const [exportingPptx, setExportingPptx] = useState(false);
+  const [exportingPdf,  setExportingPdf]  = useState(false);
   const [showGrupos, setShowGrupos] = useState(true);
 
   const tot = data.totales;
@@ -302,6 +303,10 @@ function AnalysisStage({ data, fileName, onReset }: { data: AtencionData; fileNa
   const handlePptxClick = async () => {
     setExportingPptx(true);
     try { await exportarPPTX(data); } finally { setExportingPptx(false); }
+  };
+  const handlePdfClick = () => {
+    setExportingPdf(true);
+    setTimeout(() => { exportarPDF(data); setExportingPdf(false); }, 50);
   };
 
   return (
@@ -320,20 +325,31 @@ function AnalysisStage({ data, fileName, onReset }: { data: AtencionData; fileNa
             </div>
             <div className="flex gap-2">
               <button
+                onClick={handlePptxClick}
+                disabled={exportingPptx}
+                className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
+                style={{ background: '#C43B1C' }}
+              >
+                <DownloadCloud size={15} />
+                {exportingPptx ? 'Exportando…' : 'PowerPoint'}
+              </button>
+              <button
                 onClick={handleExcelClick}
                 disabled={exportingXls}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-60 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
+                style={{ background: '#1D6F42' }}
               >
                 <FileSpreadsheet size={15} />
                 {exportingXls ? 'Exportando…' : 'Excel'}
               </button>
               <button
-                onClick={handlePptxClick}
-                disabled={exportingPptx}
-                className="flex items-center gap-2 px-4 py-2 bg-[#003DA5] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 disabled:opacity-60 transition-colors"
+                onClick={handlePdfClick}
+                disabled={exportingPdf}
+                className="flex items-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-colors"
+                style={{ background: '#E3000F' }}
               >
                 <DownloadCloud size={15} />
-                {exportingPptx ? 'Exportando…' : 'PowerPoint'}
+                {exportingPdf ? 'Generando…' : 'PDF'}
               </button>
               <button
                 onClick={onReset}

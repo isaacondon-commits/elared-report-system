@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import PptxGenJS from 'pptxgenjs';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { AtencionData } from './atencionParser';
 import { fmtSecs } from './atencionParser';
 import { generarAlertas } from './AtencionAlertas';
@@ -335,4 +337,77 @@ export async function exportarPPTX(data: AtencionData) {
   s7.addText(fechaLabel, { x: 0.5, y: 3.5, w: 9, h: 0.25, fontSize: 10, color: '93c5fd', align: 'center', fontFace: 'Calibri' });
 
   await pptx.writeFile({ fileName: `atencion_cliente_${data.fecha}.pptx` });
+}
+
+// ─── PDF export ───────────────────────────────────────────────────────────────
+
+export function exportarPDF(data: AtencionData): void {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = 297; const fecha = data.fecha || new Date().toLocaleDateString('es-UY');
+
+  function hdr(titulo: string) {
+    doc.setFillColor(0, 61, 165); doc.rect(0, 0, W, 15, 'F');
+    doc.setFillColor(227, 0, 15); doc.rect(0, 15, W, 1.5, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(12); doc.setFont('helvetica', 'bold');
+    doc.text('ELARED · Atención al Cliente', 7, 10);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(202, 220, 252);
+    doc.text(titulo, W / 2, 10, { align: 'center' });
+    doc.text(fecha, W - 7, 10, { align: 'right' });
+  }
+  function ftr(p: number, t: number) {
+    doc.setFillColor(232, 240, 254); doc.rect(0, 200, W, 10, 'F');
+    doc.setFontSize(7); doc.setTextColor(74, 74, 106); doc.setFont('helvetica', 'normal');
+    doc.text('Elared S.A. · Confidencial', 7, 207);
+    doc.text(`Pág. ${p}/${t}`, W - 7, 207, { align: 'right' });
+  }
+
+  hdr('Resumen por Grupo');
+  autoTable(doc, {
+    startY: 20,
+    head: [['Grupo', 'Llamadas', 'Respondidas', 'Abandono', '% Respuesta', '% Abandono', 'T. Charla', 'T. Cola']],
+    body: data.grupos.map(g => [
+      g.nombreLegible, g.llamadas, g.respuestas, g.abandono,
+      `${g.tasaRespuesta.toFixed(1)}%`, `${g.tasaAbandono.toFixed(1)}%`,
+      fmtSecs(g.charlaPromedio), fmtSecs(g.tiempoMedioCola),
+    ]),
+    foot: [[
+      'TOTALES', data.totales.llamadas, data.totales.respuestas, data.totales.abandono,
+      `${data.totales.tasaRespuesta.toFixed(1)}%`, `${data.totales.tasaAbandono.toFixed(1)}%`,
+      fmtSecs(data.totales.charlaPromedio), fmtSecs(data.totales.tiempoMedioCola),
+    ]],
+    headStyles: { fillColor: [0, 61, 165], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8.5 },
+    footStyles: { fillColor: [74, 74, 106], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+    alternateRowStyles: { fillColor: [232, 240, 254] },
+    margin: { left: 7, right: 7 },
+  });
+
+  for (const g of data.grupos) {
+    if (g.horasDesglose.length === 0) continue;
+    doc.addPage();
+    hdr(`Desglose Horario — ${g.nombreLegible}`);
+    autoTable(doc, {
+      startY: 20,
+      head: [['Hora', 'Llamadas', 'Respondidas', 'Abandono', '% Resp.', '% Aban.', 'T. Charla', 'T. Cola']],
+      body: g.horasDesglose.map(h => [
+        `${h.hora}:00`, h.llamadas, h.respuestas, h.abandono,
+        `${h.tasaRespuesta.toFixed(1)}%`, `${h.tasaAbandono.toFixed(1)}%`,
+        fmtSecs(h.charlaPromedio), fmtSecs(h.tiempoMedioCola),
+      ]),
+      headStyles: { fillColor: [0, 61, 165], textColor: 255, fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8.5 },
+      alternateRowStyles: { fillColor: [232, 240, 254] },
+      didParseCell: (d) => {
+        if (d.section === 'body' && d.column.index === 5) {
+          const v = parseFloat(String(d.cell.raw));
+          if (!isNaN(v) && v > 15) d.cell.styles.textColor = [200, 30, 20];
+        }
+      },
+      margin: { left: 7, right: 7 },
+    });
+  }
+
+  const pg = doc.getNumberOfPages();
+  for (let i = 1; i <= pg; i++) { doc.setPage(i); ftr(i, pg); }
+  doc.save(`atencion_cliente_${fecha}.pdf`);
 }

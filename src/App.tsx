@@ -132,14 +132,10 @@ export default function App() {
       .catch(() => setChecking(false));
   }, []);
 
-  useEffect(() => {
-    if (!showSplash) return;
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-      sessionStorage.setItem('splash_visto', '1');
-    }, 3500);
-    return () => clearTimeout(timer);
-  }, [showSplash]);
+  function handleSplashComplete() {
+    setShowSplash(false);
+    sessionStorage.setItem('splash_visto', '1');
+  }
 
   const mainContent = checking ? (
     <AppSpinner />
@@ -176,7 +172,7 @@ export default function App() {
 
   return (
     <>
-      {showSplash && <SplashScreen />}
+      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <div style={{ opacity: showSplash ? 0 : 1, transition: 'opacity 0.4s ease' }}>
         {mainContent}
         <UpdateNotification />

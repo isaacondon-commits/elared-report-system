@@ -1,27 +1,40 @@
 import { useEffect, useState } from 'react';
 
-export default function SplashScreen() {
-  const [exiting, setExiting] = useState(false);
+interface Props {
+  onComplete: () => void;
+}
+
+export default function SplashScreen({ onComplete }: Props) {
+  const [animacionTerminada, setAnimacionTerminada] = useState(false);
+  const [saliendo, setSaliendo] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setExiting(true), 3000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setAnimacionTerminada(true), 2900);
+    return () => clearTimeout(timer);
   }, []);
+
+  const handleClick = () => {
+    if (!animacionTerminada || saliendo) return;
+    setSaliendo(true);
+    setTimeout(() => onComplete(), 500);
+  };
 
   return (
     <div
+      onClick={handleClick}
       style={{
         position: 'fixed', inset: 0, zIndex: 9999,
         background: '#000000',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        animation: exiting ? 'splashExit 0.5s cubic-bezier(0.4,0,1,1) forwards' : undefined,
+        cursor: animacionTerminada ? 'pointer' : 'default',
+        animation: saliendo ? 'splashExit 0.5s cubic-bezier(0.4,0,1,1) forwards' : undefined,
       }}
     >
       {/* Logo */}
       <div style={{ animation: 'splashFadeIn 1.2s cubic-bezier(0.16,1,0.3,1) 0.2s both' }}>
         <img
-          src="/splash-logo.png"
+          src="./splash-logo.png"
           alt="Eficiencia"
           style={{ height: 420, objectFit: 'contain' }}
         />
@@ -82,6 +95,32 @@ export default function SplashScreen() {
           boxShadow: '0 0 8px #003DA5',
           animation: 'loadingBar 2.5s ease 0.2s both',
         }} />
+      </div>
+
+      {/* TOCA PARA CONTINUAR */}
+      <div style={{
+        position: 'absolute', bottom: 45,
+        left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', gap: 3,
+        opacity: animacionTerminada ? 1 : 0,
+        transition: 'opacity 0.5s ease',
+        whiteSpace: 'nowrap',
+        pointerEvents: 'none',
+      }}>
+        <div style={{
+          color: '#CADCFC', fontSize: 13, letterSpacing: 2,
+          animation: animacionTerminada ? 'pulse 1.2s ease-in-out infinite' : undefined,
+        }}>
+          ⌄⌄
+        </div>
+        <div style={{
+          color: '#CADCFC', fontSize: 11,
+          letterSpacing: 3, textTransform: 'uppercase',
+          animation: animacionTerminada ? 'pulse 1.5s ease-in-out infinite' : undefined,
+        }}>
+          TOCA PARA CONTINUAR
+        </div>
       </div>
     </div>
   );

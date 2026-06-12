@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { LogOut, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import { LogOut, ChevronDown, ChevronRight, RefreshCw, Info } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 import { NOMBRES_ROLES, ROL_COLORS } from '../config/permisos';
 import type { RolSistema } from '../types';
+import VersionModal from './VersionModal';
 
 interface HeaderProps {
   title: string;
@@ -32,8 +33,9 @@ function getInitials(nombre: string): string {
 
 export default function Header({ title, subtitle, actions }: HeaderProps) {
   const { userDoc, userRoles, logout } = useAuthContext();
-  const [open, setOpen]     = useState(false);
-  const dropRef             = useRef<HTMLDivElement>(null);
+  const [open, setOpen]           = useState(false);
+  const [showVersion, setShowVersion] = useState(false);
+  const dropRef                   = useRef<HTMLDivElement>(null);
   const { pathname }        = useLocation();
 
   const prefixParts = BREADCRUMB_PREFIX[pathname] ?? [];
@@ -63,6 +65,8 @@ export default function Header({ title, subtitle, actions }: HeaderProps) {
   }
 
   return (
+    <>
+    {showVersion && <VersionModal onClose={() => setShowVersion(false)} />}
     <div className="bg-white border-b border-gray-200 px-6 flex items-center justify-between min-h-[60px] flex-shrink-0 sticky top-0 z-30">
 
       {/* Left: breadcrumb + title */}
@@ -134,16 +138,25 @@ export default function Header({ title, subtitle, actions }: HeaderProps) {
                       ))}
                     </div>
                   </div>
-                  {window.electronAPI?.checkForUpdates && (
+                  {window.electronAPI && (
                     <>
                       <div className="border-t border-gray-100" />
                       <button
-                        onClick={() => { window.electronAPI?.checkForUpdates(); setOpen(false); }}
+                        onClick={() => { setShowVersion(true); setOpen(false); }}
                         className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       >
-                        <RefreshCw size={15} className="text-gray-400" />
-                        Buscar actualizaciones
+                        <Info size={15} className="text-gray-400" />
+                        Acerca de / Versión
                       </button>
+                      {window.electronAPI?.checkForUpdates && (
+                        <button
+                          onClick={() => { window.electronAPI?.checkForUpdates(); setOpen(false); }}
+                          className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <RefreshCw size={15} className="text-gray-400" />
+                          Buscar actualizaciones
+                        </button>
+                      )}
                     </>
                   )}
                   <div className="border-t border-gray-100" />
@@ -161,5 +174,6 @@ export default function Header({ title, subtitle, actions }: HeaderProps) {
         )}
       </div>
     </div>
+    </>
   );
 }

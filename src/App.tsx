@@ -21,6 +21,7 @@ import ChipsPage from './pages/ChipsPage';
 import VicidialModule from './modules/vicidial/VicidialModule';
 import PersonalPage from './pages/PersonalPage';
 import CertificacionesPage from './pages/CertificacionesPage';
+import PlanoCallCenterPage from './pages/PlanoCallCenterPage';
 import { UpdateNotification } from './components/UpdateNotification';
 
 // ── Spinner de carga inicial ──────────────────────────────────────────────────
@@ -98,6 +99,9 @@ function AppLayout() {
             } />
             <Route path="/certificaciones" element={
               <ProtectedRoute modulo="certificaciones"><CertificacionesPage /></ProtectedRoute>
+            } />
+            <Route path="/plano-call-center" element={
+              <ProtectedRoute modulo="plano_call_center"><PlanoCallCenterPage /></ProtectedRoute>
             } />
             <Route path="/config" element={
               <ProtectedRoute modulo="configuracion"><ConfigPage /></ProtectedRoute>

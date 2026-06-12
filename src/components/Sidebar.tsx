@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   BarChart2, Clock, AlertTriangle, Settings, Home, Users, FileCheck,
-  Smartphone, Wifi, Headphones, Briefcase, Cpu, LogOut, PauseCircle, Menu,
+  Smartphone, Wifi, Headphones, Briefcase, Cpu, LogOut, PauseCircle, Menu, LayoutGrid,
 } from 'lucide-react';
 import { useAuthContext } from '../contexts/AuthContext';
 import { tieneAcceso, NOMBRES_ROLES, ROL_COLORS, type ModuloSistema } from '../config/permisos';
@@ -41,6 +41,12 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/atencion-cliente', icon: Headphones, label: 'Atención al Cliente', modulo: 'atencion_cliente' },
       { to: '/back-office',      icon: Briefcase,  label: 'Back Office',          modulo: 'back_office'      },
       { to: '/chips',            icon: Cpu,        label: 'Chips',                modulo: 'chips'            },
+    ],
+  },
+  {
+    label: 'OPERACIONES',
+    items: [
+      { to: '/plano-call-center', icon: LayoutGrid, label: 'Plano Call Center', modulo: 'plano_call_center' },
     ],
   },
   {

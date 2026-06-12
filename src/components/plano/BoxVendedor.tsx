@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { Rnd } from 'react-rnd';
 import type { BoxPiso, EstadoBox } from '../../store/planoStore';
 import { Plus } from 'lucide-react';
@@ -8,9 +8,13 @@ interface Props {
   estados: EstadoBox[];
   editMode: boolean;
   isSelected: boolean;
+  isMultiSelected: boolean;
   isHighlighted: boolean;
-  onSelect: () => void;
+  zoom: number;
+  dragOffset?: { dx: number; dy: number };
+  onSelect: (e: React.MouseEvent) => void;
   onUpdate: (patch: Partial<BoxPiso>) => void;
+  onBoxMouseDown: (e: React.MouseEvent) => void;
 }
 
 function hexRgb(hex: string) {
@@ -29,32 +33,32 @@ function darken(hex: string): string {
 }
 
 const BoxVendedor = React.memo(function BoxVendedor({
-  box, estados, editMode, isSelected, isHighlighted, onSelect, onUpdate,
+  box, estados, editMode, isSelected, isMultiSelected, isHighlighted, zoom,
+  dragOffset, onSelect, onUpdate, onBoxMouseDown,
 }: Props) {
   const estado = estados.find(e => e.id === box.estadoId) ?? estados.find(e => e.id === 'libre') ?? estados[0];
-  const dragging = useRef(false);
   const color = estado?.color ?? '#6c757d';
 
-  const borderColor = isHighlighted ? '#facc15' : isSelected ? '#1d4ed8' : darken(color);
-  const borderWidth = isHighlighted || isSelected ? 3 : 2;
+  const displayX = dragOffset ? box.x + dragOffset.dx : box.x;
+  const displayY = dragOffset ? box.y + dragOffset.dy : box.y;
+
+  const isAnySelected = isSelected || isMultiSelected;
+  const borderColor = isHighlighted ? '#facc15' : isAnySelected ? '#1d4ed8' : darken(color);
+  const borderWidth = isHighlighted || isAnySelected ? 3 : 2;
   const abbrev = box.vendedor?.nombre
     ? box.vendedor.nombre.split(' ').slice(0, 2).join(' ')
     : null;
 
   return (
     <Rnd
-      position={{ x: box.x, y: box.y }}
+      position={{ x: displayX, y: displayY }}
       size={{ width: box.width, height: box.height }}
-      disableDragging={!editMode}
-      enableResizing={editMode}
+      disableDragging={true}
+      enableResizing={editMode && !dragOffset}
       bounds="parent"
+      scale={zoom}
       minWidth={60}
       minHeight={60}
-      onDragStart={() => { dragging.current = true; }}
-      onDragStop={(_e, d) => {
-        dragging.current = false;
-        onUpdate({ x: Math.max(0, d.x), y: Math.max(0, d.y) });
-      }}
       onResizeStop={(_e, _dir, ref, _delta, pos) => {
         onUpdate({
           width: parseInt(ref.style.width),
@@ -63,55 +67,43 @@ const BoxVendedor = React.memo(function BoxVendedor({
           y: Math.max(0, pos.y),
         });
       }}
-      style={{ zIndex: isSelected ? 10 : 2 }}
+      style={{ zIndex: isAnySelected ? 10 : 2 }}
     >
       <div
-        onClick={() => { if (!dragging.current) onSelect(); }}
+        onMouseDown={editMode ? onBoxMouseDown : undefined}
+        onClick={onSelect}
         style={{
           width: '100%', height: '100%',
           background: `rgba(${hexRgb(color)},0.88)`,
           border: `${borderWidth}px solid ${borderColor}`,
           borderRadius: 6,
-          cursor: editMode ? 'grab' : 'pointer',
+          cursor: editMode ? (dragOffset ? 'grabbing' : 'grab') : 'pointer',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           position: 'relative',
           userSelect: 'none',
           boxShadow: isHighlighted
             ? '0 0 0 3px #facc15, 0 2px 8px rgba(0,0,0,0.2)'
-            : isSelected
+            : isAnySelected
             ? '0 0 0 2px #1d4ed8, 0 2px 8px rgba(0,0,0,0.2)'
             : '0 1px 4px rgba(0,0,0,0.15)',
           overflow: 'hidden',
-          transition: 'box-shadow 0.15s',
+          transition: dragOffset ? 'none' : 'box-shadow 0.15s',
+          outline: isMultiSelected ? '2px dashed #60a5fa' : 'none',
+          outlineOffset: 1,
         }}
       >
         {box.label && (
-          <span style={{
-            position: 'absolute', top: 3, left: 4,
-            fontSize: 9, color: 'rgba(255,255,255,0.75)',
-            fontWeight: 700, lineHeight: 1, pointerEvents: 'none',
-          }}>
+          <span style={{ position: 'absolute', top: 3, left: 4, fontSize: 9, color: 'rgba(255,255,255,0.75)', fontWeight: 700, lineHeight: 1, pointerEvents: 'none' }}>
             {box.label}
           </span>
         )}
-
         {box.vendedor ? (
           <>
             {box.vendedor.foto && (
-              <img
-                src={box.vendedor.foto}
-                alt=""
-                style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', marginBottom: 4, border: '2px solid rgba(255,255,255,0.6)', flexShrink: 0 }}
-              />
+              <img src={box.vendedor.foto} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', marginBottom: 4, border: '2px solid rgba(255,255,255,0.6)', flexShrink: 0 }} />
             )}
-            <span style={{
-              fontSize: 11, fontWeight: 700, color: '#fff',
-              textAlign: 'center', lineHeight: 1.25,
-              padding: '0 6px', overflow: 'hidden',
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              maxWidth: '100%',
-            }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', textAlign: 'center', lineHeight: 1.25, padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
               {abbrev}
             </span>
           </>

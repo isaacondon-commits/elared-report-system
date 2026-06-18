@@ -211,13 +211,12 @@ export function detectMotivoFibra(raw: string): MotivoFibra {
 
 // ─── Motivo classification for pricing ────────────────────────────────────────────
 
-function normalizeMotivo(motivo: string): 'alta' | 'renovacion' | 'cambio' {
-  const m = motivo.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  if (m === 'nuevo servicio')       return 'alta';
-  if (m === 'pasaje de tecnologia') return 'alta';
-  if (m === 'renovacion')           return 'renovacion';
-  if (m === 'cambio de plan')       return 'cambio';
-  return 'alta';
+function normalizeMotivo(motivo: string): 'alta' | 'renovacion' {
+  const m = motivo.trim().toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (m === 'renovacion') return 'renovacion'
+  return 'alta'
 }
 
 // ─── Core calculation ──────────────────────────────────────────────────────────
@@ -288,7 +287,7 @@ export function calcularComisionVendedorFibra(
       ventasTelemarketing++;
 
       const tipoMotivo = normalizeMotivo(venta.motivo);
-      const esAlta = tipoMotivo === 'alta' || tipoMotivo === 'cambio';
+      const esAlta = tipoMotivo === 'alta';
       const tablaFull = planCanon
         ? (condicion === '80_sin_falta' ? PRECIOS_80_SIN_FALTA[planCanon] : PRECIOS_50_O_FALTA[planCanon])
         : null;

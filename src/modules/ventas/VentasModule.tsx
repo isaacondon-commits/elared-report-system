@@ -10,7 +10,8 @@ import Header from '../../components/Header';
 import { parseExcel, normalizeEstado, normalizeFechaVenta, type ParseResult, type EstadoVenta } from '../../utils/smartParser';
 import VentasCharts, { TemporalChart } from './VentasCharts';
 import VentasPerformanceTable from './VentasPerformanceTable';
-import { exportVentasPptx, exportVentasExcel, exportVentasPDF } from './VentasExport';
+import { exportVentasPptx, exportVentasExcel } from './VentasExport';
+import PDFModal from '../../components/PDFModal';
 import { useConfig } from '../../hooks/useConfig';
 import { recordActivity } from '../../utils/activityTracker';
 import { useAnalisisStore, formatFechaCarga } from '../../store/analisisStore';
@@ -502,6 +503,7 @@ export default function VentasModule() {
   const [sessionKey, setSessionKey] = useState(0);
   const [vendedoresOcultos, setVendedoresOcultos] = useState<Set<string>>(loadOcultos);
   const [vendedorActivo, setVendedorActivo]       = useState<string | null>(null);
+  const [showPDFModal, setShowPDFModal]           = useState(false);
 
   const getRows = useCallback((allRows: Record<string, unknown>[], emp: string, ocultos: Set<string>) => {
     const filtered = getFilteredRows(allRows, mapping, emp);
@@ -580,11 +582,6 @@ export default function VentasModule() {
     exportVentasExcel(stats, empresaActiva);
   }, [stats, empresaActiva]);
 
-  const handleExportPDF = useCallback(() => {
-    if (!stats) return;
-    exportVentasPDF(stats, config, empresaActiva);
-  }, [stats, config, empresaActiva]);
-
   const reset = () => {
     clearVentas();
     setSessionKey(k => k + 1);
@@ -622,7 +619,7 @@ export default function VentasModule() {
                 style={{ background: '#1D6F42' }}>
                 <Download size={15} /> Excel
               </button>
-              <button onClick={handleExportPDF}
+              <button onClick={() => setShowPDFModal(true)}
                 className="flex items-center gap-2 px-4 py-1.5 text-sm text-white rounded-lg hover:opacity-90"
                 style={{ background: '#E3000F' }}>
                 <Download size={15} /> PDF
@@ -705,7 +702,7 @@ export default function VentasModule() {
 
         {/* ── ANALYSIS ── */}
         {stage === 'analysis' && stats && (
-          <div key={sessionKey} className="space-y-6">
+          <div id="ventas-content" key={sessionKey} className="space-y-6">
 
             {/* 1. KPI Cards — fila 1: totales por motivo */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -808,6 +805,16 @@ export default function VentasModule() {
           </div>
         )}
       </div>
+      {showPDFModal && (
+        <PDFModal
+          elementId="ventas-content"
+          titulo="Ventas"
+          nombreArchivo={`Ventas_${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}`}
+          onClose={() => setShowPDFModal(false)}
+          personaElementId={vendedorActivo ? `ventas-vendedor-${vendedorActivo}` : undefined}
+          personaNombre={vendedorActivo ?? undefined}
+        />
+      )}
     </div>
   );
 }

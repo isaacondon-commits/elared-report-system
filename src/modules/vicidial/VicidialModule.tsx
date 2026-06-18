@@ -508,7 +508,7 @@ export default function VicidialModule() {
     <div className="flex flex-col h-full">
       <Header title="Pausas Vicidial" subtitle={subtitle} actions={headerActions} />
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div id="vicidial-content" className="max-w-7xl mx-auto space-y-6">
 
           {/* KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">

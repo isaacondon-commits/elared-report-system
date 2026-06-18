@@ -16,7 +16,8 @@ import {
 import RelojCalendar from './RelojCalendar';
 import RelojTimeline from './RelojTimeline';
 import { IngresosLineChart, JornadaLineChart, CompositionChart, RankingBarChart, JornadaBarChart, HeatmapChart, HorasExtrasBarChart } from './RelojCharts';
-import { exportRelojExcel, exportRelojPDF, exportRelojPPTX } from './RelojExport';
+import { exportRelojExcel, exportRelojPPTX } from './RelojExport';
+import PDFModal from '../../components/PDFModal';
 import { useConfig } from '../../hooks/useConfig';
 import { useAnalisisStore, formatFechaCarga } from '../../store/analisisStore';
 
@@ -597,9 +598,8 @@ function IndividualView({ emp, onEditHorario }: {
 }) {
   const presenciaPct = emp.diasLaborables > 0
     ? Math.round((emp.diasPresentes / emp.diasLaborables) * 100) : 0;
-
   return (
-    <div className="space-y-5">
+    <div id={`reloj-persona-${emp.nombre.replace(/\s+/g, '-')}`} className="space-y-5">
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KPICard
@@ -813,8 +813,8 @@ export default function RelojModule() {
   const [empleados, setEmpleados]       = useState<EmpleadoData[]>(() => storeEntry?.empleados ?? []);
   const [selected, setSelected]         = useState<string>('ALL');
   const [editingEmp, setEditingEmp]     = useState<string | null>(null);
-  const [exportingPdf, setExportingPdf]   = useState(false);
   const [exportingPptx, setExportingPptx] = useState(false);
+  const [showPDFModal, setShowPDFModal]   = useState(false);
 
   // Filter state
   const [searchQuery, setSearchQuery]           = useState('');
@@ -902,18 +902,6 @@ export default function RelojModule() {
     try { await exportRelojPPTX({ ...data, empleados }, config.nombreEmpresa); } finally { setExportingPptx(false); }
   }, [data, empleados, config]);
 
-  const handleExportPDF = useCallback(async () => {
-    if (!data) return;
-    const emp = empleados.find(e => e.nombre === selected);
-    if (!emp) return;
-    setExportingPdf(true);
-    try {
-      await exportRelojPDF(emp, config.nombreEmpresa);
-    } finally {
-      setExportingPdf(false);
-    }
-  }, [data, empleados, selected, config]);
-
   const handleSaveHorario = useCallback((empNombre: string, newHorario: HorarioEsperado) => {
     setEmpleados(prev => {
       const updated = prev.map(e => {
@@ -963,16 +951,13 @@ export default function RelojModule() {
                 <Download size={14} />
                 Excel
               </button>
-              {selected !== 'ALL' && selectedEmp && (
-                <button
-                  onClick={handleExportPDF}
-                  disabled={exportingPdf}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors"
-                  style={{ background: '#E3000F' }}>
-                  <FileText size={14} />
-                  {exportingPdf ? 'Generando…' : 'PDF'}
-                </button>
-              )}
+              <button
+                onClick={() => setShowPDFModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-white rounded-lg hover:opacity-90 transition-colors"
+                style={{ background: '#E3000F' }}>
+                <FileText size={14} />
+                PDF
+              </button>
             </div>
           ) : null
         }
@@ -1027,7 +1012,7 @@ export default function RelojModule() {
 
         {/* ── ANALYSIS ── */}
         {stage === 'analysis' && data && (
-          <div className="space-y-5">
+          <div id="reloj-content" className="space-y-5">
 
             {/* Filter bar — solo en vista comparativa */}
             {selected === 'ALL' && (
@@ -1083,6 +1068,16 @@ export default function RelojModule() {
           emp={selectedEmp}
           onSave={h => handleSaveHorario(selectedEmp.nombre, h)}
           onClose={() => setEditingEmp(null)}
+        />
+      )}
+      {showPDFModal && (
+        <PDFModal
+          elementId="reloj-content"
+          titulo="Reloj de Personal"
+          nombreArchivo={`Reloj_${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}`}
+          onClose={() => setShowPDFModal(false)}
+          personaElementId={selected !== 'ALL' && selectedEmp ? `reloj-persona-${selectedEmp.nombre.replace(/\s+/g, '-')}` : undefined}
+          personaNombre={selected !== 'ALL' ? selected : undefined}
         />
       )}
     </div>

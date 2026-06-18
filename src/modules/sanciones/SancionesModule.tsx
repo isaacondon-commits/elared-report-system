@@ -8,7 +8,8 @@ import Header from '../../components/Header';
 import RankingTable from '../../components/RankingTable';
 import { parseExcel, type ParseResult } from '../../utils/smartParser';
 import SancionesCharts from './SancionesCharts';
-import { exportSancionesPdf } from './SancionesExport';
+import { exportSancionesPptx } from './SancionesExport';
+import PDFModal from '../../components/PDFModal';
 import { useConfig } from '../../hooks/useConfig';
 import { useAnalisisStore, formatFechaCarga } from '../../store/analisisStore';
 
@@ -121,6 +122,8 @@ export default function SancionesModule() {
   const [error, setError] = useState('');
   const [filterFuncionario, setFilterFuncionario] = useState('');
   const [filterTipo, setFilterTipo] = useState('');
+  const [showPDFModal, setShowPDFModal] = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
 
   const handleFile = useCallback(async (file: File) => {
     setError('');
@@ -148,9 +151,10 @@ export default function SancionesModule() {
     }, 300);
   }, [parsed, mapping, saveToStore]);
 
-  const handleExport = useCallback(() => {
+  const handleExportPptx = useCallback(async () => {
     if (!stats) return;
-    exportSancionesPdf(stats, config);
+    setExportingPptx(true);
+    try { await exportSancionesPptx(stats, config); } finally { setExportingPptx(false); }
   }, [stats, config]);
 
   const reset = () => { clearSanciones(); setStage('upload'); setParsed(null); setStats(null); setError(''); };
@@ -172,11 +176,20 @@ export default function SancionesModule() {
                 Cargar otro archivo
               </button>
               <button
-                onClick={handleExport}
+                onClick={handleExportPptx}
+                disabled={exportingPptx}
+                className="flex items-center gap-2 px-4 py-1.5 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors"
+                style={{ background: '#C43B1C' }}
+              >
+                <Download size={15} />
+                {exportingPptx ? 'Generando…' : 'PowerPoint'}
+              </button>
+              <button
+                onClick={() => setShowPDFModal(true)}
                 className="flex items-center gap-2 px-4 py-1.5 text-sm bg-[#E3000F] text-white rounded-lg hover:bg-red-800"
               >
                 <Download size={15} />
-                Exportar PDF
+                PDF
               </button>
             </div>
           ) : null
@@ -252,7 +265,7 @@ export default function SancionesModule() {
         )}
 
         {stage === 'analysis' && stats && (
-          <div className="space-y-6">
+          <div id="sanciones-content" className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <KPICard label="Total sanciones" value={stats.total} icon={AlertTriangle} color="red" />
               <KPICard label="Funcionarios involucrados" value={stats.byFuncionario.length} icon={AlertTriangle} color="amber" />
@@ -348,6 +361,14 @@ export default function SancionesModule() {
           </div>
         )}
       </div>
+      {showPDFModal && (
+        <PDFModal
+          elementId="sanciones-content"
+          titulo="Sanciones"
+          nombreArchivo={`Sanciones_${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}`}
+          onClose={() => setShowPDFModal(false)}
+        />
+      )}
     </div>
   );
 }

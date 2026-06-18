@@ -506,7 +506,7 @@ function ResultsView({
     <div className="flex flex-col h-full">
       <Header title="Comisiones Fibra" />
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div id="comisiones-fibra-content" className="max-w-7xl mx-auto space-y-6">
 
           {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-3">

@@ -1,38 +1,34 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { LayoutGrid } from 'lucide-react';
-import Header from '../components/Header';
+import { Search, Plus, Palette, Eye, Pencil } from 'lucide-react';
 import AreaPisoComp, { AREA_HEADER_H } from '../components/plano/AreaPiso';
 import FichaVendedor from '../components/plano/FichaVendedor';
 import GestionEstados from '../components/plano/GestionEstados';
 import ConectorLayer from '../components/plano/ConectorLayer';
 import MiniMapa from '../components/plano/MiniMapa';
-import ToolbarPlano from '../components/plano/ToolbarPlano';
+import ToolbarPlano, { type PlanoTool } from '../components/plano/ToolbarPlano';
 import { usePlanoStore } from '../store/planoStore';
 import type { BoxPiso, AreaPiso } from '../store/planoStore';
 
 const CANVAS_W = 3200;
 const CANVAS_H = 2400;
 const ZOOM_MIN = 0.25;
-const ZOOM_MAX = 2;
+const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.1;
 
-// ── Modal nueva área ───────────────────────────────────────────────────────────
+// ── Modal nueva área ──────────────────────────────────────────────────────────
 
-function ModalNuevaArea({ onClose, onAdd }: { onClose: () => void; onAdd: (nombre: string, color: string, w: number, h: number) => void }) {
+function ModalNuevaArea({ onClose, onAdd }: {
+  onClose: () => void;
+  onAdd: (nombre: string, color: string, w: number, h: number) => void;
+}) {
   const [nombre, setNombre] = useState('');
-  const [color, setColor] = useState('#e3f2fd');
+  const [color, setColor] = useState('#4A90D9');
   const [w, setW] = useState(800);
   const [h, setH] = useState(500);
 
-  function handleAdd() {
-    if (!nombre.trim()) return;
-    onAdd(nombre.trim(), color, w, h);
-    onClose();
-  }
-
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 12, width: 380, padding: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 14, width: 380, padding: '24px', boxShadow: '0 24px 64px rgba(0,0,0,0.28)' }} onClick={e => e.stopPropagation()}>
         <div style={{ fontWeight: 700, fontSize: 16, color: '#111827', marginBottom: 20 }}>Nueva Área</div>
 
         <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Nombre *</label>
@@ -41,7 +37,8 @@ function ModalNuevaArea({ onClose, onAdd }: { onClose: () => void; onAdd: (nombr
 
         <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Color</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ width: 40, height: 36, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 2 }} />
+          <input type="color" value={color} onChange={e => setColor(e.target.value)}
+            style={{ width: 40, height: 36, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 2 }} />
           <span style={{ fontSize: 12, color: '#374151' }}>{color}</span>
         </div>
 
@@ -60,7 +57,9 @@ function ModalNuevaArea({ onClose, onAdd }: { onClose: () => void; onAdd: (nombr
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '9px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={handleAdd} disabled={!nombre.trim()} style={{ flex: 2, padding: '9px', border: 'none', borderRadius: 8, background: nombre.trim() ? '#003DA5' : '#e5e7eb', color: nombre.trim() ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: 600, cursor: nombre.trim() ? 'pointer' : 'not-allowed' }}>
+          <button onClick={() => { if (!nombre.trim()) return; onAdd(nombre.trim(), color, w, h); onClose(); }}
+            disabled={!nombre.trim()}
+            style={{ flex: 2, padding: '9px', border: 'none', borderRadius: 8, background: nombre.trim() ? '#003DA5' : '#e5e7eb', color: nombre.trim() ? '#fff' : '#9ca3af', fontSize: 13, fontWeight: 600, cursor: nombre.trim() ? 'pointer' : 'not-allowed' }}>
             Crear Área
           </button>
         </div>
@@ -69,7 +68,7 @@ function ModalNuevaArea({ onClose, onAdd }: { onClose: () => void; onAdd: (nombr
   );
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function findBoxGlobal(areas: AreaPiso[], boxId: string): { area: AreaPiso; box: BoxPiso } | null {
   for (const area of areas) {
@@ -85,7 +84,12 @@ function rectsIntersect(ax: number, ay: number, aw: number, ah: number, bx: numb
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
 
-// ── Página principal ───────────────────────────────────────────────────────────
+function multiSelectedIds_forArea(multiSelected: Set<string>, area: AreaPiso): Set<string> {
+  const areaBoxIds = new Set(area.boxes.map(b => b.id));
+  return new Set([...multiSelected].filter(id => areaBoxIds.has(id)));
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PlanoCallCenterPage() {
   const {
@@ -96,8 +100,13 @@ export default function PlanoCallCenterPage() {
     addConector, updateConector, removeConector,
   } = usePlanoStore();
 
-  // ── View state ──
-  const [editMode, setEditMode] = useState(() => { try { return localStorage.getItem('elared_plano_editmode') === 'true'; } catch { return false; } });
+  // ── Tool ──
+  const [tool, setTool] = useState<PlanoTool>(() => {
+    try { return (localStorage.getItem('elared_plano_tool') as PlanoTool) || 'select'; } catch { return 'select'; }
+  });
+  const [spaceActive, setSpaceActive] = useState(false);
+
+  // ── View ──
   const [zoom, setZoom] = useState(0.8);
   const [panX, setPanX] = useState(40);
   const [panY, setPanY] = useState(40);
@@ -113,7 +122,6 @@ export default function PlanoCallCenterPage() {
   const [dragOffsets, setDragOffsets] = useState<Map<string, { dx: number; dy: number }>>(new Map());
 
   // ── Connectors ──
-  const [conectMode, setConectMode] = useState(false);
   const [conectOrigen, setConectOrigen] = useState<string | null>(null);
   const [selectedConector, setSelectedConector] = useState<string | null>(null);
 
@@ -124,7 +132,7 @@ export default function PlanoCallCenterPage() {
   const [showGestionEstados, setShowGestionEstados] = useState(false);
   const [showNuevaArea, setShowNuevaArea] = useState(false);
 
-  // ── Refs for mouse state (avoid re-renders on every mousemove) ──
+  // ── Refs ──
   const containerRef = useRef<HTMLDivElement>(null);
   const panningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0, px: 0, py: 0 });
@@ -132,18 +140,18 @@ export default function PlanoCallCenterPage() {
   const dragRef = useRef<{ boxes: { boxId: string; areaId: string; origX: number; origY: number }[]; startCX: number; startCY: number } | null>(null);
   const containerSizeRef = useRef({ w: 800, h: 600 });
 
-  // ── Persist edit mode ──
-  useEffect(() => { try { localStorage.setItem('elared_plano_editmode', String(editMode)); } catch {} }, [editMode]);
+  // ── Persist tool ──
+  useEffect(() => { try { localStorage.setItem('elared_plano_tool', tool); } catch {} }, [tool]);
 
   // ── savedAt indicator ──
   useEffect(() => {
     if (!savedAt) return;
     setSavedIndicator(true);
-    const t = setTimeout(() => setSavedIndicator(false), 1500);
+    const t = setTimeout(() => setSavedIndicator(false), 2000);
     return () => clearTimeout(t);
   }, [savedAt]);
 
-  // ── Track container size ──
+  // ── Container size tracker ──
   useEffect(() => {
     function update() {
       if (containerRef.current) {
@@ -156,43 +164,37 @@ export default function PlanoCallCenterPage() {
     return () => window.removeEventListener('resize', update);
   }, []);
 
-  // ── Coordinate helpers ──
+  // ── Helpers ──
   function screenToCanvas(sx: number, sy: number) {
     const rect = containerRef.current!.getBoundingClientRect();
     return { x: (sx - rect.left - panX) / zoom, y: (sy - rect.top - panY) / zoom };
   }
 
-  // ── Wheel handler ──
+  // ── Wheel = zoom centered on cursor ──
   function handleWheel(e: React.WheelEvent) {
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) {
-      const rect = containerRef.current!.getBoundingClientRect();
-      const fx = e.clientX - rect.left;
-      const fy = e.clientY - rect.top;
-      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      const newZoom = clampZoom(zoom + delta);
-      setPanX(px => px + (fx - px) * (1 - newZoom / zoom));
-      setPanY(py => py + (fy - py) * (1 - newZoom / zoom));
-      setZoom(newZoom);
-    } else {
-      setPanX(px => px - e.deltaX);
-      setPanY(py => py - e.deltaY);
-    }
+    const rect = containerRef.current!.getBoundingClientRect();
+    const fx = e.clientX - rect.left;
+    const fy = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    const newZoom = clampZoom(zoom + delta);
+    setPanX(px => px + (fx - px) * (1 - newZoom / zoom));
+    setPanY(py => py + (fy - py) * (1 - newZoom / zoom));
+    setZoom(newZoom);
   }
 
-  // ── Mouse events on container ──
+  // ── Container mouse events ──
   function handleContainerMouseDown(e: React.MouseEvent) {
-    // Middle button or left in view mode → pan
-    if (e.button === 1 || (!editMode && e.button === 0)) {
+    const isPanMode = tool === 'pan' || spaceActive;
+    if (e.button === 1 || (isPanMode && e.button === 0)) {
       panningRef.current = true;
       panStartRef.current = { x: e.clientX, y: e.clientY, px: panX, py: panY };
       return;
     }
-    // Edit mode, left button → rubber-band selection
-    if (editMode && e.button === 0) {
-      const canvasPos = screenToCanvas(e.clientX, e.clientY);
-      selStartRef.current = { cx: canvasPos.x, cy: canvasPos.y };
-      setSelectionRect({ x: canvasPos.x, y: canvasPos.y, w: 0, h: 0 });
+    if (tool === 'select' && e.button === 0) {
+      const cp = screenToCanvas(e.clientX, e.clientY);
+      selStartRef.current = { cx: cp.x, cy: cp.y };
+      setSelectionRect({ x: cp.x, y: cp.y, w: 0, h: 0 });
     }
   }
 
@@ -202,54 +204,66 @@ export default function PlanoCallCenterPage() {
       setPanY(panStartRef.current.py + e.clientY - panStartRef.current.y);
       return;
     }
-
     if (dragRef.current) {
-      const canvasPos = screenToCanvas(e.clientX, e.clientY);
-      const dx = canvasPos.x - dragRef.current.startCX;
-      const dy = canvasPos.y - dragRef.current.startCY;
-      const newOffsets = new Map<string, { dx: number; dy: number }>();
-      for (const b of dragRef.current.boxes) newOffsets.set(b.boxId, { dx, dy });
-      setDragOffsets(newOffsets);
+      const cp = screenToCanvas(e.clientX, e.clientY);
+      const dx = cp.x - dragRef.current.startCX;
+      const dy = cp.y - dragRef.current.startCY;
+      const offsets = new Map<string, { dx: number; dy: number }>();
+      for (const b of dragRef.current.boxes) offsets.set(b.boxId, { dx, dy });
+      setDragOffsets(offsets);
       return;
     }
-
     if (selStartRef.current) {
-      const canvasPos = screenToCanvas(e.clientX, e.clientY);
-      const sx = selStartRef.current.cx;
-      const sy = selStartRef.current.cy;
-      setSelectionRect({
-        x: Math.min(sx, canvasPos.x),
-        y: Math.min(sy, canvasPos.y),
-        w: Math.abs(canvasPos.x - sx),
-        h: Math.abs(canvasPos.y - sy),
-      });
+      const cp = screenToCanvas(e.clientX, e.clientY);
+      const sx = selStartRef.current.cx, sy = selStartRef.current.cy;
+      setSelectionRect({ x: Math.min(sx, cp.x), y: Math.min(sy, cp.y), w: Math.abs(cp.x - sx), h: Math.abs(cp.y - sy) });
     }
   }
 
   function handleContainerMouseUp(e: React.MouseEvent) {
-    // End pan
     if (panningRef.current) { panningRef.current = false; return; }
 
-    // End drag
     if (dragRef.current) {
-      const canvasPos = screenToCanvas(e.clientX, e.clientY);
-      const dx = canvasPos.x - dragRef.current.startCX;
-      const dy = canvasPos.y - dragRef.current.startCY;
+      const cp = screenToCanvas(e.clientX, e.clientY);
+      const dx = cp.x - dragRef.current.startCX;
+      const dy = cp.y - dragRef.current.startCY;
       if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
         pushHistory();
-        const updates = dragRef.current.boxes.map(b => ({
-          areaId: b.areaId,
-          boxId: b.boxId,
+        updateBoxes(dragRef.current.boxes.map(b => ({
+          areaId: b.areaId, boxId: b.boxId,
           patch: { x: Math.max(0, b.origX + dx), y: Math.max(0, b.origY + dy) },
-        }));
-        updateBoxes(updates);
+        })));
       }
       dragRef.current = null;
       setDragOffsets(new Map());
       return;
     }
 
-    // End rubber-band selection
+    // Box creation tool
+    if (tool === 'box' && e.button === 0) {
+      const cp = screenToCanvas(e.clientX, e.clientY);
+      const area = areas.find(a =>
+        cp.x >= a.x && cp.x <= a.x + a.width &&
+        cp.y >= a.y + AREA_HEADER_H && cp.y <= a.y + a.height,
+      );
+      if (area) {
+        addBox(area.id, {
+          x: Math.max(0, cp.x - area.x - 45),
+          y: Math.max(0, cp.y - area.y - AREA_HEADER_H - 45),
+          width: 90, height: 90, estadoId: 'libre', vendedor: null,
+          label: `B-${area.boxes.length + 1}`,
+        });
+      }
+      return;
+    }
+
+    // Area creation tool
+    if (tool === 'area' && e.button === 0) {
+      setShowNuevaArea(true);
+      return;
+    }
+
+    // Rubber-band selection end
     if (selStartRef.current && selectionRect) {
       if (selectionRect.w > 4 && selectionRect.h > 4) {
         const sel = new Set<string>();
@@ -268,8 +282,7 @@ export default function PlanoCallCenterPage() {
           const found = findBoxGlobal(areas, boxId);
           if (found) setSelectedBox({ areaId: found.area.id, boxId });
         } else { setSelectedBox(null); }
-      } else if (selectionRect.w <= 4 && selectionRect.h <= 4) {
-        // Click on empty space → deselect
+      } else {
         setMultiSelected(new Set());
         setSelectedBox(null);
         setConectOrigen(null);
@@ -283,41 +296,26 @@ export default function PlanoCallCenterPage() {
   function handleContainerMouseLeave() {
     if (panningRef.current) { panningRef.current = false; }
     if (dragRef.current) {
-      // Commit drag on leave
       const updates = dragRef.current.boxes.map(b => ({
         areaId: b.areaId, boxId: b.boxId,
         patch: { x: Math.max(0, b.origX + (dragOffsets.get(b.boxId)?.dx ?? 0)), y: Math.max(0, b.origY + (dragOffsets.get(b.boxId)?.dy ?? 0)) },
       }));
-      if (updates.some(u => (u.patch.x !== 0 || u.patch.y !== 0))) {
-        pushHistory();
-        updateBoxes(updates);
-      }
+      if (updates.some(u => u.patch.x !== 0 || u.patch.y !== 0)) { pushHistory(); updateBoxes(updates); }
       dragRef.current = null;
       setDragOffsets(new Map());
     }
     if (selStartRef.current) { selStartRef.current = null; setSelectionRect(null); }
   }
 
-  // ── Box interaction ──
+  // ── Box events ──
   function handleBoxMouseDown(boxId: string, areaId: string, e: React.MouseEvent) {
-    if (!editMode) return;
+    if (tool !== 'select') return;
     e.stopPropagation();
     selStartRef.current = null;
     setSelectionRect(null);
 
-    // Connect mode
-    if (conectMode) {
-      if (!conectOrigen) {
-        setConectOrigen(boxId);
-      } else if (conectOrigen !== boxId) {
-        addConector({ origenId: conectOrigen, destinoId: boxId, tipo: 'flecha', color: '#4A4A6A' });
-        setConectOrigen(null);
-        setConectMode(false);
-      }
-      return;
-    }
+    if (tool === 'select' as PlanoTool && false) { /* connect handled below */ }
 
-    // Shift-click: toggle selection
     if (e.shiftKey) {
       setMultiSelected(prev => {
         const next = new Set(prev);
@@ -327,12 +325,11 @@ export default function PlanoCallCenterPage() {
       return;
     }
 
-    // Determine which boxes to drag
     let toDrag: { boxId: string; areaId: string; origX: number; origY: number }[];
     if (multiSelected.has(boxId) && multiSelected.size > 1) {
       toDrag = [...multiSelected].map(bid => {
-        const found = findBoxGlobal(areas, bid);
-        return found ? { boxId: bid, areaId: found.area.id, origX: found.box.x, origY: found.box.y } : null;
+        const f = findBoxGlobal(areas, bid);
+        return f ? { boxId: bid, areaId: f.area.id, origX: f.box.x, origY: f.box.y } : null;
       }).filter(Boolean) as { boxId: string; areaId: string; origX: number; origY: number }[];
     } else {
       const found = findBoxGlobal(areas, boxId);
@@ -340,14 +337,26 @@ export default function PlanoCallCenterPage() {
       setMultiSelected(new Set([boxId]));
     }
 
-    const canvasPos = screenToCanvas(e.clientX, e.clientY);
-    dragRef.current = { boxes: toDrag, startCX: canvasPos.x, startCY: canvasPos.y };
+    const cp = screenToCanvas(e.clientX, e.clientY);
+    dragRef.current = { boxes: toDrag, startCX: cp.x, startCY: cp.y };
   }
 
   function handleBoxClick(boxId: string, areaId: string, e: React.MouseEvent) {
-    if (dragRef.current) return; // was dragging
+    if (dragRef.current) return;
     if (e.shiftKey) return;
-    if (conectMode) return; // handled in mousedown
+
+    // Connect mode
+    if (tool === 'connect') {
+      if (!conectOrigen) {
+        setConectOrigen(boxId);
+      } else if (conectOrigen !== boxId) {
+        addConector({ origenId: conectOrigen, destinoId: boxId, tipo: 'flecha', color: '#4A4A6A' });
+        setConectOrigen(null);
+        setTool('select');
+      }
+      return;
+    }
+
     setSelectedBox({ areaId, boxId });
   }
 
@@ -357,52 +366,49 @@ export default function PlanoCallCenterPage() {
       const target = e.target as HTMLElement;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
 
+      if (e.code === 'Space') { e.preventDefault(); setSpaceActive(true); return; }
+
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
         if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return; }
-        if (e.key === 'c' && editMode && multiSelected.size > 0) {
+        if (e.key === 'c' && multiSelected.size > 0) {
           e.preventDefault();
           const items = [...multiSelected].map(bid => {
-            const found = findBoxGlobal(areas, bid);
-            return found ? { areaId: found.area.id, box: { ...found.box } } : null;
+            const f = findBoxGlobal(areas, bid);
+            return f ? { areaId: f.area.id, box: { ...f.box } } : null;
           }).filter(Boolean) as { areaId: string; box: BoxPiso }[];
           setClipboard(items);
           return;
         }
-        if (e.key === 'v' && editMode && clipboard) {
+        if (e.key === 'v' && clipboard) {
           e.preventDefault();
-          const newItems = addBoxes(clipboard.map(i => ({ areaId: i.areaId, box: { ...i.box, x: i.box.x + 20, y: i.box.y + 20 } })));
-          setMultiSelected(new Set(newItems));
+          const ids = addBoxes(clipboard.map(i => ({ areaId: i.areaId, box: { ...i.box, x: i.box.x + 20, y: i.box.y + 20 } })));
+          setMultiSelected(new Set(ids));
           return;
         }
-        if (e.key === 'a' && editMode) {
+        if (e.key === 'a') {
           e.preventDefault();
-          const all = areas.flatMap(a => a.boxes.map(b => b.id));
-          setMultiSelected(new Set(all));
+          setMultiSelected(new Set(areas.flatMap(a => a.boxes.map(b => b.id))));
           return;
         }
       }
 
       if (e.key === 'Escape') {
-        setMultiSelected(new Set());
-        setSelectedBox(null);
-        setConectMode(false);
-        setConectOrigen(null);
-        setSelectedConector(null);
+        setMultiSelected(new Set()); setSelectedBox(null);
+        setConectOrigen(null); setSelectedConector(null);
         return;
       }
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && editMode && multiSelected.size > 0) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && multiSelected.size > 0) {
         e.preventDefault();
         const withVendedor = [...multiSelected].filter(bid => findBoxGlobal(areas, bid)?.box.vendedor);
         if (withVendedor.length > 0 && !confirm(`¿Eliminar ${multiSelected.size} box${multiSelected.size > 1 ? 'es' : ''}? ${withVendedor.length} tienen vendedor asignado.`)) return;
         removeBoxes([...multiSelected].map(bid => { const f = findBoxGlobal(areas, bid); return f ? { areaId: f.area.id, boxId: bid } : null; }).filter(Boolean) as { areaId: string; boxId: string }[]);
-        setMultiSelected(new Set());
-        setSelectedBox(null);
+        setMultiSelected(new Set()); setSelectedBox(null);
         return;
       }
 
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && editMode && multiSelected.size > 0) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && multiSelected.size > 0) {
         e.preventDefault();
         const d = e.shiftKey ? 10 : 1;
         const dx = e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0;
@@ -411,13 +417,29 @@ export default function PlanoCallCenterPage() {
           const f = findBoxGlobal(areas, bid);
           return f ? { areaId: f.area.id, boxId: bid, patch: { x: Math.max(0, f.box.x + dx), y: Math.max(0, f.box.y + dy) } } : null;
         }).filter(Boolean) as { areaId: string; boxId: string; patch: Partial<BoxPiso> }[]);
+        return;
+      }
+
+      // Tool shortcuts (no modifier)
+      switch (e.key.toLowerCase()) {
+        case 'v': setTool('select'); break;
+        case 'h': setTool('pan'); break;
+        case 'b': setTool('box'); break;
+        case 'a': setTool('area'); setShowNuevaArea(true); break;
+        case 'c': setTool('connect'); setConectOrigen(null); break;
       }
     }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [editMode, multiSelected, areas, clipboard, undo, redo, addBoxes, removeBoxes, updateBoxes]);
 
-  // ── Search auto-scroll + highlight ──
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.code === 'Space') setSpaceActive(false);
+    }
+
+    document.addEventListener('keydown', handleKey);
+    document.addEventListener('keyup', handleKeyUp);
+    return () => { document.removeEventListener('keydown', handleKey); document.removeEventListener('keyup', handleKeyUp); };
+  }, [multiSelected, areas, clipboard, undo, redo, addBoxes, removeBoxes, updateBoxes]);
+
+  // ── Search ──
   useEffect(() => {
     if (!searchTerm.trim()) return;
     const term = searchTerm.toLowerCase();
@@ -435,7 +457,7 @@ export default function PlanoCallCenterPage() {
     }
   }, [searchTerm]);
 
-  // ── Derived data ──
+  // ── Derived ──
   const kpis = useMemo(() => ({
     areas: areas.length,
     boxes: areas.reduce((s, a) => s + a.boxes.length, 0),
@@ -450,177 +472,272 @@ export default function PlanoCallCenterPage() {
   }, [areas, selectedBox]);
 
   // ── Cursor ──
-  const cursor = conectMode ? 'crosshair'
-    : panningRef.current ? 'grabbing'
+  const isPanActive = tool === 'pan' || spaceActive;
+  const cursor = isPanActive
+    ? (panningRef.current ? 'grabbing' : 'grab')
+    : (tool === 'box' || tool === 'area' || tool === 'connect') ? 'crosshair'
     : selStartRef.current ? 'crosshair'
-    : !editMode ? 'grab'
     : 'default';
 
-  // ── Zoom controls ──
-  function zoomIn() { const n = clampZoom(zoom + ZOOM_STEP); const { w, h } = containerSizeRef.current; setPanX(px => px + (w / 2 - px) * (1 - n / zoom)); setPanY(py => py + (h / 2 - py) * (1 - n / zoom)); setZoom(n); }
-  function zoomOut() { const n = clampZoom(zoom - ZOOM_STEP); const { w, h } = containerSizeRef.current; setPanX(px => px + (w / 2 - px) * (1 - n / zoom)); setPanY(py => py + (h / 2 - py) * (1 - n / zoom)); setZoom(n); }
+  // editMode = can drag/resize areas and boxes
+  const editMode = tool !== 'pan';
+
+  // ── Zoom functions ──
+  function zoomIn() {
+    const { w, h } = containerSizeRef.current;
+    const n = clampZoom(zoom + ZOOM_STEP);
+    setPanX(px => px + (w / 2 - px) * (1 - n / zoom));
+    setPanY(py => py + (h / 2 - py) * (1 - n / zoom));
+    setZoom(n);
+  }
+  function zoomOut() {
+    const { w, h } = containerSizeRef.current;
+    const n = clampZoom(zoom - ZOOM_STEP);
+    setPanX(px => px + (w / 2 - px) * (1 - n / zoom));
+    setPanY(py => py + (h / 2 - py) * (1 - n / zoom));
+    setZoom(n);
+  }
   function zoomReset() { setZoom(1); setPanX(40); setPanY(40); }
+
+  function fitAll() {
+    if (areas.length === 0) { setZoom(0.8); setPanX(40); setPanY(40); return; }
+    const { w, h } = containerSizeRef.current;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const a of areas) {
+      minX = Math.min(minX, a.x); minY = Math.min(minY, a.y);
+      maxX = Math.max(maxX, a.x + a.width); maxY = Math.max(maxY, a.y + a.height);
+    }
+    const cw = maxX - minX, ch = maxY - minY;
+    const nz = clampZoom(Math.min((w - 80) / cw, (h - 80) / ch, 1.2));
+    setPanX((w - cw * nz) / 2 - minX * nz);
+    setPanY((h - ch * nz) / 2 - minY * nz);
+    setZoom(nz);
+  }
 
   function handleAddBox(areaId: string) {
     const area = areas.find(a => a.id === areaId);
     if (!area) return;
-    const newBox: Omit<BoxPiso, 'id'> = { x: 20, y: 40, width: 90, height: 90, estadoId: 'libre', vendedor: null, label: `B-${area.boxes.length + 1}` };
-    addBox(areaId, newBox);
+    addBox(areaId, { x: 20, y: 40, width: 90, height: 90, estadoId: 'libre', vendedor: null, label: `B-${area.boxes.length + 1}` });
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return (
-    <div className="flex flex-col h-full" style={{ overflow: 'hidden' }}>
-      <Header
-        title="Plano del Call Center"
-        subtitle={`${kpis.areas} área${kpis.areas !== 1 ? 's' : ''} · ${kpis.boxes} box${kpis.boxes !== 1 ? 'es' : ''}`}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      <ToolbarPlano
-        editMode={editMode}
-        onToggleEdit={() => setEditMode(v => !v)}
-        searchTerm={searchTerm}
-        onSearch={setSearchTerm}
-        zoom={zoom}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-        onZoomReset={zoomReset}
-        historyLen={historyLen}
-        futureLen={futureLen}
-        onUndo={undo}
-        onRedo={redo}
-        conectMode={conectMode}
-        onToggleConect={() => { setConectMode(v => !v); setConectOrigen(null); }}
-        onNuevaArea={() => setShowNuevaArea(true)}
-        onGestionEstados={() => setShowGestionEstados(true)}
-        kpis={kpis}
-        savedIndicator={savedIndicator}
-      />
+      {/* ── Top bar ── */}
+      <div style={{
+        height: 44, flexShrink: 0,
+        background: '#fff', borderBottom: '1px solid #E2E8F0',
+        display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px',
+        zIndex: 50,
+      }}>
+        {/* Title */}
+        <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', whiteSpace: 'nowrap' }}>Plano del Call Center</span>
 
-      {/* Main canvas area */}
-      <div
-        ref={containerRef}
-        style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor, userSelect: 'none' }}
-        onWheel={handleWheel}
-        onMouseDown={handleContainerMouseDown}
-        onMouseMove={handleContainerMouseMove}
-        onMouseUp={handleContainerMouseUp}
-        onMouseLeave={handleContainerMouseLeave}
-      >
-        {/* Transformed canvas */}
+        <div style={{ width: 1, height: 20, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* View / Edit toggle */}
+        <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 7, padding: 2, gap: 2, flexShrink: 0 }}>
+          {[
+            { value: 'pan'    as PlanoTool, icon: Eye,    label: 'Vista' },
+            { value: 'select' as PlanoTool, icon: Pencil, label: 'Edición' },
+          ].map(({ value, icon: Icon, label }) => {
+            const isAct2 = value === 'pan' ? tool === 'pan' : tool !== 'pan';
+            return (
+              <button key={value} onClick={() => setTool(value)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+                  border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  background: isAct2 ? '#fff' : 'transparent',
+                  color: isAct2 ? '#1A1A2E' : '#6b7280',
+                  boxShadow: isAct2 ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s',
+                }}>
+                <Icon size={12} />{label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ width: 1, height: 20, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* Search */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <Search size={12} style={{ position: 'absolute', left: 7, color: '#9ca3af', pointerEvents: 'none' }} />
+          <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+            placeholder="Buscar vendedor..."
+            style={{ paddingLeft: 24, paddingRight: 8, paddingTop: 5, paddingBottom: 5, border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12, width: 170, outline: 'none', background: '#fafafa' }} />
+        </div>
+
+        {/* Actions */}
+        <button onClick={() => setShowGestionEstados(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer', color: '#374151', flexShrink: 0 }}>
+          <Palette size={12} /> Estados
+        </button>
+        <button onClick={() => { setShowNuevaArea(true); }}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: 'none', borderRadius: 6, background: '#003DA5', fontSize: 12, cursor: 'pointer', color: '#fff', fontWeight: 600, flexShrink: 0 }}>
+          <Plus size={12} /> Nueva Área
+        </button>
+
+        <div style={{ width: 1, height: 20, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* Zoom */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <button onClick={zoomOut} style={{ width: 24, height: 24, border: '1px solid #e5e7eb', borderRadius: 4, background: '#fff', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+          <button onClick={zoomReset} style={{ minWidth: 48, height: 24, border: '1px solid #e5e7eb', borderRadius: 4, background: '#fff', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{Math.round(zoom * 100)}%</button>
+          <button onClick={zoomIn} style={{ width: 24, height: 24, border: '1px solid #e5e7eb', borderRadius: 4, background: '#fff', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Saved indicator + stats */}
+        {savedIndicator && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 500, flexShrink: 0 }}>Guardado ✓</span>}
+        <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {kpis.boxes} box{kpis.boxes !== 1 ? 'es' : ''} · {kpis.vendedores} asignado{kpis.vendedores !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* ── Body: toolbar + canvas ── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+        {/* Left toolbar */}
+        <ToolbarPlano
+          tool={tool}
+          onTool={(t) => { setTool(t); if (t !== 'connect') setConectOrigen(null); }}
+          canUndo={historyLen > 0}
+          canRedo={futureLen > 0}
+          onUndo={undo}
+          onRedo={redo}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onFitAll={fitAll}
+        />
+
+        {/* Canvas */}
         <div
-          style={{
+          ref={containerRef}
+          style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor, userSelect: 'none' }}
+          onWheel={handleWheel}
+          onMouseDown={handleContainerMouseDown}
+          onMouseMove={handleContainerMouseMove}
+          onMouseUp={handleContainerMouseUp}
+          onMouseLeave={handleContainerMouseLeave}
+        >
+          {/* Transformed canvas */}
+          <div style={{
             position: 'absolute', top: 0, left: 0,
             width: CANVAS_W, height: CANVAS_H,
             transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
             transformOrigin: '0 0',
-            backgroundColor: '#F5F7FA',
-            backgroundImage: 'radial-gradient(circle, #c8d3e0 1px, transparent 1px)',
+            backgroundColor: '#F0F2F5',
+            backgroundImage: 'radial-gradient(#CBD5E1 1px, transparent 1px)',
             backgroundSize: '20px 20px',
-          }}
-        >
-          {/* Connectors SVG layer */}
-          <ConectorLayer
+          }}>
+            <ConectorLayer
+              areas={areas}
+              conectores={conectores}
+              editMode={editMode}
+              selectedId={selectedConector}
+              onSelect={setSelectedConector}
+              onDelete={removeConector}
+              onUpdate={updateConector}
+            />
+
+            {areas.map(area => (
+              <AreaPisoComp
+                key={area.id}
+                area={area}
+                estados={estados}
+                editMode={editMode}
+                searchTerm={searchTerm}
+                selectedBoxId={selectedBox?.areaId === area.id ? selectedBox.boxId : null}
+                multiSelectedIds={multiSelectedIds_forArea(multiSelected, area)}
+                zoom={zoom}
+                dragOffsets={dragOffsets}
+                onBoxClick={(boxId, e) => handleBoxClick(boxId, area.id, e)}
+                onBoxMouseDown={(boxId, areaId, e) => handleBoxMouseDown(boxId, areaId, e)}
+                onAreaUpdate={patch => updateArea(area.id, patch)}
+                onAreaDelete={() => { removeArea(area.id); if (selectedBox?.areaId === area.id) setSelectedBox(null); }}
+                onBoxAdd={() => handleAddBox(area.id)}
+                onBoxUpdate={(boxId, patch) => updateBox(area.id, boxId, patch)}
+              />
+            ))}
+
+            {/* Empty state */}
+            {areas.length === 0 && (
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', color: '#9ca3af' }}>
+                <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.2 }}>⊞</div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>Sin áreas</div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>Presioná A o hacé clic en "Nueva Área" para empezar</div>
+              </div>
+            )}
+
+            {/* Connect mode origin highlight */}
+            {tool === 'connect' && conectOrigen && (() => {
+              const found = findBoxGlobal(areas, conectOrigen);
+              if (!found) return null;
+              return (
+                <div style={{
+                  position: 'absolute',
+                  left: found.area.x + found.box.x - 4,
+                  top: found.area.y + AREA_HEADER_H + found.box.y - 4,
+                  width: found.box.width + 8, height: found.box.height + 8,
+                  border: '3px solid #003DA5', borderRadius: 8,
+                  pointerEvents: 'none', zIndex: 200,
+                  boxShadow: '0 0 0 4px rgba(0,61,165,0.2)',
+                }} />
+              );
+            })()}
+
+            {/* Rubber-band */}
+            {selectionRect && selectionRect.w > 4 && (
+              <div style={{
+                position: 'absolute',
+                left: selectionRect.x, top: selectionRect.y,
+                width: selectionRect.w, height: selectionRect.h,
+                border: '2px solid #3b82f6', background: 'rgba(59,130,246,0.08)',
+                pointerEvents: 'none', zIndex: 300, borderRadius: 2,
+              }} />
+            )}
+          </div>
+
+          {/* Minimap */}
+          <MiniMapa
             areas={areas}
-            conectores={conectores}
-            editMode={editMode}
-            selectedId={selectedConector}
-            onSelect={setSelectedConector}
-            onDelete={removeConector}
-            onUpdate={updateConector}
+            panX={panX} panY={panY} zoom={zoom}
+            containerW={containerSizeRef.current.w}
+            containerH={containerSizeRef.current.h}
+            onPan={(px, py) => { setPanX(px); setPanY(py); }}
           />
 
-          {/* Areas + boxes */}
-          {areas.map(area => (
-            <AreaPisoComp
-              key={area.id}
-              area={area}
-              estados={estados}
-              editMode={editMode}
-              searchTerm={searchTerm}
-              selectedBoxId={selectedBox?.areaId === area.id ? selectedBox.boxId : null}
-              multiSelectedIds={multiSelectedIds_forArea(multiSelected, area)}
-              zoom={zoom}
-              dragOffsets={dragOffsets}
-              onBoxClick={(boxId, e) => handleBoxClick(boxId, area.id, e)}
-              onBoxMouseDown={(boxId, areaId, e) => handleBoxMouseDown(boxId, areaId, e)}
-              onAreaUpdate={patch => updateArea(area.id, patch)}
-              onAreaDelete={() => { removeArea(area.id); if (selectedBox?.areaId === area.id) setSelectedBox(null); }}
-              onBoxAdd={() => handleAddBox(area.id)}
-              onBoxUpdate={(boxId, patch) => updateBox(area.id, boxId, patch)}
-            />
-          ))}
-
-          {/* Empty state */}
-          {areas.length === 0 && (
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', color: '#9ca3af' }}>
-              <LayoutGrid size={48} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-              <div style={{ fontSize: 16, fontWeight: 600 }}>Sin áreas</div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>Crea una nueva área para empezar</div>
+          {/* Connect mode hint */}
+          {tool === 'connect' && (
+            <div style={{
+              position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+              background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8,
+              padding: '6px 14px', fontSize: 12, color: '#1d4ed8',
+              pointerEvents: 'none', zIndex: 100,
+            }}>
+              {conectOrigen ? 'Haz clic en el box destino' : 'Haz clic en el box origen'} · Esc para cancelar
             </div>
           )}
 
-          {/* Connect mode: highlight origen */}
-          {conectMode && conectOrigen && (() => {
-            const found = findBoxGlobal(areas, conectOrigen);
-            if (!found) return null;
-            return (
-              <div style={{
-                position: 'absolute',
-                left: found.area.x + found.box.x - 4,
-                top: found.area.y + AREA_HEADER_H + found.box.y - 4,
-                width: found.box.width + 8,
-                height: found.box.height + 8,
-                border: '3px solid #003DA5',
-                borderRadius: 8,
-                animation: 'pulse 1.5s ease-in-out infinite',
-                pointerEvents: 'none',
-                zIndex: 200,
-              }} />
-            );
-          })()}
-
-          {/* Rubber-band selection rect */}
-          {selectionRect && selectionRect.w > 4 && (
+          {/* Box tool hint */}
+          {tool === 'box' && (
             <div style={{
-              position: 'absolute',
-              left: selectionRect.x, top: selectionRect.y,
-              width: selectionRect.w, height: selectionRect.h,
-              border: '2px solid #3b82f6',
-              background: 'rgba(59,130,246,0.08)',
-              pointerEvents: 'none',
-              zIndex: 300,
-              borderRadius: 2,
-            }} />
+              position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+              background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8,
+              padding: '6px 14px', fontSize: 12, color: '#16a34a',
+              pointerEvents: 'none', zIndex: 100,
+            }}>
+              Haz clic dentro de un área para crear un box
+            </div>
           )}
         </div>
-
-        {/* Mini-map */}
-        <MiniMapa
-          areas={areas}
-          panX={panX}
-          panY={panY}
-          zoom={zoom}
-          containerW={containerSizeRef.current.w}
-          containerH={containerSizeRef.current.h}
-          onPan={(px, py) => { setPanX(px); setPanY(py); }}
-        />
-
-        {/* Zoom controls (bottom right) */}
-        <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 4, zIndex: 100 }}>
-          <button onClick={zoomIn} style={{ width: 32, height: 32, border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>+</button>
-          <button onClick={zoomReset} style={{ width: 32, height: 18, border: '1px solid #e5e7eb', borderRadius: 4, background: '#fff', fontSize: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.1)', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{Math.round(zoom * 100)}%</button>
-          <button onClick={zoomOut} style={{ width: 32, height: 32, border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>−</button>
-        </div>
-
-        {/* Connect mode hint */}
-        {conectMode && (
-          <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '6px 14px', fontSize: 12, color: '#1d4ed8', pointerEvents: 'none', zIndex: 100 }}>
-            {conectOrigen ? 'Ahora haz clic en el box destino' : 'Haz clic en el box origen'} · Esc para cancelar
-          </div>
-        )}
       </div>
 
-      {/* Right panel: Ficha vendedor */}
+      {/* Right panel */}
       {selectedBox && selectedBoxData && (
         <FichaVendedor
           box={selectedBoxData.box}
@@ -636,14 +753,11 @@ export default function PlanoCallCenterPage() {
       )}
 
       {showNuevaArea && (
-        <ModalNuevaArea onClose={() => setShowNuevaArea(false)} onAdd={(nombre, color, w, h) => addArea({ nombre, color, width: w, height: h, x: 50, y: 50 })} />
+        <ModalNuevaArea
+          onClose={() => setShowNuevaArea(false)}
+          onAdd={(nombre, color, w, h) => addArea({ nombre, color, width: w, height: h, x: 50, y: 50 })}
+        />
       )}
     </div>
   );
-}
-
-// Helper: filter multiSelected to only boxes in this area
-function multiSelectedIds_forArea(multiSelected: Set<string>, area: AreaPiso): Set<string> {
-  const areaBoxIds = new Set(area.boxes.map(b => b.id));
-  return new Set([...multiSelected].filter(id => areaBoxIds.has(id)));
 }

@@ -1,7 +1,7 @@
 {
   "name": "elared-report-system",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "main": "src-electron/main.js",
   "type": "module",
   "scripts": {
@@ -67,12 +67,14 @@
       "src-electron/**/*",
       "public/**/*"
     ],
+    "generateUpdatesFilesForAllChannels": true,
     "publish": {
       "provider": "github",
       "owner": "isaacondon-commits",
       "repo": "elared-report-system",
       "private": false,
-      "releaseType": "release"
+      "releaseType": "release",
+      "publishAutoUpdate": true
     },
     "win": {
       "target": "nsis",

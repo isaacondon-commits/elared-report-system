@@ -71,7 +71,7 @@ export default function MiniMapa({ areas, panX, panY, zoom, containerW, containe
       ref={miniRef}
       onMouseDown={handleMouseDown}
       style={{
-        position: 'absolute', bottom: 52, left: 12,
+        position: 'absolute', bottom: 12, right: 12,
         width: MINI_W, height: MINI_H,
         background: 'rgba(255,255,255,0.92)',
         border: '1px solid #e5e7eb',

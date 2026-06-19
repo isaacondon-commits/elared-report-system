@@ -1,117 +1,158 @@
-import { Eye, Pencil, Search, Plus, Minus, RotateCcw, RotateCw, Link, Palette } from 'lucide-react';
+import { useState } from 'react';
+import {
+  MousePointer2, Hand, Square, LayoutDashboard,
+  GitBranch, ZoomIn, ZoomOut, Maximize2, Undo2, Redo2,
+} from 'lucide-react';
+
+export type PlanoTool = 'select' | 'pan' | 'box' | 'area' | 'connect';
 
 interface Props {
-  editMode: boolean;
-  onToggleEdit: () => void;
-  searchTerm: string;
-  onSearch: (v: string) => void;
-  zoom: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onZoomReset: () => void;
-  historyLen: number;
-  futureLen: number;
+  tool: PlanoTool;
+  onTool: (t: PlanoTool) => void;
+  canUndo: boolean;
+  canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
-  conectMode: boolean;
-  onToggleConect: () => void;
-  onNuevaArea: () => void;
-  onGestionEstados: () => void;
-  kpis: { areas: number; boxes: number; vendedores: number };
-  savedIndicator: boolean;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onFitAll: () => void;
 }
 
-const SEP = <div style={{ width: 1, height: 24, background: '#e5e7eb', flexShrink: 0 }} />;
+const TOOL_ITEMS: { id: PlanoTool; Icon: React.ElementType; label: string; key: string }[] = [
+  { id: 'select',  Icon: MousePointer2,  label: 'Seleccionar',  key: 'V' },
+  { id: 'pan',     Icon: Hand,           label: 'Mover canvas', key: 'H' },
+  { id: 'box',     Icon: Square,         label: 'Crear box',    key: 'B' },
+  { id: 'area',    Icon: LayoutDashboard,label: 'Crear área',   key: 'A' },
+  { id: 'connect', Icon: GitBranch,      label: 'Conector',     key: 'C' },
+];
+
+const ACTION_ITEMS: { id: string; Icon: React.ElementType; label: string; key?: string }[] = [
+  { id: 'zoom-in',  Icon: ZoomIn,    label: 'Zoom in',       key: '+' },
+  { id: 'zoom-out', Icon: ZoomOut,   label: 'Zoom out',      key: '−' },
+  { id: 'fit',      Icon: Maximize2, label: 'Ajustar todo' },
+];
+
+const HISTORY_ITEMS: { id: string; Icon: React.ElementType; label: string; key: string }[] = [
+  { id: 'undo', Icon: Undo2, label: 'Deshacer', key: 'Ctrl+Z' },
+  { id: 'redo', Icon: Redo2, label: 'Rehacer',  key: 'Ctrl+Y' },
+];
+
+const SEP = (
+  <div style={{ width: 28, height: 1, background: 'rgba(255,255,255,0.12)', margin: '4px 0', flexShrink: 0 }} />
+);
 
 export default function ToolbarPlano({
-  editMode, onToggleEdit,
-  searchTerm, onSearch,
-  zoom, onZoomIn, onZoomOut, onZoomReset,
-  historyLen, futureLen, onUndo, onRedo,
-  conectMode, onToggleConect,
-  onNuevaArea, onGestionEstados,
-  kpis, savedIndicator,
+  tool, onTool, canUndo, canRedo, onUndo, onRedo, onZoomIn, onZoomOut, onFitAll,
 }: Props) {
-  const btnBase: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 5,
-    padding: '4px 10px', border: '1px solid #e5e7eb',
-    borderRadius: 6, fontSize: 12, cursor: 'pointer',
-    background: '#fff', color: '#374151', flexShrink: 0,
-    whiteSpace: 'nowrap',
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  const base: React.CSSProperties = {
+    width: 40, height: 40, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    border: 'none', borderRadius: 8, cursor: 'pointer',
+    transition: 'background 0.12s',
   };
-  const btnActive: React.CSSProperties = { ...btnBase, background: '#fef3c7', color: '#92400e', borderColor: '#fde68a', fontWeight: 600 };
-  const btnPrimary: React.CSSProperties = { ...btnBase, background: '#003DA5', color: '#fff', borderColor: '#003DA5' };
-  const btnIcon: React.CSSProperties = { ...btnBase, padding: '4px 7px', gap: 0 };
-  const btnDisabled: React.CSSProperties = { ...btnIcon, opacity: 0.35, cursor: 'not-allowed' };
+
+  function Tooltip({ id, label, shortcut }: { id: string; label: string; shortcut?: string }) {
+    if (hovered !== id) return null;
+    return (
+      <div style={{
+        position: 'absolute', left: 48, top: '50%', transform: 'translateY(-50%)',
+        background: '#1e293b', color: '#fff', padding: '5px 10px', borderRadius: 6,
+        fontSize: 12, whiteSpace: 'nowrap', zIndex: 9999, pointerEvents: 'none',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+      }}>
+        {label}
+        {shortcut && (
+          <span style={{
+            marginLeft: 8, fontSize: 10, opacity: 0.6, fontWeight: 700,
+            background: 'rgba(255,255,255,0.15)', padding: '1px 5px', borderRadius: 3,
+          }}>{shortcut}</span>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 16px', height: 44, borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0, overflowX: 'auto' }}>
-
-      {/* Modo */}
-      <button onClick={onToggleEdit} style={editMode ? btnActive : btnBase}>
-        {editMode ? <Pencil size={13} /> : <Eye size={13} />}
-        {editMode ? 'Edición' : 'Vista'}
-      </button>
-
-      {SEP}
-
-      {/* Buscar */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-        <Search size={12} style={{ position: 'absolute', left: 7, color: '#9ca3af', pointerEvents: 'none' }} />
-        <input
-          value={searchTerm}
-          onChange={e => onSearch(e.target.value)}
-          placeholder="Buscar vendedor..."
-          style={{ paddingLeft: 24, paddingRight: 8, paddingTop: 4, paddingBottom: 4, border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12, width: 148, outline: 'none', background: '#fafafa' }}
-        />
-      </div>
-
-      {SEP}
-
-      {/* Acciones edición */}
-      {editMode && (
-        <>
-          <button onClick={onNuevaArea} style={btnPrimary}>
-            <Plus size={13} /> Área
-          </button>
-          <button
-            onClick={onToggleConect}
-            style={conectMode ? { ...btnBase, background: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe', fontWeight: 600 } : btnBase}
-            title="Modo conectar: clic en box origen → clic en box destino"
+    <div style={{
+      width: 60, flexShrink: 0,
+      background: '#1A1A2E',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      paddingTop: 10, paddingBottom: 10, gap: 2,
+      overflow: 'hidden',
+    }}>
+      {TOOL_ITEMS.map(({ id, Icon, label, key }) => {
+        const isActive = tool === id;
+        const isHov = hovered === id;
+        return (
+          <div key={id} style={{ position: 'relative' }}
+            onMouseEnter={() => setHovered(id)}
+            onMouseLeave={() => setHovered(null)}
           >
-            <Link size={13} /> Conector
-          </button>
-          <button onClick={onGestionEstados} style={btnBase}>
-            <Palette size={13} /> Estados
-          </button>
+            <button
+              onClick={() => onTool(id)}
+              style={{
+                ...base,
+                background: isActive ? '#003DA5' : isHov ? 'rgba(255,255,255,0.08)' : 'transparent',
+                color: isActive ? '#fff' : 'rgba(255,255,255,0.6)',
+              }}
+            >
+              <Icon size={18} />
+            </button>
+            <Tooltip id={id} label={label} shortcut={key} />
+          </div>
+        );
+      })}
 
-          {SEP}
+      {SEP}
 
-          {/* Undo/Redo */}
-          <button onClick={onUndo} disabled={historyLen === 0} style={historyLen === 0 ? btnDisabled : btnIcon} title="Deshacer (Ctrl+Z)">
-            <RotateCcw size={14} />
-          </button>
-          <button onClick={onRedo} disabled={futureLen === 0} style={futureLen === 0 ? btnDisabled : btnIcon} title="Rehacer (Ctrl+Y)">
-            <RotateCw size={14} />
-          </button>
+      {ACTION_ITEMS.map(({ id, Icon, label, key }) => {
+        const action = id === 'zoom-in' ? onZoomIn : id === 'zoom-out' ? onZoomOut : onFitAll;
+        const isHov = hovered === id;
+        return (
+          <div key={id} style={{ position: 'relative' }}
+            onMouseEnter={() => setHovered(id)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <button
+              onClick={action}
+              style={{ ...base, background: isHov ? 'rgba(255,255,255,0.08)' : 'transparent', color: 'rgba(255,255,255,0.6)' }}
+            >
+              <Icon size={18} />
+            </button>
+            <Tooltip id={id} label={label} shortcut={key} />
+          </div>
+        );
+      })}
 
-          {SEP}
-        </>
-      )}
+      {SEP}
 
-      {/* Zoom */}
-      <button onClick={onZoomOut} style={btnIcon} title="Alejar (Ctrl+scroll)"><Minus size={13} /></button>
-      <button onClick={onZoomReset} style={{ ...btnBase, minWidth: 52, justifyContent: 'center', fontVariantNumeric: 'tabular-nums', fontSize: 12 }} title="Restablecer zoom">
-        {Math.round(zoom * 100)}%
-      </button>
-      <button onClick={onZoomIn} style={btnIcon} title="Acercar (Ctrl+scroll)"><Plus size={13} /></button>
-
-      {/* KPIs + guardado */}
-      <div style={{ flex: 1 }} />
-      {savedIndicator && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 500, flexShrink: 0 }}>💾 Guardado</span>}
-      <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
-        {kpis.areas} área{kpis.areas !== 1 ? 's' : ''} · {kpis.boxes} box{kpis.boxes !== 1 ? 'es' : ''} · {kpis.vendedores} asignado{kpis.vendedores !== 1 ? 's' : ''}
-      </span>
+      {HISTORY_ITEMS.map(({ id, Icon, label, key }) => {
+        const disabled = id === 'undo' ? !canUndo : !canRedo;
+        const action = id === 'undo' ? onUndo : onRedo;
+        const isHov = hovered === id;
+        return (
+          <div key={id} style={{ position: 'relative' }}
+            onMouseEnter={() => setHovered(id)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <button
+              onClick={action}
+              disabled={disabled}
+              style={{
+                ...base,
+                background: (!disabled && isHov) ? 'rgba(255,255,255,0.08)' : 'transparent',
+                color: 'rgba(255,255,255,0.6)',
+                opacity: disabled ? 0.28 : 1,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <Icon size={18} />
+            </button>
+            {!disabled && <Tooltip id={id} label={label} shortcut={key} />}
+          </div>
+        );
+      })}
     </div>
   );
 }

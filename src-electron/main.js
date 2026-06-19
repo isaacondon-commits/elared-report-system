@@ -7,12 +7,21 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true } },
 ])
 
+let mainWindow = null
+
 autoUpdater.logger = log
 autoUpdater.logger.transports.file.level = 'debug'
 autoUpdater.autoDownload = true
 autoUpdater.autoInstallOnAppQuit = true
 autoUpdater.allowDowngrade = false
 autoUpdater.allowPrerelease = false
+
+autoUpdater.setFeedURL({
+  provider: 'github',
+  owner: 'isaacondon-commits',
+  repo: 'elared-report-system',
+  private: false,
+})
 
 log.info('App starting. Version:', app.getVersion())
 
@@ -42,6 +51,8 @@ function createWindow() {
     autoHideMenuBar: true,
     backgroundColor: '#003DA5',
   })
+
+  mainWindow = win
 
   if (process.env.NODE_ENV === 'development') {
     win.loadURL('http://localhost:5173')
@@ -86,21 +97,13 @@ function createWindow() {
     win.webContents.send('update-status', { status: 'downloaded' })
   })
   autoUpdater.on('error', (err) => {
-    log.error('Auto-updater error:', err)
-    const msg = err.message || ''
-    if (
-      msg.includes('No releases') ||
-      msg.includes('404') ||
-      msg.includes('Cannot find') ||
-      msg.includes('HttpError') ||
-      msg.includes('net::') ||
-      msg.includes('ENOTFOUND') ||
-      msg.includes('ECONNREFUSED')
-    ) {
-      log.info('Update check: no releases found or network unavailable — ignorando')
-      return
+    log.error('Update error full:', err)
+    if (mainWindow) {
+      mainWindow.webContents.send('update-status', {
+        status: 'error',
+        message: err.message,
+      })
     }
-    win.webContents.send('update-status', { status: 'error', message: 'Error de actualizacion' })
   })
 
   return win

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   BarChart2, Users, Calendar, Download, Loader2,
   ArrowUpRight, Layers, Repeat, CheckCircle, XCircle, EyeOff,
@@ -9,6 +9,7 @@ import KPICard from '../../components/KPICard';
 import Header from '../../components/Header';
 import { parseExcel, normalizeEstado, normalizeFechaVenta, type ParseResult, type EstadoVenta } from '../../utils/smartParser';
 import VentasCharts, { TemporalChart } from './VentasCharts';
+import FiltroPeriodo, { type FiltroState } from '../../components/ventas/FiltroPeriodo';
 import VentasPerformanceTable from './VentasPerformanceTable';
 import { exportVentasPptx, exportVentasExcel } from './VentasExport';
 import PDFModal from '../../components/PDFModal';
@@ -125,8 +126,9 @@ export interface VentasStats {
   empresaActiva: string;
 }
 
-// ── Constantes localStorage ───────────────────────────────────────────────────
-const OCULTOS_KEY = 'elared_vendedores_ocultos';
+// ── Constantes localStorage / sessionStorage ──────────────────────────────────
+const OCULTOS_KEY       = 'elared_vendedores_ocultos';
+const SESSION_FILTRO_KEY = 'elared_ventas_filtro_periodo';
 
 function loadOcultos(): Set<string> {
   try {
@@ -140,6 +142,33 @@ function saveOcultos(s: Set<string>) {
     if (s.size === 0) localStorage.removeItem(OCULTOS_KEY);
     else localStorage.setItem(OCULTOS_KEY, JSON.stringify([...s]));
   } catch {}
+}
+
+function loadFiltroPeriodo(): FiltroState {
+  try {
+    const raw = sessionStorage.getItem(SESSION_FILTRO_KEY);
+    return raw ? JSON.parse(raw) : { desde: null, hasta: null, label: null };
+  } catch { return { desde: null, hasta: null, label: null }; }
+}
+
+function saveFiltroPeriodo(f: FiltroState) {
+  try {
+    if (f.desde) sessionStorage.setItem(SESSION_FILTRO_KEY, JSON.stringify(f));
+    else sessionStorage.removeItem(SESSION_FILTRO_KEY);
+  } catch {}
+}
+
+// Aplica filtro de período sobre rows ya filtrados por empresa/ocultos
+function applyPeriodFilter(
+  rows: Record<string, unknown>[],
+  mapping: Record<string, string>,
+  filtro: FiltroState,
+): Record<string, unknown>[] {
+  if (!filtro.desde || !filtro.hasta || !mapping.fecha) return rows;
+  return rows.filter(r => {
+    const f = normalizeFechaVenta(String(r[mapping.fecha] ?? '')).substring(0, 10);
+    return f >= filtro.desde! && f <= filtro.hasta!;
+  });
 }
 
 // ── Lógica de negocio ─────────────────────────────────────────────────────────
@@ -504,16 +533,62 @@ export default function VentasModule() {
   const [vendedoresOcultos, setVendedoresOcultos] = useState<Set<string>>(loadOcultos);
   const [vendedorActivo, setVendedorActivo]       = useState<string | null>(null);
   const [showPDFModal, setShowPDFModal]           = useState(false);
+  const [filtroPeriodo, setFiltroPeriodo]         = useState<FiltroState>(loadFiltroPeriodo);
+  const [mesSeleccionado, setMesSeleccionado]     = useState<string | null>(null);
+  const initDoneRef = useRef(false);
 
-  const getRows = useCallback((allRows: Record<string, unknown>[], emp: string, ocultos: Set<string>) => {
-    const filtered = getFilteredRows(allRows, mapping, emp);
-    return applyOcultosFilter(filtered, mapping, ocultos);
+  // Detección del mes predominante y todos los meses presentes en el archivo
+  const { mesPredominante, mesesDisponibles } = useMemo(() => {
+    if (!parsed || !mapping.fecha) return { mesPredominante: null, mesesDisponibles: [] };
+    const mesesMap = new Map<string, number>();
+    for (const r of parsed.rows) {
+      const f = normalizeFechaVenta(String(r[mapping.fecha] ?? '')).substring(0, 7);
+      if (f && /^\d{4}-\d{2}$/.test(f)) mesesMap.set(f, (mesesMap.get(f) ?? 0) + 1);
+    }
+    if (mesesMap.size === 0) return { mesPredominante: null, mesesDisponibles: [] };
+    const entries = [...mesesMap.entries()].sort((a, b) => b[1] - a[1]);
+    return {
+      mesPredominante: entries[0][0],
+      mesesDisponibles: entries.map(e => e[0]).sort(),
+    };
+  }, [parsed, mapping.fecha]);
+
+  // Inicializar mesSeleccionado cuando se carga un nuevo archivo
+  useEffect(() => {
+    if (mesPredominante && !mesSeleccionado) setMesSeleccionado(mesPredominante);
+  }, [mesPredominante]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Al restaurar desde store: re-aplicar filtro de sessionStorage si existe
+  useEffect(() => {
+    if (initDoneRef.current || !parsed || stage !== 'analysis' || !filtroPeriodo.desde) return;
+    initDoneRef.current = true;
+    const s = processVentas(
+      getRows(parsed.rows, empresaActiva, vendedoresOcultos, filtroPeriodo),
+      mapping,
+      empresaActiva,
+    );
+    setStats(s);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, parsed]);
+
+  const getRows = useCallback((
+    allRows: Record<string, unknown>[],
+    emp: string,
+    ocultos: Set<string>,
+    filtro: FiltroState,
+  ) => {
+    let rows = getFilteredRows(allRows, mapping, emp);
+    rows = applyOcultosFilter(rows, mapping, ocultos);
+    return applyPeriodFilter(rows, mapping, filtro);
   }, [mapping]);
 
   const handleFile = useCallback(async (file: File) => {
     setError(''); setStage('loading');
     clearVentas();
     setSessionKey(k => k + 1);
+    setFiltroPeriodo({ desde: null, hasta: null, label: null });
+    setMesSeleccionado(null);
+    saveFiltroPeriodo({ desde: null, hasta: null, label: null });
     try {
       const result = await parseExcel(file, 'ventas');
       setParsed(result);
@@ -533,22 +608,22 @@ export default function VentasModule() {
       setEmpresas(empList);
       const defaultEmpresa = empList.length > 1 ? empList[1].nombre : 'Todas';
       setEmpresaActiva(defaultEmpresa);
-      const s = processVentas(getRows(parsed.rows, defaultEmpresa, vendedoresOcultos), mapping, defaultEmpresa);
+      const s = processVentas(getRows(parsed.rows, defaultEmpresa, vendedoresOcultos, filtroPeriodo), mapping, defaultEmpresa);
       setStats(s);
       recordActivity('ventas', parsed.fileName);
       saveToStore({ data: s, parsed, mapping, empresas: empList, empresaActiva: defaultEmpresa, nombreArchivo: parsed.fileName });
       setStage('analysis');
     }, 300);
-  }, [parsed, mapping, vendedoresOcultos, getRows, saveToStore]);
+  }, [parsed, mapping, vendedoresOcultos, filtroPeriodo, getRows, saveToStore]);
 
   const handleEmpresaChange = useCallback((empresa: string) => {
     if (!parsed) return;
     setEmpresaActiva(empresa);
     setVendedorActivo(null);
-    const s = processVentas(getRows(parsed.rows, empresa, vendedoresOcultos), mapping, empresa);
+    const s = processVentas(getRows(parsed.rows, empresa, vendedoresOcultos, filtroPeriodo), mapping, empresa);
     setStats(s);
     saveToStore({ data: s, parsed, mapping, empresas, empresaActiva: empresa, nombreArchivo: parsed.fileName });
-  }, [parsed, mapping, empresas, vendedoresOcultos, getRows, saveToStore]);
+  }, [parsed, mapping, empresas, vendedoresOcultos, filtroPeriodo, getRows, saveToStore]);
 
   const handleHideVendedor = useCallback((nombre: string) => {
     if (!parsed) return;
@@ -557,20 +632,49 @@ export default function VentasModule() {
     setVendedoresOcultos(next);
     saveOcultos(next);
     if (vendedorActivo === nombre) setVendedorActivo(null);
-    const s = processVentas(getRows(parsed.rows, empresaActiva, next), mapping, empresaActiva);
+    const s = processVentas(getRows(parsed.rows, empresaActiva, next, filtroPeriodo), mapping, empresaActiva);
     setStats(s);
     saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
-  }, [parsed, mapping, empresas, empresaActiva, vendedoresOcultos, vendedorActivo, getRows, saveToStore]);
+  }, [parsed, mapping, empresas, empresaActiva, vendedoresOcultos, vendedorActivo, filtroPeriodo, getRows, saveToStore]);
 
   const handleShowAll = useCallback(() => {
     if (!parsed) return;
     const next = new Set<string>();
     setVendedoresOcultos(next);
     saveOcultos(next);
-    const s = processVentas(getRows(parsed.rows, empresaActiva, next), mapping, empresaActiva);
+    const s = processVentas(getRows(parsed.rows, empresaActiva, next, filtroPeriodo), mapping, empresaActiva);
     setStats(s);
     saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
-  }, [parsed, mapping, empresas, empresaActiva, getRows, saveToStore]);
+  }, [parsed, mapping, empresas, empresaActiva, filtroPeriodo, getRows, saveToStore]);
+
+  const handleFiltroPeriodo = useCallback((nuevo: FiltroState) => {
+    if (!parsed) return;
+    setFiltroPeriodo(nuevo);
+    saveFiltroPeriodo(nuevo);
+    const s = processVentas(
+      getRows(parsed.rows, empresaActiva, vendedoresOcultos, nuevo),
+      mapping,
+      empresaActiva,
+    );
+    setStats(s);
+    saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
+  }, [parsed, mapping, empresas, empresaActiva, vendedoresOcultos, getRows, saveToStore]);
+
+  const handleMesChange = useCallback((mes: string) => {
+    setMesSeleccionado(mes);
+    if (!filtroPeriodo.desde) return;
+    const limpio: FiltroState = { desde: null, hasta: null, label: null };
+    setFiltroPeriodo(limpio);
+    saveFiltroPeriodo(limpio);
+    if (!parsed) return;
+    const s = processVentas(
+      getRows(parsed.rows, empresaActiva, vendedoresOcultos, limpio),
+      mapping,
+      empresaActiva,
+    );
+    setStats(s);
+    saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
+  }, [filtroPeriodo, parsed, mapping, empresas, empresaActiva, vendedoresOcultos, getRows, saveToStore]);
 
   const handleExport = useCallback(() => {
     if (!stats) return;
@@ -588,13 +692,33 @@ export default function VentasModule() {
     setStage('upload'); setParsed(null); setStats(null);
     setEmpresas([]); setEmpresaActiva('Todas'); setError('');
     setVendedorActivo(null);
+    const limpio: FiltroState = { desde: null, hasta: null, label: null };
+    setFiltroPeriodo(limpio);
+    setMesSeleccionado(null);
+    saveFiltroPeriodo(limpio);
+    initDoneRef.current = false;
   };
 
+  // Total sin filtro de período (empresa+ocultos aplicados, período no)
+  const totalSinFiltro = useMemo(() => {
+    if (!parsed || stage !== 'analysis') return stats?.total ?? 0;
+    return getRows(parsed.rows, empresaActiva, vendedoresOcultos, { desde: null, hasta: null, label: null }).length;
+  }, [parsed, empresaActiva, vendedoresOcultos, getRows, stage]);
+
   const subtitle = useMemo(() => {
-    if (!stats || !stats.fechaMin) return 'Análisis de rendimiento de vendedores';
+    if (!stats) return 'Análisis de rendimiento de vendedores';
+    if (filtroPeriodo.desde && filtroPeriodo.hasta) {
+      const dd = (iso: string) => { const [, m, d] = iso.split('-'); return `${d}/${m}`; };
+      const rangoStr = filtroPeriodo.label
+        ? `${filtroPeriodo.label}: ${dd(filtroPeriodo.desde)} – ${dd(filtroPeriodo.hasta)}`
+        : `${formatFecha(filtroPeriodo.desde)} – ${formatFecha(filtroPeriodo.hasta)}`;
+      const base = `${stats.total.toLocaleString()} de ${totalSinFiltro.toLocaleString()} registros · ${rangoStr}`;
+      return storeEntry ? `${base} · ${storeEntry.nombreArchivo}` : base;
+    }
+    if (!stats.fechaMin) return 'Análisis de rendimiento de vendedores';
     const base = `${stats.total.toLocaleString()} registros · ${formatFecha(stats.fechaMin)} – ${formatFecha(stats.fechaMax)}`;
     return storeEntry ? `${base} · ${storeEntry.nombreArchivo} · ${formatFechaCarga(storeEntry.fechaCarga)}` : base;
-  }, [stats, storeEntry]);
+  }, [stats, storeEntry, filtroPeriodo, totalSinFiltro]);
 
   const vendedorData = vendedorActivo ? (stats?.byFuncionario.find(f => f.nombre === vendedorActivo) ?? null) : null;
 
@@ -748,6 +872,17 @@ export default function VentasModule() {
 
             {/* 2. Empresa tabs + controles */}
             <EmpresaTabs empresas={empresas} active={empresaActiva} onChange={handleEmpresaChange} />
+
+            {/* Filtro de período */}
+            <FiltroPeriodo
+              filtro={filtroPeriodo}
+              onChange={handleFiltroPeriodo}
+              mesSeleccionado={mesSeleccionado}
+              onMesChange={handleMesChange}
+              mesesDisponibles={mesesDisponibles}
+              totalVentas={stats.total}
+              totalSinFiltro={totalSinFiltro}
+            />
 
             {/* Controls bar */}
             <div className="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-gray-200 px-4 py-3">

@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, type FormEvent, Fragment } from 'react';
 import { recordActivity } from '../../utils/activityTracker';
-import type { HorarioDia } from '../../data/horarios_personal';
+import type { HorarioDia, HorarioPersona } from '../../data/horarios_personal';
+import { guardarHorarioCustom } from '../../data/horarios_personal';
 import {
   Clock, Download, Loader2, FileText, ChevronDown, ChevronUp,
   Edit2, Info, Check, Users, AlertCircle, XCircle, Calendar,
@@ -15,7 +16,7 @@ import {
 } from './relojParser';
 import RelojCalendar from './RelojCalendar';
 import RelojTimeline from './RelojTimeline';
-import { IngresosLineChart, JornadaLineChart, CompositionChart, RankingBarChart, JornadaBarChart, HeatmapChart, HorasExtrasBarChart } from './RelojCharts';
+import { IngresosLineChart, JornadaLineChart, HeatmapChart } from './RelojCharts';
 import { exportRelojExcel, exportRelojPPTX } from './RelojExport';
 import PDFModal from '../../components/PDFModal';
 import { useConfig } from '../../hooks/useConfig';
@@ -35,6 +36,14 @@ function fmtFechaLong(iso: string): string {
   if (!iso) return '';
   const d = new Date(iso + 'T12:00:00');
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+function fmtExtras(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `+${h}h ${m}min`;
+  if (h > 0) return `+${h}h`;
+  return `+${m}min`;
 }
 
 const ESTADO_BADGE: Record<EstadoDia, { label: string; bg: string; text: string }> = {
@@ -152,6 +161,7 @@ function HorarioCard({ emp, onEdit }: { emp: EmpleadoData; onEdit: () => void })
   const [showTurns, setShowTurns] = useState(false);
   const h = emp.horario;
   const isOficial = h.fuenteHorario === 'horario_oficial';
+  const isCustom  = h.fuenteHorario === 'horario_custom';
   const hp = h.horarioPersona;
 
   return (
@@ -168,6 +178,13 @@ function HorarioCard({ emp, onEdit }: { emp: EmpleadoData; onEdit: () => void })
               >
                 ✓ Horario oficial
               </span>
+            ) : isCustom ? (
+              <span
+                className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full font-semibold"
+                title="Horario guardado manualmente"
+              >
+                Horario guardado
+              </span>
             ) : (
               <span
                 className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full font-semibold"
@@ -183,7 +200,7 @@ function HorarioCard({ emp, onEdit }: { emp: EmpleadoData; onEdit: () => void })
         </div>
 
         <div className="flex gap-4 flex-wrap text-sm flex-1">
-          {isOficial && hp ? (
+          {(isOficial || isCustom) && hp ? (
             <>
               <div>
                 <span className="text-gray-400 text-xs">Lun–Mié</span>
@@ -223,7 +240,7 @@ function HorarioCard({ emp, onEdit }: { emp: EmpleadoData; onEdit: () => void })
           )}
         </div>
 
-        {isOficial && hp ? (
+        {(isOficial || isCustom) && hp ? (
           <button
             onClick={() => setShowTurns(v => !v)}
             className="flex items-center gap-1.5 text-[#003DA5] text-xs font-medium hover:bg-blue-50 px-2 py-1 rounded-lg transition-colors flex-shrink-0"
@@ -392,6 +409,457 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ─── ResumenTable ──────────────────────────────────────────────────────────────
+
+type ResumenSortCol = 'nombre' | 'presencia' | 'tardanzas' | 'ausencias' | 'descExt' | 'salAnt' | 'extras' | 'puntualidad';
+type ResumenFiltro  = 'todos' | 'con' | 'sin';
+
+function ResumenTable({ empleados, onSelectEmployee }: {
+  empleados: EmpleadoData[];
+  onSelectEmployee?: (nombre: string) => void;
+}) {
+  const [search,  setSearch]  = useState('');
+  const [filtro,  setFiltro]  = useState<ResumenFiltro>('todos');
+  const [sortCol, setSortCol] = useState<ResumenSortCol>('nombre');
+  const [sortAsc, setSortAsc] = useState(true);
+  const [page,    setPage]    = useState(0);
+  const PAGE_SIZE = 15;
+
+  const hasIncidencia = (e: EmpleadoData) =>
+    e.tardanzas > 0 || e.ausencias > 0 || e.descansosExtendidos > 0 ||
+    e.salidasAnticipadas > 0 || e.diasIncompletos > 0;
+
+  const filtered = useMemo(() => {
+    let r = [...empleados];
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      r = r.filter(e => e.nombre.toLowerCase().includes(q));
+    }
+    if (filtro === 'con') r = r.filter(hasIncidencia);
+    if (filtro === 'sin') r = r.filter(e => !hasIncidencia(e));
+
+    r.sort((a, b) => {
+      let diff = 0;
+      switch (sortCol) {
+        case 'nombre':      diff = a.nombre.localeCompare(b.nombre, 'es'); break;
+        case 'presencia':   diff = (a.diasPresentes / Math.max(a.diasLaborables, 1)) - (b.diasPresentes / Math.max(b.diasLaborables, 1)); break;
+        case 'tardanzas':   diff = a.tardanzas - b.tardanzas; break;
+        case 'ausencias':   diff = a.ausencias - b.ausencias; break;
+        case 'descExt':     diff = a.descansosExtendidos - b.descansosExtendidos; break;
+        case 'salAnt':      diff = a.salidasAnticipadas - b.salidasAnticipadas; break;
+        case 'extras':      diff = a.totalHorasExtrasMinutos - b.totalHorasExtrasMinutos; break;
+        case 'puntualidad': diff = a.puntualidadPct - b.puntualidadPct; break;
+      }
+      return sortAsc ? diff : -diff;
+    });
+    return r;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empleados, search, filtro, sortCol, sortAsc]);
+
+  const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
+  const pageData  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const SortTh = ({ col, label }: { col: ResumenSortCol; label: string }) => (
+    <th
+      className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap cursor-pointer select-none hover:bg-blue-700 transition-colors"
+      onClick={() => {
+        if (sortCol === col) setSortAsc(v => !v);
+        else { setSortCol(col); setSortAsc(true); }
+        setPage(0);
+      }}
+    >
+      {label}{sortCol === col ? (sortAsc ? ' ↑' : ' ↓') : ''}
+    </th>
+  );
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100 flex-wrap">
+        <div className="relative flex-shrink-0" style={{ width: 210 }}>
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="search" value={search}
+            onChange={e => { setSearch(e.target.value); setPage(0); }}
+            placeholder="Buscar empleado..."
+            className="w-full border border-gray-200 rounded-lg text-sm pl-8 pr-3 py-1.5 focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+          />
+        </div>
+        <div className="flex gap-1">
+          {(['todos', 'con', 'sin'] as ResumenFiltro[]).map(f => (
+            <button key={f}
+              onClick={() => { setFiltro(f); setPage(0); }}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                filtro === f ? 'bg-[#003DA5] text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {f === 'todos' ? 'Todos' : f === 'con' ? 'Con incidencias' : 'Sin incidencias'}
+            </button>
+          ))}
+        </div>
+        <span className="ml-auto text-xs text-gray-400 flex-shrink-0">
+          {filtered.length} persona{filtered.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-[#003DA5] text-white">
+              <SortTh col="nombre"      label="Empleado" />
+              <SortTh col="presencia"   label="Presencia" />
+              <SortTh col="tardanzas"   label="Tardanzas" />
+              <SortTh col="ausencias"   label="Ausencias" />
+              <SortTh col="descExt"     label="Desc. Ext." />
+              <SortTh col="salAnt"      label="Sal. Anticip." />
+              <SortTh col="extras"      label="Hrs Extras" />
+              <SortTh col="puntualidad" label="Puntualidad %" />
+            </tr>
+          </thead>
+          <tbody>
+            {pageData.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  Ningún empleado coincide con los filtros aplicados.
+                </td>
+              </tr>
+            )}
+            {pageData.map((emp, i) => {
+              const inc = hasIncidencia(emp);
+              return (
+                <tr key={emp.nombre}
+                  style={{ borderLeft: `3px solid ${inc ? '#dc2626' : '#16a34a'}` }}
+                  className={`border-b border-gray-100 transition-colors ${
+                    i % 2 === 0 ? 'bg-white' : 'bg-[#F0F5FF]'
+                  } ${onSelectEmployee ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                  onClick={() => onSelectEmployee?.(emp.nombre)}
+                >
+                  <td className="px-4 py-2.5 font-semibold text-gray-800">{emp.nombre}</td>
+                  <td className="px-4 py-2.5 text-center text-gray-600">
+                    {emp.diasPresentes}/{emp.diasLaborables}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <span className={`font-semibold ${emp.tardanzas > 5 ? 'text-red-700' : emp.tardanzas > 2 ? 'text-amber-700' : 'text-gray-700'}`}>
+                      {emp.tardanzas}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <span className={emp.ausencias > 3 ? 'text-red-700 font-semibold' : emp.ausencias > 0 ? 'text-amber-700 font-semibold' : 'text-green-700'}>
+                      {emp.ausencias}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-center text-gray-600">{emp.descansosExtendidos}</td>
+                  <td className="px-4 py-2.5 text-center text-gray-600">{emp.salidasAnticipadas}</td>
+                  <td className="px-4 py-2.5 text-center font-mono text-xs">
+                    {emp.totalHorasExtrasMinutos > 0
+                      ? <span style={{ color: '#28a745' }} className="font-semibold">{minsToHHMM(emp.totalHorasExtrasMinutos)}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <span className={`font-semibold ${emp.puntualidadPct >= 90 ? 'text-green-700' : emp.puntualidadPct >= 75 ? 'text-amber-700' : 'text-red-700'}`}>
+                      {emp.puntualidadPct}%
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {pageCount > 1 && (
+        <div className="flex items-center justify-center gap-2 px-5 py-3 border-t border-gray-100">
+          <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
+            className="px-3 py-1 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            ← Anterior
+          </button>
+          <span className="text-xs text-gray-500">Pág. {page + 1} de {pageCount}</span>
+          <button disabled={page >= pageCount - 1} onClick={() => setPage(p => p + 1)}
+            className="px-3 py-1 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            Siguiente →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ExtrasPanel ───────────────────────────────────────────────────────────────
+
+function ExtrasModal({ emp, onClose }: { emp: EmpleadoData; onClose: () => void }) {
+  const dias = Array.from(emp.dias.values())
+    .filter(d => d.horasExtrasMinutos > 0)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const expectedMins = parseHHMM(emp.horario.salidaEsperada) - parseHHMM(emp.horario.ingresoEsperado);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-gray-900">{emp.nombre}</h2>
+            <p className="text-xs text-gray-400">{dias.length} días con horas extras</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-gray-50">
+              <tr className="border-b border-gray-200">
+                {['Fecha', 'Día', 'Ingreso', 'Salida', 'Jornada real', 'Esperada', 'Extras'].map(h => (
+                  <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dias.map(dia => (
+                <tr key={dia.fecha} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{fmtFecha(dia.fecha)}</td>
+                  <td className="px-3 py-1.5 text-gray-500">{DIAS_SEMANA_SHORT[new Date(dia.fecha + 'T12:00:00').getDay()]}</td>
+                  <td className="px-3 py-1.5 font-mono text-gray-700">{dia.ingreso ?? '—'}</td>
+                  <td className="px-3 py-1.5 font-mono text-gray-700">{dia.salidaFinal ?? '—'}</td>
+                  <td className="px-3 py-1.5 font-mono text-gray-600">{dia.minutosJornada ? minsToHHMM(dia.minutosJornada) : '—'}</td>
+                  <td className="px-3 py-1.5 font-mono text-gray-500">{minsToHHMM(expectedMins)}</td>
+                  <td className="px-3 py-1.5 font-mono font-bold" style={{ color: '#28a745' }}>{fmtExtras(dia.horasExtrasMinutos)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExtrasPanel({ empleados, onSelectEmployee }: {
+  empleados: EmpleadoData[];
+  onSelectEmployee?: (nombre: string) => void;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [modalEmp, setModalEmp] = useState<EmpleadoData | null>(null);
+
+  const withExtras = empleados
+    .filter(e => e.totalHorasExtrasMinutos > 0)
+    .sort((a, b) => b.totalHorasExtrasMinutos - a.totalHorasExtrasMinutos);
+
+  if (withExtras.length === 0) return null;
+
+  return (
+    <div>
+      <div className="px-5 py-4 border-b border-gray-100">
+        <h3 className="font-semibold text-gray-800 text-sm">Horas extras acumuladas</h3>
+        <p className="text-[11px] text-gray-400 mt-0.5">
+          {withExtras.length} persona{withExtras.length !== 1 ? 's' : ''} con horas extras · Hacé clic para ver el detalle por día
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              {['Empleado', 'Días con extras', 'Total acumulado', 'Promedio/día', ''].map(h => (
+                <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {withExtras.map(emp => {
+              const isExp = expanded === emp.nombre;
+              const diasExtra = Array.from(emp.dias.values())
+                .filter(d => d.horasExtrasMinutos > 0)
+                .sort((a, b) => b.fecha.localeCompare(a.fecha));
+              const expectedMins = parseHHMM(emp.horario.salidaEsperada) - parseHHMM(emp.horario.ingresoEsperado);
+              const diasShown  = isExp ? diasExtra.slice(0, 10) : [];
+              const hasMore    = diasExtra.length > 10;
+
+              return (
+                <Fragment key={emp.nombre}>
+                  <tr
+                    className={`border-b border-gray-100 cursor-pointer transition-colors ${isExp ? 'bg-green-50' : 'hover:bg-gray-50'}`}
+                    onClick={() => setExpanded(isExp ? null : emp.nombre)}
+                  >
+                    <td className="px-4 py-2.5 font-semibold text-gray-800">{emp.nombre}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-600">{emp.diasConExtras}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span style={{ color: '#28a745' }} className="font-bold font-mono text-sm">
+                        {fmtExtras(emp.totalHorasExtrasMinutos)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center font-mono text-xs text-gray-500">
+                      {emp.diasConExtras > 0 ? fmtExtras(Math.round(emp.totalHorasExtrasMinutos / emp.diasConExtras)) : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-400">
+                      {isExp ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </td>
+                  </tr>
+                  {isExp && (
+                    <tr className="bg-green-50">
+                      <td colSpan={5} className="px-4 pb-3 pt-0">
+                        <div className="mt-2 rounded-lg border border-green-200 overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-green-100">
+                                {['Fecha', 'Día', 'Ingreso', 'Salida', 'Jornada real', 'Esperada', 'Extras'].map(h => (
+                                  <th key={h} className="px-3 py-1.5 text-left text-[10px] font-semibold text-green-800 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {diasShown.map(dia => (
+                                <tr key={dia.fecha} className="border-t border-green-100 bg-white">
+                                  <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{fmtFecha(dia.fecha)}</td>
+                                  <td className="px-3 py-1.5 text-gray-500">{DIAS_SEMANA_SHORT[new Date(dia.fecha + 'T12:00:00').getDay()]}</td>
+                                  <td className="px-3 py-1.5 font-mono text-gray-700">{dia.ingreso ?? '—'}</td>
+                                  <td className="px-3 py-1.5 font-mono text-gray-700">{dia.salidaFinal ?? '—'}</td>
+                                  <td className="px-3 py-1.5 font-mono text-gray-600">{dia.minutosJornada ? minsToHHMM(dia.minutosJornada) : '—'}</td>
+                                  <td className="px-3 py-1.5 font-mono text-gray-500">{minsToHHMM(expectedMins)}</td>
+                                  <td className="px-3 py-1.5 font-mono font-bold" style={{ color: '#28a745' }}>{fmtExtras(dia.horasExtrasMinutos)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {hasMore && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setModalEmp(emp); }}
+                            className="mt-2 text-xs text-[#003DA5] font-medium hover:underline"
+                          >
+                            Ver todos los días ({diasExtra.length}) →
+                          </button>
+                        )}
+                        {onSelectEmployee && (
+                          <button
+                            onClick={e => { e.stopPropagation(); onSelectEmployee(emp.nombre); }}
+                            className="mt-2 ml-4 text-xs text-gray-500 hover:text-[#003DA5] font-medium hover:underline"
+                          >
+                            Ver ficha individual →
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {modalEmp && <ExtrasModal emp={modalEmp} onClose={() => setModalEmp(null)} />}
+    </div>
+  );
+}
+
+// ─── SinHorarioCard ───────────────────────────────────────────────────────────
+
+function SinHorarioCard({ empleados, onGuardar }: {
+  empleados: EmpleadoData[];
+  onGuardar: (emp: EmpleadoData) => void;
+}) {
+  const sinHorario = empleados.filter(e => e.horario.fuenteHorario === 'inferido');
+  if (sinHorario.length === 0) return null;
+
+  return (
+    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+      <div className="flex items-start gap-3">
+        <AlertCircle size={18} className="text-orange-500 flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <h3 className="font-semibold text-orange-800 text-sm">
+            {sinHorario.length} persona{sinHorario.length !== 1 ? 's' : ''} sin horario oficial configurado
+          </h3>
+          <p className="text-xs text-orange-600 mt-0.5">
+            Sus análisis usan horario inferido por mediana de marcaciones
+          </p>
+          <div className="mt-3 space-y-2">
+            {sinHorario.map(emp => (
+              <div key={emp.nombre} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-orange-100">
+                <div>
+                  <span className="text-sm font-medium text-gray-800">{emp.nombre}</span>
+                  <span className="ml-2 text-xs text-gray-400">
+                    inferido: {emp.horario.ingresoEsperado}–{emp.horario.salidaEsperada}
+                  </span>
+                </div>
+                <button
+                  onClick={() => onGuardar(emp)}
+                  className="text-xs text-[#003DA5] font-medium hover:bg-blue-50 px-2 py-1 rounded transition-colors flex-shrink-0"
+                >
+                  Guardar horario
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── HorarioCustomModal ───────────────────────────────────────────────────────
+
+function HorarioCustomModal({ emp, onSave, onClose }: {
+  emp: EmpleadoData;
+  onSave: (horario: HorarioPersona) => void;
+  onClose: () => void;
+}) {
+  const [lunMie, setLunMie] = useState<HorarioDia>({ ingreso: emp.horario.ingresoEsperado, salida: emp.horario.salidaEsperada, trabaja: true });
+  const [jueVie, setJueVie] = useState<HorarioDia>({ ingreso: emp.horario.ingresoEsperado, salida: emp.horario.salidaEsperada, trabaja: true });
+  const [sab,    setSab]    = useState<HorarioDia>({ ingreso: '10:00', salida: '14:00', trabaja: false });
+  const [dom,    setDom]    = useState<HorarioDia>({ ingreso: '10:00', salida: '14:00', trabaja: false });
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    onSave({ nombre: emp.nombre, lunesAMiercoles: lunMie, jueveYViernes: jueVie, sabado: sab, domingo: dom });
+    onClose();
+  }
+
+  function TurnoRow({ label, val, setVal }: { label: string; val: HorarioDia; setVal: (v: HorarioDia) => void }) {
+    return (
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-medium text-gray-600 w-20 flex-shrink-0">{label}</span>
+        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+          <input type="checkbox" checked={val.trabaja}
+            onChange={e => setVal({ ...val, trabaja: e.target.checked })}
+            className="accent-[#003DA5]" />
+          Trabaja
+        </label>
+        {val.trabaja && (
+          <>
+            <input type="time" value={val.ingreso}
+              onChange={e => setVal({ ...val, ingreso: e.target.value })}
+              className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-[#003DA5]" />
+            <span className="text-xs text-gray-400">a</span>
+            <input type="time" value={val.salida}
+              onChange={e => setVal({ ...val, salida: e.target.value })}
+              className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-[#003DA5]" />
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+        <h2 className="font-bold text-gray-900 text-lg mb-1">Guardar horario de {emp.nombre}</h2>
+        <p className="text-xs text-gray-400 mb-4">Confirmá o ajustá el horario inferido. Se guardará localmente.</p>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <TurnoRow label="Lun – Mié" val={lunMie} setVal={setLunMie} />
+          <TurnoRow label="Jue – Vie" val={jueVie} setVal={setJueVie} />
+          <TurnoRow label="Sábado"    val={sab}    setVal={setSab} />
+          <TurnoRow label="Domingo"   val={dom}    setVal={setDom} />
+          <div className="flex gap-2 pt-3 border-t border-gray-100">
+            <button type="button" onClick={onClose}
+              className="flex-1 border border-gray-300 rounded-lg py-2 text-sm text-gray-700 hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button type="submit"
+              className="flex-1 bg-[#003DA5] text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-800 flex items-center justify-center gap-2">
+              <Check size={15} /> Guardar
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -740,7 +1208,7 @@ function ComparativaView({ empleados, fechaMin, fechaMax, onSelectEmployee }: {
 }) {
   return (
     <div className="space-y-5">
-      {/* Summary table */}
+      {/* Tabla resumen */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-800 text-sm">Resumen comparativo</h3>
@@ -748,100 +1216,19 @@ function ComparativaView({ empleados, fechaMin, fechaMax, onSelectEmployee }: {
             <p className="text-[11px] text-gray-400 mt-0.5">Hacé clic en una fila para ver el detalle individual</p>
           )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#003DA5] text-white">
-                {['Empleado', 'Presencias', 'Tardanzas', 'Min. tardanza', 'Desc. ext.', 'Sal. anticip.', 'Ausencias', 'Hrs extras', 'Puntualidad %', ''].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {empleados.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
-                    Ninguna persona coincide con los filtros aplicados.
-                  </td>
-                </tr>
-              )}
-              {empleados.map((emp, i) => {
-                const isWorst = emp.tardanzas === Math.max(...empleados.map(e => e.tardanzas));
-                const isBest  = emp.puntualidadPct === Math.max(...empleados.map(e => e.puntualidadPct));
-                return (
-                  <tr
-                    key={emp.nombre}
-                    className={`border-b border-gray-100 transition-colors ${
-                      i % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFF]'
-                    } ${isWorst && emp.tardanzas > 0 ? 'bg-red-50' : ''} ${
-                      isBest && empleados.length > 1 ? 'bg-green-50' : ''
-                    } ${onSelectEmployee ? 'cursor-pointer hover:bg-blue-50' : ''}`}
-                    onClick={() => onSelectEmployee?.(emp.nombre)}
-                  >
-                    <td className="px-4 py-2.5 font-semibold text-gray-800">{emp.nombre}</td>
-                    <td className="px-4 py-2.5 text-center text-gray-600">
-                      {emp.diasPresentes}/{emp.diasLaborables}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={`font-semibold ${emp.tardanzas > 5 ? 'text-red-700' : emp.tardanzas > 2 ? 'text-amber-700' : 'text-gray-700'}`}>
-                        {emp.tardanzas}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-center text-gray-600">
-                      {emp.minutosTardanzaTotal > 0 ? minsToHHMM(emp.minutosTardanzaTotal) : '—'}
-                    </td>
-                    <td className="px-4 py-2.5 text-center text-gray-600">{emp.descansosExtendidos}</td>
-                    <td className="px-4 py-2.5 text-center text-gray-600">{emp.salidasAnticipadas}</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={emp.ausencias > 3 ? 'text-red-700 font-semibold' : emp.ausencias > 0 ? 'text-amber-700 font-semibold' : 'text-green-700'}>
-                        {emp.ausencias}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-center font-mono text-xs">
-                      {emp.totalHorasExtrasMinutos > 0
-                        ? <span style={{ color: '#28a745' }} className="font-semibold">{minsToHHMM(emp.totalHorasExtrasMinutos)}</span>
-                        : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={`font-semibold ${emp.puntualidadPct >= 90 ? 'text-green-700' : emp.puntualidadPct >= 75 ? 'text-amber-700' : 'text-red-700'}`}>
-                        {emp.puntualidadPct}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-300 text-right">
-                      {onSelectEmployee && <ChevronDown size={14} className="-rotate-90" />}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ResumenTable empleados={empleados} onSelectEmployee={onSelectEmployee} />
       </div>
 
-      {/* Charts grid */}
       {empleados.length > 0 && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <CompositionChart empleados={empleados} />
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <RankingBarChart empleados={empleados} />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <JornadaBarChart empleados={empleados} />
-          </div>
-
+          {/* Panel de horas extras */}
           {empleados.some(e => e.totalHorasExtrasMinutos > 0) && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <HorasExtrasBarChart empleados={empleados} />
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <ExtrasPanel empleados={empleados} onSelectEmployee={onSelectEmployee} />
             </div>
           )}
 
+          {/* Mapa de calor */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <HeatmapChart empleados={empleados} fechaMin={fechaMin} fechaMax={fechaMax} />
           </div>
@@ -867,8 +1254,9 @@ export default function RelojModule() {
   const [empleados, setEmpleados]       = useState<EmpleadoData[]>(() => storeEntry?.empleados ?? []);
   const [selected, setSelected]         = useState<string>('ALL');
   const [editingEmp, setEditingEmp]     = useState<string | null>(null);
-  const [exportingPptx, setExportingPptx] = useState(false);
-  const [showPDFModal, setShowPDFModal]   = useState(false);
+  const [exportingPptx, setExportingPptx]       = useState(false);
+  const [showPDFModal, setShowPDFModal]         = useState(false);
+  const [customHorarioModal, setCustomHorarioModal] = useState<EmpleadoData | null>(null);
 
   // Filter state
   const [searchQuery, setSearchQuery]           = useState('');
@@ -971,6 +1359,23 @@ export default function RelojModule() {
     });
   }, [data, saveToStore, storeEntry?.nombreArchivo]);
 
+  const handleGuardarHorarioCustom = useCallback((emp: EmpleadoData, horario: HorarioPersona) => {
+    guardarHorarioCustom(horario);
+    const repr = horario.lunesAMiercoles.trabaja ? horario.lunesAMiercoles : horario.jueveYViernes;
+    handleSaveHorario(emp.nombre, {
+      ingresoEsperado: repr.ingreso,
+      salidaEsperada: repr.salida,
+      descansoSalida: '13:00',
+      descansoRegreso: '14:00',
+      duracionDescansoMinutos: 60,
+      toleranciaIngreso: 10,
+      diasConDatosCompletos: 0,
+      fuenteHorario: 'horario_custom',
+      nombreEnConfig: horario.nombre,
+      horarioPersona: horario,
+    });
+  }, [handleSaveHorario]);
+
   const selectedEmp = empleados.find(e => e.nombre === selected) ?? null;
 
   const subtitle = useMemo(() => {
@@ -1068,6 +1473,14 @@ export default function RelojModule() {
         {stage === 'analysis' && data && (
           <div id="reloj-content" className="space-y-5">
 
+            {/* Personas sin horario oficial */}
+            {empleados.some(e => e.horario.fuenteHorario === 'inferido') && (
+              <SinHorarioCard
+                empleados={empleados}
+                onGuardar={setCustomHorarioModal}
+              />
+            )}
+
             {/* Filter bar — solo en vista comparativa */}
             {selected === 'ALL' && (
               <FilterBar
@@ -1122,6 +1535,13 @@ export default function RelojModule() {
           emp={selectedEmp}
           onSave={h => handleSaveHorario(selectedEmp.nombre, h)}
           onClose={() => setEditingEmp(null)}
+        />
+      )}
+      {customHorarioModal && (
+        <HorarioCustomModal
+          emp={customHorarioModal}
+          onSave={horario => { handleGuardarHorarioCustom(customHorarioModal, horario); setCustomHorarioModal(null); }}
+          onClose={() => setCustomHorarioModal(null)}
         />
       )}
       {showPDFModal && (

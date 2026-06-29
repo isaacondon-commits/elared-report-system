@@ -55,7 +55,7 @@ export interface HorarioEsperado {
   duracionDescansoMinutos: number;
   toleranciaIngreso: number;
   diasConDatosCompletos: number;
-  fuenteHorario: 'horario_oficial' | 'inferido';
+  fuenteHorario: 'horario_oficial' | 'horario_custom' | 'inferido';
   nombreEnConfig?: string;
   horarioPersona?: HorarioPersona;
 }
@@ -241,9 +241,10 @@ function inferirRolMarcacion(mcs: Marcacion[]): void {
 }
 
 function detectarHorarioEsperado(dias: Map<string, DiaData>, nombre: string): HorarioEsperado {
-  // Try official schedule first
-  const persona = buscarHorarioPersona(nombre);
-  if (persona) {
+  // Try official/custom schedule first
+  const resultado = buscarHorarioPersona(nombre);
+  if (resultado) {
+    const { persona, fuente } = resultado;
     const repr = persona.lunesAMiercoles.trabaja ? persona.lunesAMiercoles : persona.jueveYViernes;
     return {
       ingresoEsperado: repr.trabaja ? repr.ingreso : '09:00',
@@ -253,7 +254,7 @@ function detectarHorarioEsperado(dias: Map<string, DiaData>, nombre: string): Ho
       duracionDescansoMinutos: 60,
       toleranciaIngreso: 10,
       diasConDatosCompletos: 0,
-      fuenteHorario: 'horario_oficial',
+      fuenteHorario: fuente,
       nombreEnConfig: persona.nombre,
       horarioPersona: persona,
     };
@@ -391,16 +392,18 @@ export function calcularMetricas(
       ? Math.max(0, dia.minutosDescanso - horario.duracionDescansoMinutos - 15)
       : 0;
 
-    dia.minutosSalidaAnticipada = dia.minutosSalidaFinal !== null
-      ? Math.max(0, salidaEsp - dia.minutosSalidaFinal - 10)
-      : 0;
+    // Umbral: 30 min mínimo para considerar salida anticipada como significativa. Menos de 30 min = margen normal.
+    const minutosAntes = dia.minutosSalidaFinal !== null ? salidaEsp - dia.minutosSalidaFinal : 0;
+    dia.minutosSalidaAnticipada = minutosAntes >= 30 ? minutosAntes : 0;
 
     // Horas extras: solo si hay salida final registrada
     if (dia.minutosIngreso !== null && dia.minutosSalidaFinal !== null) {
       const descReal = dia.minutosDescanso !== null && dia.minutosDescanso > 0 ? dia.minutosDescanso : 0;
       const jornadaReal = dia.minutosSalidaFinal - dia.minutosIngreso - descReal;
       const jornadaEsperada = salidaEsp - ingresoEsp - 30;
-      dia.horasExtrasMinutos = Math.max(0, jornadaReal - jornadaEsperada);
+      const extrasRaw = jornadaReal - jornadaEsperada;
+      // Umbral: 30 min mínimo para considerar horas extras como significativas. Menos de 30 min = margen normal.
+      dia.horasExtrasMinutos = extrasRaw >= 30 ? extrasRaw : 0;
     } else {
       dia.horasExtrasMinutos = 0;
     }

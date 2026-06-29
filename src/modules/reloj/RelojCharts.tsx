@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, ReferenceArea,
-  BarChart, Bar, Cell, Legend,
 } from 'recharts';
 import type { EmpleadoData, EstadoDia, DiaData } from './relojParser';
 import { parseHHMM, minsToHHMM } from './relojParser';
@@ -54,21 +53,11 @@ const ESTADO_BG: Record<EstadoDia, string> = {
   FIN_SEMANA:         '#f9fafb',
 };
 
-const ESTADO_LABELS_MAP: Partial<Record<EstadoDia, string>> = {
-  OK: 'OK', TARDANZA: 'Tardanza', TARDANZA_GRAVE: 'T. Grave',
-  SALIDA_ANTICIPADA: 'Sal. Anticip.', DESCANSO_EXTENDIDO: 'Desc. Ext.',
-  DATO_INCOMPLETO: 'Incompleto', AUSENTE: 'Ausente',
-};
-
 const ESTADO_LABEL_FULL: Record<EstadoDia, string> = {
   OK: 'A tiempo', TARDANZA: 'Tardanza', TARDANZA_GRAVE: 'Tardanza grave',
   SALIDA_ANTICIPADA: 'Salida anticipada', DESCANSO_EXTENDIDO: 'Desc. extendido',
   DATO_INCOMPLETO: 'Incompleto', AUSENTE: 'Ausente', FIN_SEMANA: 'Fin de semana',
 };
-
-const ALL_KEYS: EstadoDia[] = [
-  'OK', 'TARDANZA', 'TARDANZA_GRAVE', 'SALIDA_ANTICIPADA', 'DESCANSO_EXTENDIDO', 'DATO_INCOMPLETO', 'AUSENTE',
-];
 
 // ─── Ingreso evolution chart (individual) ─────────────────────────────────────
 
@@ -225,187 +214,7 @@ export function JornadaLineChart({ empleado }: { empleado: EmpleadoData }) {
   );
 }
 
-// ─── Composition chart (horizontal stacked, only people with incidents) ────────
-
-export function CompositionChart({ empleados }: { empleados: EmpleadoData[] }) {
-  const withIncidents = empleados.filter(e =>
-    e.tardanzas > 0 || e.ausencias > 0 || e.descansosExtendidos > 0 || e.salidasAnticipadas > 0 ||
-    Array.from(e.dias.values()).some(d => d.estado === 'DATO_INCOMPLETO')
-  );
-
-  if (withIncidents.length === 0) {
-    return (
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Composición de días por persona</h3>
-        <div className="flex flex-col items-center justify-center py-10 text-center">
-          <div className="text-3xl mb-2">🎉</div>
-          <div className="font-semibold text-green-700 text-sm">¡Sin incidencias!</div>
-          <div className="text-xs text-gray-400 mt-1">Todo el equipo tiene días perfectos.</div>
-        </div>
-      </div>
-    );
-  }
-
-  const data = [...withIncidents]
-    .sort((a, b) =>
-      (b.tardanzas + b.ausencias + b.descansosExtendidos) -
-      (a.tardanzas + a.ausencias + a.descansosExtendidos)
-    )
-    .map(emp => {
-      const counts: Record<string, number> = {
-        OK: 0, TARDANZA: 0, TARDANZA_GRAVE: 0,
-        SALIDA_ANTICIPADA: 0, DESCANSO_EXTENDIDO: 0, DATO_INCOMPLETO: 0, AUSENTE: 0,
-      };
-      for (const dia of emp.dias.values()) {
-        if (dia.estado !== 'FIN_SEMANA' && counts[dia.estado] !== undefined) {
-          counts[dia.estado]++;
-        }
-      }
-      return { nombre: emp.nombre, ...counts };
-    });
-
-  const height = Math.max(160, data.length * 40 + 70);
-
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-700 mb-1">Composición de días por persona</h3>
-      <p className="text-xs text-gray-400 mb-3">
-        {withIncidents.length} de {empleados.length} personas con incidencias
-      </p>
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 180, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-          <YAxis type="category" dataKey="nombre" width={175} tick={{ fontSize: 11, fill: '#64748b' }} />
-          <Tooltip
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(value: any, name: any) => [value, ESTADO_LABELS_MAP[name as EstadoDia] ?? name]}
-          />
-          <Legend
-            formatter={(name: string) => ESTADO_LABELS_MAP[name as EstadoDia] ?? name}
-            iconType="circle" iconSize={8}
-            wrapperStyle={{ fontSize: 10, paddingTop: 8 }}
-          />
-          {ALL_KEYS.map(k => (
-            <Bar key={k} dataKey={k} stackId="a" fill={COLORES_ESTADO[k]} />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ─── Ranking chart (only <100%, celebration if all perfect) ───────────────────
-
-export function RankingBarChart({ empleados }: { empleados: EmpleadoData[] }) {
-  const withIssues = empleados.filter(e => e.puntualidadPct < 100);
-
-  if (withIssues.length === 0) {
-    return (
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Ranking de puntualidad</h3>
-        <div className="flex flex-col items-center justify-center py-10 text-center">
-          <div className="text-3xl mb-2">🏆</div>
-          <div className="font-semibold text-green-700 text-sm">¡Puntualidad perfecta!</div>
-          <div className="text-xs text-gray-400 mt-1">Todo el equipo tiene 100% de puntualidad.</div>
-        </div>
-      </div>
-    );
-  }
-
-  const data = [...withIssues]
-    .sort((a, b) => a.puntualidadPct - b.puntualidadPct)
-    .map(e => ({ nombre: e.nombre, puntualidad: e.puntualidadPct }));
-
-  const height = Math.max(120, data.length * 40 + 70);
-
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-700 mb-1">Ranking de puntualidad</h3>
-      <p className="text-xs text-gray-400 mb-3">
-        {withIssues.length} de {empleados.length} personas con puntualidad &lt; 100%
-      </p>
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} layout="vertical" margin={{ top: 5, right: 50, left: 180, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical horizontal={false} />
-          <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`}
-            tick={{ fontSize: 10, fill: '#94a3b8' }} />
-          <YAxis type="category" dataKey="nombre" width={175} tick={{ fontSize: 11, fill: '#64748b' }} />
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          <Tooltip formatter={(v: any) => [`${v}%`, 'Puntualidad']} />
-          <ReferenceLine x={90} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={1} />
-          <Bar dataKey="puntualidad" radius={[0, 4, 4, 0]}>
-            {data.map((entry, i) => (
-              <Cell
-                key={i}
-                fill={entry.puntualidad >= 90 ? '#16a34a' : entry.puntualidad >= 75 ? '#f59e0b' : '#E3000F'}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ─── Jornada chart (horizontal, colored by vs expected) ───────────────────────
-
-export function JornadaBarChart({ empleados }: { empleados: EmpleadoData[] }) {
-  const data = empleados
-    .filter(e => e.jornadaPromedioMinutos > 0)
-    .map(e => {
-      const expectedMins = parseHHMM(e.horario.salidaEsperada) - parseHHMM(e.horario.ingresoEsperado);
-      const diff = e.jornadaPromedioMinutos - expectedMins;
-      return {
-        nombre: e.nombre,
-        jornada: Math.round(e.jornadaPromedioMinutos / 60 * 10) / 10,
-        label: minsToHHMM(e.jornadaPromedioMinutos),
-        expectedH: Math.round(expectedMins / 60 * 10) / 10,
-        diff,
-      };
-    })
-    .sort((a, b) => a.jornada - b.jornada);
-
-  if (data.length === 0) return null;
-
-  const sorted = [...data].sort((a, b) => a.expectedH - b.expectedH);
-  const medianExp = sorted[Math.floor(sorted.length / 2)]?.expectedH ?? 8;
-  const xMin = Math.max(0, Math.min(...data.map(d => d.jornada)) - 0.5);
-  const xMax = Math.max(...data.map(d => d.jornada)) + 0.5;
-  const height = Math.max(160, data.length * 36 + 70);
-
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-700 mb-1">Jornada promedio por persona</h3>
-      <p className="text-xs text-gray-400 mb-3">Horas trabajadas promedio. Línea azul = jornada esperada.</p>
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} layout="vertical" margin={{ top: 5, right: 30, left: 180, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical horizontal={false} />
-          <XAxis type="number" domain={[xMin, xMax]} tickFormatter={v => `${v}h`}
-            tick={{ fontSize: 10, fill: '#94a3b8' }} />
-          <YAxis type="category" dataKey="nombre" width={175} tick={{ fontSize: 11, fill: '#64748b' }} />
-          <Tooltip
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(_v: any, _n: any, p: any) => [p.payload.label, 'Jornada promedio']}
-          />
-          <ReferenceLine x={medianExp} stroke="#003DA5" strokeDasharray="4 4" strokeWidth={1.5}
-            label={{ value: `${medianExp}h`, fill: '#003DA5', fontSize: 9, position: 'insideTopRight' }}
-          />
-          <Bar dataKey="jornada" radius={[0, 4, 4, 0]}>
-            {data.map((entry, i) => (
-              <Cell
-                key={i}
-                fill={entry.diff >= -10 ? '#16a34a' : entry.diff >= -30 ? '#f59e0b' : '#E3000F'}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ─── Heatmap chart (CSS grid, people × dates) ─────────────────────────────────
+// ─── Heatmap chart — solo personas con incidencias ────────────────────────────
 
 interface HeatmapTooltipState {
   clientX: number;
@@ -427,14 +236,34 @@ export function HeatmapChart({ empleados, fechaMin, fechaMax }: HeatmapChartProp
 
   const allDates = getLaborableDays(fechaMin, fechaMax);
 
-  const topEmps = [...empleados]
+  const withIncidents = empleados.filter(e =>
+    e.tardanzas > 0 || e.ausencias > 0 || e.descansosExtendidos > 0 ||
+    e.salidasAnticipadas > 0 || e.diasIncompletos > 0
+  );
+
+  const topEmps = [...withIncidents]
     .sort((a, b) =>
       (b.tardanzas + b.ausencias + b.descansosExtendidos) -
       (a.tardanzas + a.ausencias + a.descansosExtendidos)
     )
     .slice(0, 20);
 
-  if (allDates.length === 0 || topEmps.length === 0) return null;
+  if (allDates.length === 0) return null;
+
+  if (withIncidents.length === 0) {
+    return (
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Mapa de calor de asistencia</h3>
+        <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
+          <span className="text-2xl">✓</span>
+          <div>
+            <div className="font-semibold text-green-800 text-sm">Sin incidencias en el período analizado</div>
+            <div className="text-xs text-green-600 mt-0.5">Todo el equipo con asistencia perfecta</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const monthChanges = new Set<number>();
   allDates.forEach((d, i) => {
@@ -451,8 +280,8 @@ export function HeatmapChart({ empleados, fechaMin, fechaMax }: HeatmapChartProp
     <div>
       <h3 className="text-sm font-semibold text-gray-700 mb-1">Mapa de calor de asistencia</h3>
       <p className="text-xs text-gray-400 mb-3">
-        Top {topEmps.length} personas · {allDates.length} días laborables
-        {empleados.length > 20 && ` (de ${empleados.length} totales)`}
+        Mostrando {topEmps.length} persona{topEmps.length !== 1 ? 's' : ''} con incidencias de {empleados.length} totales
+        {withIncidents.length > 20 && ` (top 20)`}
       </p>
 
       <div className="flex flex-wrap gap-3 mb-4">
@@ -560,53 +389,6 @@ export function HeatmapChart({ empleados, fechaMin, fechaMax }: HeatmapChartProp
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── Horas extras chart ────────────────────────────────────────────────────────
-
-export function HorasExtrasBarChart({ empleados }: { empleados: EmpleadoData[] }) {
-  const withExtras = empleados
-    .filter(e => e.totalHorasExtrasMinutos > 0)
-    .sort((a, b) => b.totalHorasExtrasMinutos - a.totalHorasExtrasMinutos);
-
-  if (withExtras.length === 0) return null;
-
-  const avgMins = Math.round(
-    withExtras.reduce((s, e) => s + e.totalHorasExtrasMinutos, 0) / withExtras.length,
-  );
-  const avgH = avgMins / 60;
-
-  const data = withExtras.map(e => ({
-    nombre: e.nombre,
-    extrasH: Math.round((e.totalHorasExtrasMinutos / 60) * 10) / 10,
-    label: minsToHHMM(e.totalHorasExtrasMinutos),
-  }));
-
-  const height = Math.max(120, data.length * 40 + 70);
-
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-700 mb-1">Horas extras acumuladas</h3>
-      <p className="text-xs text-gray-400 mb-3">
-        {withExtras.length} persona{withExtras.length !== 1 ? 's' : ''} con extras · promedio equipo: {minsToHHMM(avgMins)}
-      </p>
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} layout="vertical" margin={{ top: 5, right: 60, left: 180, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical horizontal={false} />
-          <XAxis type="number" tickFormatter={v => `${v}h`} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-          <YAxis type="category" dataKey="nombre" width={175} tick={{ fontSize: 11, fill: '#64748b' }} />
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          <Tooltip formatter={(v: any) => [`${v}h`, 'Extras']} />
-          <ReferenceLine x={avgH} stroke="#94a3b8" strokeDasharray="3 3" strokeWidth={1} label={{ value: 'prom.', position: 'top', fontSize: 9, fill: '#94a3b8' }} />
-          <Bar dataKey="extrasH" fill="#28a745" radius={[0, 4, 4, 0]}>
-            {data.map((_, i) => (
-              <Cell key={i} fill="#28a745" />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
     </div>
   );
 }

@@ -42,7 +42,7 @@ const VENTAS_FIELDS: Record<string, string[]> = {
   fecha:        ['fecha de venta', 'fecha venta', 'fecha', 'dia', 'date', 'día'],
   motivo:       ['motivo de cambio de plan', 'motivo de cambio', 'motivo', 'razon de cambio', 'razon', 'razón', 'tipo de gestion', 'tipo de gestión'],
   nuevoPlan:    ['nuevo plan', 'plan contratado', 'plan nuevo', 'plan vigente', 'plan final'],
-  planAnterior: ['plan anterior', 'descripcion de plan', 'plan previo', 'plan original', 'plan base'],
+  planAnterior: ['plan anterior', 'descripcion de plan', 'descripcion', 'plan ant', 'plan previo', 'plan original', 'plan base'],
   empresa:      ['empresa', 'company', 'negocio', 'linea', 'línea', 'servicio'],
   estado:       ['estado', 'status', 'resultado', 'situacion', 'situación'],
   backOffice:   ['back-office', 'back office', 'backoffice', 'back_office'],
@@ -95,7 +95,7 @@ function safeStr(val: unknown): string {
 }
 
 function normalize(str: string): string {
-  return str
+  return fixEncoding(str)
     .toLowerCase().trim()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9\s]/g, '')

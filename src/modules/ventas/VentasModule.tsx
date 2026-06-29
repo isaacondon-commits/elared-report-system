@@ -7,7 +7,7 @@ import FileUploader from '../../components/FileUploader';
 import ColumnMapper from '../../components/ColumnMapper';
 import KPICard from '../../components/KPICard';
 import Header from '../../components/Header';
-import { parseExcel, normalizeEstado, normalizeFechaVenta, type ParseResult, type EstadoVenta } from '../../utils/smartParser';
+import { parseExcel, normalizeEstado, normalizeFechaVenta, getEquivalente, getEquivalenteColor, type ParseResult, type EstadoVenta } from '../../utils/smartParser';
 import VentasCharts, { TemporalChart } from './VentasCharts';
 import FiltroPeriodo, { type FiltroState } from '../../components/ventas/FiltroPeriodo';
 import VentasPerformanceTable from './VentasPerformanceTable';
@@ -84,6 +84,8 @@ export interface FuncionarioStat {
   ventasPorDia: FuncionarioDia[];
   promVentasDia: number;
   diaMasProductivo: { fecha: string; ventas: number } | null;
+  ventasPorPlan: Record<string, number>;
+  estadosRawPorDia: Record<string, Record<string, number>>;
 }
 
 export interface EstadoKpis {
@@ -246,6 +248,8 @@ export function processVentas(
   const modalMap   = new Map<string, { count: number; vendidos: number }>();
   const boMap      = new Map<string, { count: number; estados: Record<string, number> }>();
   const diaVendedores = new Map<string, Set<string>>();
+  const funcDiaEstados = new Map<string, Map<string, Record<string, number>>>();
+  const funcPlan       = new Map<string, Map<string, number>>();
 
   for (const r of rows) {
     const nombre = String(r[mapping.funcionario] ?? '').trim();
@@ -258,7 +262,7 @@ export function processVentas(
     const estadoRawVal = (mapping.estado ? String(r[mapping.estado] ?? '') : '').trim();
     const estadoNorm   = hasEstado ? normalizeEstado(estadoRawVal) : 'Otro';
     const esVendido    = estadoRawVal === 'VENDIDO' || estadoNorm === 'Vendido';
-    const esRechazo    = estadoRawVal === 'RECHAZADO' || estadoNorm === 'Rechazo';
+    const esRechazo    = hasEstado ? getEquivalente(estadoRawVal) === 'Rechazado' : false;
 
     // Departamento
     if (hasDepartamento) {
@@ -309,7 +313,11 @@ export function processVentas(
     // Plan
     if (mapping.nuevoPlan) {
       const plan = String(r[mapping.nuevoPlan] ?? '').trim();
-      if (plan) planMap.set(plan, (planMap.get(plan) ?? 0) + 1);
+      if (plan) {
+        planMap.set(plan, (planMap.get(plan) ?? 0) + 1);
+        if (!funcPlan.has(nombre)) funcPlan.set(nombre, new Map());
+        funcPlan.get(nombre)!.set(plan, (funcPlan.get(nombre)!.get(plan) ?? 0) + 1);
+      }
     }
 
     // Fecha
@@ -322,6 +330,13 @@ export function processVentas(
         dv.set(fechaStr, (dv.get(fechaStr) ?? 0) + 1);
         if (!diaVendedores.has(fechaStr)) diaVendedores.set(fechaStr, new Set());
         diaVendedores.get(fechaStr)!.add(nombre);
+        if (hasEstado && estadoRawVal) {
+          if (!funcDiaEstados.has(nombre)) funcDiaEstados.set(nombre, new Map());
+          const de = funcDiaEstados.get(nombre)!;
+          if (!de.has(fechaStr)) de.set(fechaStr, {});
+          const ds = de.get(fechaStr)!;
+          ds[estadoRawVal] = (ds[estadoRawVal] ?? 0) + 1;
+        }
       }
     }
 
@@ -356,6 +371,10 @@ export function processVentas(
       ...f, diasActivos, ventasPorDia,
       promVentasDia: diasActivos > 0 ? f.total / diasActivos : 0,
       diaMasProductivo,
+      ventasPorPlan: Object.fromEntries(funcPlan.get(f.nombre) ?? []),
+      estadosRawPorDia: Object.fromEntries(
+        [...(funcDiaEstados.get(f.nombre) ?? new Map()).entries()]
+      ),
     };
   }).sort((a, b) => b.total - a.total);
 
@@ -512,6 +531,47 @@ function VendedorActivoSection({ vendedor }: { vendedor: FuncionarioStat }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── KPI Cards secundarios por equivalente ─────────────────────────────────────
+function EquivalenteKpis({ stats }: { stats: VentasStats }) {
+  if (!stats.hasEstado || stats.byEstadoRaw.length === 0) return null;
+  const totals: Record<string, number> = {};
+  for (const { estado, count } of stats.byEstadoRaw) {
+    const eq = getEquivalente(estado);
+    if (eq) totals[eq] = (totals[eq] ?? 0) + count;
+  }
+  const total = stats.total;
+  const items = [
+    { key: 'Activo',      label: 'Activos (Control Antel)',         icon: CheckCircle  },
+    { key: 'Pendiente',   label: 'Pendientes (Activar/Distribuir)', icon: Layers       },
+    { key: 'Back Office', label: 'Back Office (Vendido)',           icon: ArrowUpRight },
+    { key: 'Rechazado',   label: 'Rechazados',                     icon: XCircle      },
+  ] as const;
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {items.map(item => {
+        const cnt = totals[item.key] ?? 0;
+        const pct = total > 0 ? ((cnt / total) * 100).toFixed(1) : '0.0';
+        const color = getEquivalenteColor(item.key);
+        const Icon = item.icon;
+        return (
+          <div key={item.key} style={{
+            background: '#fff', border: '1px solid #e2e8f0',
+            borderLeft: `4px solid ${color}`, borderRadius: 12, padding: '14px 16px',
+            display: 'flex', flexDirection: 'column', gap: 4,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon size={14} style={{ color }} />
+              <span style={{ fontSize: 11, color: '#6c757d', fontWeight: 600 }}>{item.label}</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color }}>{cnt.toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: '#9ca3af' }}>{pct}% del total</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -870,8 +930,8 @@ export default function VentasModule() {
               )}
             </div>
 
-            {/* 2. Empresa tabs + controles */}
-            <EmpresaTabs empresas={empresas} active={empresaActiva} onChange={handleEmpresaChange} />
+            {/* KPI Cards secundarios — pipeline por equivalente */}
+            <EquivalenteKpis stats={stats} />
 
             {/* Filtro de período */}
             <FiltroPeriodo
@@ -883,6 +943,9 @@ export default function VentasModule() {
               totalVentas={stats.total}
               totalSinFiltro={totalSinFiltro}
             />
+
+            {/* Selector de empresa */}
+            <EmpresaTabs empresas={empresas} active={empresaActiva} onChange={handleEmpresaChange} />
 
             {/* Controls bar */}
             <div className="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-gray-200 px-4 py-3">
@@ -918,16 +981,16 @@ export default function VentasModule() {
               <VendedorActivoSection vendedor={vendedorData} />
             )}
 
-            {/* 3–10. Gráficos */}
+            {/* Tabla maestra de vendedores (fusión ranking + performance) */}
+            <VentasPerformanceTable stats={stats} onHideVendedor={handleHideVendedor} />
+
+            {/* Gráficos: Promedio/día, Estado, Planes, Modalidad, Deptos, BackOffice, Rechazos */}
             <VentasCharts
               stats={stats}
               vendedoresOcultos={vendedoresOcultos}
               onHideVendedor={handleHideVendedor}
               vendedorActivo={vendedorActivo}
             />
-
-            {/* 11. Tabla performance */}
-            <VentasPerformanceTable stats={stats} onHideVendedor={handleHideVendedor} />
 
             {/* 12. Evolución temporal */}
             {stats.byFecha.length > 1 && (

@@ -1,13 +1,13 @@
-import { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, Legend, LabelList, ReferenceLine,
+  LineChart, Line, LabelList, ReferenceLine, Cell,
+  PieChart, Pie, Legend,
 } from 'recharts';
-import { EyeOff } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { VentasStats } from './VentasModule';
 import { getEstadoColor } from './VentasModule';
+import { getEquivalente, getEquivalenteColor } from '../../utils/smartParser';
 
 // ── Paleta Antel ──────────────────────────────────────────────────────────────
 const P = {
@@ -52,111 +52,7 @@ interface Props {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. RANKING DE VENDEDORES — tabla con hover + EyeOff (Mejoras 1, 6)
-// ─────────────────────────────────────────────────────────────────────────────
-function RankingChart({ stats, onHideVendedor }: Props) {
-  const [hovered, setHovered] = useState<string | null>(null);
-  const data = stats.byFuncionario;
-  const maxTotal = data[0]?.total ?? 1;
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Ranking General de Vendedores</h3>
-      <div className="space-y-1">
-        {data.map((f, i) => {
-          const pct = (f.total / maxTotal) * 100;
-          const isTop = i < 3;
-          const medals = ['🥇', '🥈', '🥉'];
-          return (
-            <div
-              key={f.nombre}
-              className="flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors cursor-default"
-              style={{ background: hovered === f.nombre ? '#f1f5f9' : 'transparent' }}
-              onMouseEnter={() => setHovered(f.nombre)}
-              onMouseLeave={() => setHovered(null)}
-            >
-              {/* Rank */}
-              <div className="w-8 text-center flex-shrink-0">
-                {isTop
-                  ? <span className="text-base">{medals[i]}</span>
-                  : <span className="text-xs text-gray-400 font-mono">{i + 1}</span>}
-              </div>
-              {/* Nombre */}
-              <div className="w-52 flex-shrink-0 text-sm font-medium text-gray-800 truncate" title={f.nombre}>
-                {f.nombre}
-              </div>
-              {/* Bar */}
-              <div className="flex-1 bg-gray-100 rounded-full h-4 relative overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${pct}%`,
-                    background: i === 0 ? P.rojo : i < 3 ? P.azul2 : P.azul1,
-                    opacity: 1 - i * 0.02,
-                  }}
-                />
-              </div>
-              {/* Total */}
-              <div className="w-16 text-right flex-shrink-0">
-                <span className={`text-sm font-bold ${i === 0 ? 'text-[#E3000F]' : 'text-[#003DA5]'}`}>
-                  {f.total.toLocaleString()}
-                </span>
-              </div>
-              {/* EyeOff */}
-              <button
-                onClick={() => onHideVendedor(f.nombre)}
-                className="w-7 flex-shrink-0 flex items-center justify-center transition-opacity"
-                style={{ opacity: hovered === f.nombre ? 1 : 0 }}
-                title={`Ocultar ${f.nombre}`}
-              >
-                <EyeOff size={14} className="text-gray-400 hover:text-red-500" />
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. COMPOSICIÓN POR VENDEDOR — stacked top 10 (Mejora 1)
-// ─────────────────────────────────────────────────────────────────────────────
-function StackedChart({ stats }: Pick<Props, 'stats'>) {
-  const top10 = stats.byFuncionario.slice(0, 10).map(f => ({
-    nombre: f.nombre.split(' ').slice(0, 2).join(' '),
-    fullNombre: f.nombre,
-    Renovacion: f.renovaciones,
-    'Nuevo Servicio': f.altas,
-    'Cambio de plan': f.cambios,
-    Otros: f.otros,
-  }));
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Composición de Ventas por Vendedor (Top 10)</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={top10} margin={{ top: 5, right: 20, left: 0, bottom: 65 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="nombre" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} />
-          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-          <Tooltip
-            labelFormatter={(_: unknown, payload: readonly { payload?: { fullNombre?: string } }[]) =>
-              payload?.[0]?.payload?.fullNombre ?? ''}
-          />
-          <Legend />
-          <Bar dataKey="Renovacion"     stackId="a" fill={P.azul1} />
-          <Bar dataKey="Cambio de plan" stackId="a" fill={P.azul3} />
-          <Bar dataKey="Nuevo Servicio" stackId="a" fill={P.rojo}  />
-          <Bar dataKey="Otros"          stackId="a" fill={P.grisClaro} radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. MÉTRICAS DIARIAS DEL EQUIPO (Mejora 4)
+// Promedio de Ventas por Vendedor
 // ─────────────────────────────────────────────────────────────────────────────
 function MetricasDiariasEquipo({ stats }: Pick<Props, 'stats'>) {
   if (stats.byDia.length === 0) return null;
@@ -175,7 +71,7 @@ function MetricasDiariasEquipo({ stats }: Pick<Props, 'stats'>) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Actividad del Equipo por Día</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">Promedio de Ventas por Vendedor</h3>
 
       {/* Mini line chart */}
       {chartData.length > 1 && (
@@ -241,7 +137,7 @@ function MetricasDiariasEquipo({ stats }: Pick<Props, 'stats'>) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. DISTRIBUCIÓN POR ESTADO (Mejora 5) — todos los estados reales
+// Distribución por Estado — solo tabla con columna EQUIVALENTE
 // ─────────────────────────────────────────────────────────────────────────────
 function EstadoChart({ stats }: Pick<Props, 'stats'>) {
   if (!stats.hasEstado || stats.byEstadoRaw.length === 0) return null;
@@ -252,61 +148,46 @@ function EstadoChart({ stats }: Pick<Props, 'stats'>) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <h3 className="font-semibold text-gray-900 mb-4">Distribución por Estado</h3>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pie */}
-        <ResponsiveContainer width="100%" height={260}>
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="count"
-              nameKey="estado"
-              cx="50%"
-              cy="50%"
-              outerRadius={95}
-              innerRadius={40}
-              label={({ percent }: { percent?: number }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
-              labelLine
-            >
-              {data.map((entry, i) => (
-                <Cell key={i} fill={getEstadoColor(entry.estado)} />
-              ))}
-            </Pie>
-            <Tooltip formatter={fmt} />
-            <Legend
-              formatter={(value: string, entry: { payload?: { count?: number } }) =>
-                `${value} (${entry?.payload?.count ?? 0})`}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-
-        {/* Tabla */}
-        <div className="overflow-x-auto self-center">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">Estado</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">Cant.</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map(d => (
-                <tr key={d.estado} className="border-t border-gray-100">
-                  <td className="px-3 py-1.5">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full text-white"
-                      style={{ background: getEstadoColor(d.estado) }}>
-                      {d.estado}
-                    </span>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-[#003DA5] text-white">
+              <th className="px-3 py-2 text-left text-xs font-semibold">Estado</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold">Equivalente</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">Cantidad</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">% del Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d, i) => {
+              const eq = getEquivalente(d.estado);
+              return (
+                <tr key={d.estado} className="border-t border-gray-100"
+                  style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                  <td className="px-3 py-2 font-medium text-gray-800">{d.estado}</td>
+                  <td className="px-3 py-2">
+                    {eq ? (
+                      <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                        style={{ background: getEquivalenteColor(eq) }}>
+                        {eq}
+                      </span>
+                    ) : <span className="text-gray-300 text-xs">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 text-right font-semibold text-gray-800">{d.count.toLocaleString()}</td>
-                  <td className="px-3 py-1.5 text-right text-gray-500 text-xs">
+                  <td className="px-3 py-2 text-right font-bold text-[#003DA5]">{d.count.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-gray-500 text-xs">
                     {total > 0 ? ((d.count / total) * 100).toFixed(1) : 0}%
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              );
+            })}
+            <tr className="border-t-2 border-gray-300" style={{ background: '#f1f5f9' }}>
+              <td className="px-3 py-2 font-bold text-gray-700">TOTAL</td>
+              <td className="px-3 py-2" />
+              <td className="px-3 py-2 text-right font-bold text-gray-800">{total.toLocaleString()}</td>
+              <td className="px-3 py-2 text-right font-bold text-gray-600 text-xs">100%</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -581,25 +462,25 @@ function BackOfficeChart({ stats }: Pick<Props, 'stats'>) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. RANKING DE RECHAZOS (Mejora 7)
+// Ranking de Rechazos — ordenado por % desc, mínimo 5 ventas
 // ─────────────────────────────────────────────────────────────────────────────
 function RechazosChart({ stats }: Pick<Props, 'stats'>) {
   if (!stats.hasEstado) return null;
 
   const conRechazos = stats.byFuncionario
-    .filter(f => f.rechazos > 0)
+    .filter(f => f.total >= 5 && f.rechazos > 0)
     .map(f => ({ ...f, pctRechazo: f.total > 0 ? (f.rechazos / f.total) * 100 : 0 }))
-    .sort((a, b) => b.rechazos - a.rechazos)
-    .slice(0, 10);
+    .sort((a, b) => b.pctRechazo - a.pctRechazo);
 
   if (conRechazos.length === 0) return null;
 
   const tasaEquipo = stats.tasaRechazoEquipo ?? 0;
 
-  function badgePct(pct: number) {
-    if (pct < 5)  return { label: 'Bajo',  bg: '#d4edda', color: '#155724' };
-    if (pct <= 15) return { label: 'Medio', bg: '#fff3cd', color: '#856404' };
-    return              { label: 'Alto',  bg: '#f8d7da', color: '#721c24' };
+  function riesgoBadge(pct: number) {
+    if (pct > 30) return { label: 'Crítico', bg: '#7f1d1d', color: '#fff' };
+    if (pct > 15) return { label: 'Alto',    bg: '#E3000F', color: '#fff' };
+    if (pct >= 5) return { label: 'Medio',   bg: '#fd7e14', color: '#fff' };
+    return              { label: 'Bajo',    bg: '#d4edda', color: '#155724' };
   }
 
   return (
@@ -611,58 +492,45 @@ function RechazosChart({ stats }: Pick<Props, 'stats'>) {
           <span className={`font-bold ${tasaEquipo < 5 ? 'text-green-700' : tasaEquipo <= 10 ? 'text-orange-600' : 'text-red-600'}`}>
             {tasaEquipo.toFixed(1)}%
           </span>
+          <span className="text-gray-400 text-xs ml-2">(solo vendedores con ≥5 ventas)</span>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Chart */}
-        <div>
-          <ResponsiveContainer width="100%" height={Math.max(conRechazos.length * 38 + 40, 200)}>
-            <BarChart data={conRechazos} layout="vertical" margin={{ top: 0, right: 55, left: 10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-              <YAxis dataKey="nombre" type="category" tick={{ fontSize: 10 }} width={170} />
-              <Tooltip formatter={(v: unknown) => [Number(v).toLocaleString(), 'Rechazos']} contentStyle={{ fontSize: 12 }} />
-              <Bar dataKey="rechazos" fill={P.rojo} radius={[0, 4, 4, 0]}>
-                <LabelList dataKey="rechazos" position="right" style={{ fontSize: 11, fill: '#334155', fontWeight: 600 }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Tabla */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#003DA5] text-white">
-                <th className="px-2 py-2 text-center text-xs font-semibold w-8">#</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold">Vendedor</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold">Rechazos</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold">Total</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold">% Rechazo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {conRechazos.map((f, i) => {
-                const b = badgePct(f.pctRechazo);
-                return (
-                  <tr key={f.nombre} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                    <td className="px-2 py-1.5 text-center text-xs text-gray-400">{i + 1}</td>
-                    <td className="px-3 py-1.5 font-medium text-gray-800 text-sm truncate max-w-[160px]">{f.nombre}</td>
-                    <td className="px-3 py-1.5 text-right font-bold text-red-600">{f.rechazos}</td>
-                    <td className="px-3 py-1.5 text-right text-gray-600">{f.total}</td>
-                    <td className="px-3 py-1.5 text-right">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: b.bg, color: b.color }}>
-                        {f.pctRechazo.toFixed(1)}% {b.label}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-[#003DA5] text-white">
+              <th className="px-2 py-2 text-center text-xs font-semibold w-8">#</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold">Vendedor</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">Total Ventas</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">Rechazos</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">% Rechazo</th>
+              <th className="px-3 py-2 text-center text-xs font-semibold">Riesgo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {conRechazos.map((f, i) => {
+              const b = riesgoBadge(f.pctRechazo);
+              return (
+                <tr key={f.nombre} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <td className="px-2 py-1.5 text-center text-xs text-gray-400">{i + 1}</td>
+                  <td className="px-3 py-1.5 font-medium text-gray-800 text-sm truncate max-w-[200px]">{f.nombre}</td>
+                  <td className="px-3 py-1.5 text-right text-gray-600">{f.total}</td>
+                  <td className="px-3 py-1.5 text-right font-bold text-red-600">{f.rechazos}</td>
+                  <td className="px-3 py-1.5 text-right font-bold"
+                    style={{ color: f.pctRechazo > 15 ? '#E3000F' : f.pctRechazo >= 5 ? '#fd7e14' : '#28a745' }}>
+                    {f.pctRechazo.toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: b.bg, color: b.color }}>
+                      {b.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -679,7 +547,7 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Evolución Temporal (ventas por día)</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">Ventas Diarias</h3>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
@@ -724,7 +592,7 @@ function PlanChart({ stats }: Pick<Props, 'stats'>) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Distribución por Plan</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">Planes Vendidos</h3>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -746,37 +614,31 @@ function PlanChart({ stats }: Pick<Props, 'stats'>) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Default export — secciones 3-10 (sin temporal)
+// Default export — secciones secundarias (sin ranking, sin stacked, sin temporal)
 // ─────────────────────────────────────────────────────────────────────────────
 export default function VentasCharts(props: Props) {
   const { stats } = props;
   return (
     <div className="space-y-6">
-      {/* 3. Ranking */}
-      <RankingChart {...props} />
-
-      {/* 4. Composición stacked */}
-      <StackedChart stats={stats} />
-
-      {/* 5. Métricas diarias equipo */}
+      {/* Promedio de Ventas por Vendedor */}
       <MetricasDiariasEquipo key={`actividad-equipo-${stats.byDia.length}-${stats.fechaMin}`} stats={stats} />
 
-      {/* Distribución por plan (si hay datos) */}
-      {stats.byPlan.length > 0 && <PlanChart stats={stats} />}
-
-      {/* 6. Distribución por estado */}
+      {/* Distribución por Estado (solo tabla) */}
       <EstadoChart stats={stats} />
 
-      {/* 7. Modalidad */}
+      {/* Planes Vendidos */}
+      {stats.byPlan.length > 0 && <PlanChart stats={stats} />}
+
+      {/* Modalidad de Venta */}
       <ModalidadChart stats={stats} />
 
-      {/* 8. Departamentos */}
+      {/* Distribución Geográfica */}
       <DepartamentosChart stats={stats} />
 
-      {/* 9. Back Office */}
+      {/* Back Office */}
       <BackOfficeChart stats={stats} />
 
-      {/* 10. Rechazos */}
+      {/* Ranking de Rechazos (por %) */}
       <RechazosChart stats={stats} />
     </div>
   );

@@ -23,6 +23,38 @@ export function normalizeEstado(valor: string): EstadoVenta {
   return 'Otro';
 }
 
+// ── Equivalentes de estado ────────────────────────────────────────────────────
+export const EQUIVALENTES_ESTADO: Record<string, string> = {
+  'CONTROL ANTEL':            'Activo',
+  'CANCELADO POR CLIENTE':    'Rechazado',
+  'DISTRIBUIR':               'Pendiente',
+  'NO FIRMA':                 'Rechazado',
+  'ACTIVAR':                  'Pendiente',
+  'RECHAZADO':                'Rechazado',
+  'LLAMAR':                   'Rechazado',
+  'VENDIDO POR OTRA EMPRESA': 'Rechazado',
+  'VENDIDO':                  'Back Office',
+  'RELLAMAR':                 'Rechazado',
+  'NO LLAMAR':                'Rechazado',
+  'FACTURA IMPAGA':           'Rechazado',
+  'GESTION DISTRIBUCION':     'Rechazado',
+};
+
+export function getEquivalente(estado: string): string | null {
+  return EQUIVALENTES_ESTADO[estado.trim().toUpperCase()] ?? null;
+}
+
+export const EQUIVALENTE_COLORS: Record<string, string> = {
+  'Activo':      '#28a745',
+  'Pendiente':   '#fd7e14',
+  'Back Office': '#003DA5',
+  'Rechazado':   '#E3000F',
+};
+
+export function getEquivalenteColor(equivalente: string): string {
+  return EQUIVALENTE_COLORS[equivalente] ?? '#adb5bd';
+}
+
 // ── Normalizar fechas DD/MM/YYYY → YYYY-MM-DD ────────────────────────────────
 export function normalizeFechaVenta(val: string): string {
   if (!val) return '';

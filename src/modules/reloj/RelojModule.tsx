@@ -540,7 +540,7 @@ function ResumenTable({ empleados, onSelectEmployee }: {
                 >
                   <td className="px-4 py-2.5 font-semibold text-gray-800">{emp.nombre}</td>
                   <td className="px-4 py-2.5">
-                    <DepartamentoBadge depto={emp.horario.horarioPersona?.departamento} />
+                    <DepartamentoBadge depto={getEmpDepto(emp)} />
                   </td>
                   <td className="px-4 py-2.5 text-center text-gray-600">
                     {emp.diasPresentes}/{emp.diasLaborables}
@@ -755,6 +755,13 @@ function ExtrasPanel({ empleados, onSelectEmployee }: {
   );
 }
 
+// ─── Departamento helpers ─────────────────────────────────────────────────────
+
+function getEmpDepto(emp: EmpleadoData): string | undefined {
+  if (emp.departamento) return emp.departamento;
+  return emp.horario.horarioPersona?.departamento;
+}
+
 // ─── DepartamentoBadge ────────────────────────────────────────────────────────
 
 const DEPTO_COLORS: Record<string, string> = {
@@ -851,7 +858,8 @@ function HorarioCustomModal({ emp, onSave, onClose }: {
   const [sab,    setSab]    = useState<HorarioDia>({ ingreso: '10:00', salida: '14:00', trabaja: false });
   const [dom,    setDom]    = useState<HorarioDia>({ ingreso: '10:00', salida: '14:00', trabaja: false });
   const [mismoLunMie, setMismoLunMie] = useState(true);
-  const [departamento, setDepartamento] = useState(emp.horario.horarioPersona?.departamento ?? '');
+  const deptoFromExcel = emp.departamento || null;
+  const [departamento, setDepartamento] = useState(deptoFromExcel ?? emp.horario.horarioPersona?.departamento ?? '');
 
   const jueVieEfectivo: HorarioDia = mismoLunMie ? { ...lunMie } : jueVie;
 
@@ -863,7 +871,8 @@ function HorarioCustomModal({ emp, onSave, onClose }: {
       jueveYViernes: jueVieEfectivo,
       sabado: sab,
       domingo: dom,
-      departamento: departamento.trim() || undefined,
+      // only save manual departamento — Excel departamento lives on emp.departamento
+      departamento: deptoFromExcel ? undefined : (departamento.trim() || undefined),
     });
     onClose();
   }
@@ -915,20 +924,29 @@ function HorarioCustomModal({ emp, onSave, onClose }: {
           <TurnoRow label="Domingo" val={dom} setVal={setDom} />
           <div className="pt-2 border-t border-gray-100">
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">Departamento</label>
-            <input
-              type="text"
-              value={departamento}
-              onChange={e => setDepartamento(e.target.value)}
-              list="depto-options"
-              placeholder="Ej: Call Fibra, Call Móvil, RRHH…"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
-            />
-            <datalist id="depto-options">
-              <option value="Call Fibra" />
-              <option value="Call Móvil" />
-              <option value="RRHH" />
-              <option value="Atención" />
-            </datalist>
+            {deptoFromExcel ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                <DepartamentoBadge depto={deptoFromExcel} />
+                <span className="text-xs text-gray-400 italic">Detectado del archivo</span>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={departamento}
+                  onChange={e => setDepartamento(e.target.value)}
+                  list="depto-options"
+                  placeholder="ej: Call Fibra, Call Móvil…"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+                />
+                <datalist id="depto-options">
+                  <option value="Call Fibra" />
+                  <option value="Call Móvil" />
+                  <option value="RRHH" />
+                  <option value="Atención" />
+                </datalist>
+              </>
+            )}
           </div>
           <div className="flex gap-2 pt-3 border-t border-gray-100">
             <button type="button" onClick={onClose}
@@ -1293,10 +1311,13 @@ function IndividualView({ emp, onEditHorario }: {
       </div>
 
       {/* Departamento */}
-      {emp.horario.horarioPersona?.departamento && (
+      {getEmpDepto(emp) && (
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500 font-medium">Departamento:</span>
-          <DepartamentoBadge depto={emp.horario.horarioPersona.departamento} />
+          <DepartamentoBadge depto={getEmpDepto(emp)} />
+          {!emp.departamento && emp.horario.horarioPersona?.departamento && (
+            <span className="text-[10px] text-gray-400 italic">guardado manualmente</span>
+          )}
         </div>
       )}
 
@@ -1409,7 +1430,7 @@ export default function RelojModule() {
   const availableDepartamentos = useMemo(() => {
     const depts = new Set<string>();
     empleados.forEach(e => {
-      const d = e.horario.horarioPersona?.departamento;
+      const d = getEmpDepto(e);
       if (d) depts.add(d);
     });
     return Array.from(depts).sort();
@@ -1443,7 +1464,7 @@ export default function RelojModule() {
     }
 
     if (departamentoFiltro) {
-      result = result.filter(e => e.horario.horarioPersona?.departamento === departamentoFiltro);
+      result = result.filter(e => getEmpDepto(e) === departamentoFiltro);
     }
 
     switch (sortBy) {

@@ -63,6 +63,7 @@ export interface HorarioEsperado {
 export interface EmpleadoData {
   nombre: string;
   id: string;
+  departamento: string;
   dias: Map<string, DiaData>;
   horario: HorarioEsperado;
   fechaMin: string;
@@ -484,13 +485,17 @@ export async function parseReloj(file: File): Promise<RelojData> {
   if (hasNombresRow0 && !hasNombresRow1) headerRowIdx = 0;
 
   const headers = ((rawRows[headerRowIdx] as unknown[]) ?? []).map(h => String(h ?? '').trim().toLowerCase());
+  // NFD-normalized headers for accent-safe matching
+  const headersNorm = headers.map(h => h.normalize('NFD').replace(/[̀-ͯ]/g, ''));
 
   const findCol = (...terms: string[]) => headers.findIndex(h => terms.some(t => h.includes(t)));
+  const findColNorm = (...terms: string[]) => headersNorm.findIndex(h => terms.some(t => h.includes(t)));
 
   const idxNombre = findCol('nombres', 'nombre');
   const idxId     = findCol('id del empleado', 'id empleado', 'empleado id');
   const idxFecha  = findCol('fecha');
   const idxHora   = findCol('hora');
+  const idxDepto  = findColNorm('departamento', 'dept', 'area', 'sector');
 
   if (idxNombre < 0) throw new Error('No se encontró la columna "Nombres". Verificá el archivo.');
   if (idxFecha < 0)  throw new Error('No se encontró la columna "Fecha". Verificá el archivo.');
@@ -498,6 +503,8 @@ export async function parseReloj(file: File): Promise<RelojData> {
 
   const grupoNombreFecha = new Map<string, Map<string, number[]>>();
   const grupoIds = new Map<string, string>();
+  // nombre → (departamento → count)
+  const grupoDepartamentos = new Map<string, Map<string, number>>();
   let totalMarcaciones = 0;
 
   for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
@@ -513,6 +520,15 @@ export async function parseReloj(file: File): Promise<RelojData> {
 
     totalMarcaciones++;
     if (idxId >= 0) grupoIds.set(nombre, String(row[idxId] ?? '').trim());
+
+    if (idxDepto >= 0) {
+      const dv = String(row[idxDepto] ?? '').trim();
+      if (dv) {
+        if (!grupoDepartamentos.has(nombre)) grupoDepartamentos.set(nombre, new Map());
+        const dm = grupoDepartamentos.get(nombre)!;
+        dm.set(dv, (dm.get(dv) ?? 0) + 1);
+      }
+    }
 
     if (!grupoNombreFecha.has(nombre)) grupoNombreFecha.set(nombre, new Map());
     const fm = grupoNombreFecha.get(nombre)!;
@@ -589,8 +605,20 @@ export async function parseReloj(file: File): Promise<RelojData> {
 
     const metricas = calcularMetricas(dias, horario);
 
+    // Compute most-frequent departamento from Excel rows
+    let departamento = '';
+    const dm = grupoDepartamentos.get(nombre);
+    if (dm && dm.size > 0) {
+      let best = '', bestCount = 0;
+      for (const [k, v] of dm.entries()) {
+        if (v > bestCount) { bestCount = v; best = k; }
+      }
+      departamento = best;
+    }
+
     empleados.push({
       nombre, id: grupoIds.get(nombre) ?? '',
+      departamento,
       dias, horario, fechaMin, fechaMax,
       diasLaborables: laborables.length,
       ...metricas,

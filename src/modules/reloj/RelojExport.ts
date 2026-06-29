@@ -106,7 +106,7 @@ export function exportRelojExcel(data: RelojData): void {
   ];
   const resumenRows = data.empleados.map(e => [[
     [e.nombre],
-    [e.horario.horarioPersona?.departamento ?? '—'],
+    [e.departamento || e.horario.horarioPersona?.departamento || '—'],
     [e.diasPresentes],
     [e.diasLaborables],
     [fmtPct(e.diasLaborables > 0 ? Math.round((e.diasPresentes / e.diasLaborables) * 100) : 0)],

@@ -1,83 +1,117 @@
 import { useState, useMemo, useCallback } from 'react';
 import {
   Upload, ChevronDown, ChevronRight, AlertTriangle,
-  FileSpreadsheet, Download, RefreshCw, Package,
-  Truck, Store, Activity,
+  AlertCircle, Info, FileSpreadsheet, Download,
+  RefreshCw, Package, Truck, Store, BarChart2,
 } from 'lucide-react';
 import Header from '../../components/Header';
 import FileUploader from '../../components/FileUploader';
 import { parseChips } from './chipsParser';
 import type { ChipsData } from './chipsParser';
 import { analyzeChips } from './chipAnalysis';
-import type { ChipsAnalysis } from './chipAnalysis';
+import type { ChipsAnalysis, EfectividadRow, ChiperoRow } from './chipAnalysis';
 import { exportChipsExcel, exportChipsPDF } from './ChipsExport';
 import { recordActivity } from '../../utils/activityTracker';
 
 type Stage = 'upload' | 'loading' | 'analysis';
 
-const EMPRESAS_TABS = ['Todas', 'VOS', 'Phinternet', 'RELPONT'];
+const EMPRESA_ORDER = ['VOS', 'Phinternet', 'RELPONT'];
 
-// ── KPI Card ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function pctColor(pct: number): string {
+  if (pct >= 90) return '#28a745';
+  if (pct >= 70) return '#003DA5';
+  if (pct >= 50) return '#fd7e14';
+  return '#dc3545';
+}
+
+function pctLabel(pct: number): string {
+  if (pct >= 90) return 'Eficiente';
+  if (pct >= 70) return 'Normal';
+  if (pct >= 50) return 'Bajo';
+  return 'Crítico';
+}
+
+function rendLabel(v: number): string {
+  if (v >= 7) return 'Alto';
+  if (v >= 5) return 'Normal';
+  return 'Bajo';
+}
+
+function rendColor(v: number): string {
+  if (v >= 7) return '#28a745';
+  if (v >= 5) return '#003DA5';
+  return '#fd7e14';
+}
+
+function fmt1(n: number): string {
+  return n.toFixed(1);
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, value, sub, icon, borderColor,
+  label, value, sub, desglose, borderColor, icon, showDesglose,
 }: {
   label: string;
   value: string | number;
   sub?: string;
-  icon: React.ReactNode;
+  desglose?: Record<string, number>;
   borderColor: string;
+  icon: React.ReactNode;
+  showDesglose?: boolean;
 }) {
+  const displayValue = typeof value === 'number' ? value.toLocaleString() : value;
+
+  const desgloseText = showDesglose && desglose
+    ? Object.entries(desglose)
+        .filter(([, n]) => n > 0)
+        .sort((a, b) => {
+          const ia = EMPRESA_ORDER.indexOf(a[0]);
+          const ib = EMPRESA_ORDER.indexOf(b[0]);
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        })
+        .map(([e, n]) => `${e}: ${n.toLocaleString()}`)
+        .join(' · ')
+    : null;
+
   return (
     <div
       className="bg-white rounded-xl p-5 shadow-sm flex flex-col gap-1"
       style={{ borderTop: `4px solid ${borderColor}` }}
     >
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</span>
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide leading-tight">{label}</span>
         <span style={{ color: borderColor }}>{icon}</span>
       </div>
-      <div className="text-3xl font-bold text-gray-900">
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </div>
+      <div className="text-3xl font-bold text-gray-900 tabular-nums">{displayValue}</div>
       {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
+      {desgloseText && (
+        <div className="text-[11px] text-gray-500 mt-1.5 font-medium border-t border-gray-100 pt-1.5">
+          {desgloseText}
+        </div>
+      )}
     </div>
   );
 }
-
-// ── Progress bar ──────────────────────────────────────────────────────────────
-
-function ProgressBar({ value, color = '#003DA5' }: { value: number; color?: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${Math.min(value, 100)}%`, backgroundColor: color }}
-        />
-      </div>
-      <span className="text-xs font-semibold text-gray-600 w-10 text-right">{value}%</span>
-    </div>
-  );
-}
-
-// ── Empresa Tabs ──────────────────────────────────────────────────────────────
 
 function EmpresaTabs({
-  empresas, active, onChange,
+  empresas, tabCounts, active, onChange,
 }: {
   empresas: string[];
+  tabCounts: Record<string, number>;
   active: string;
   onChange: (e: string) => void;
 }) {
   const tabs = useMemo(() => {
-    const known = EMPRESAS_TABS.filter(t => t === 'Todas' || empresas.includes(t));
-    const extra = empresas.filter(e => !EMPRESAS_TABS.includes(e));
+    const known = ['Todas', ...EMPRESA_ORDER.filter(e => empresas.includes(e))];
+    const extra = empresas.filter(e => !EMPRESA_ORDER.includes(e));
     return [...known, ...extra];
   }, [empresas]);
 
   return (
-    <div className="flex gap-1 flex-wrap">
+    <div className="flex gap-1.5 flex-wrap">
       {tabs.map(tab => (
         <button
           key={tab}
@@ -89,85 +123,146 @@ function EmpresaTabs({
           }`}
         >
           {tab}
+          {tabCounts[tab] !== undefined && (
+            <span className={`ml-1.5 text-xs ${active === tab ? 'text-blue-200' : 'text-gray-400'}`}>
+              ({(tabCounts[tab] ?? 0).toLocaleString()})
+            </span>
+          )}
         </button>
       ))}
     </div>
   );
 }
 
-// ── Chiperos Table ────────────────────────────────────────────────────────────
+function AlertasSection({ alertas }: { alertas: ChipsAnalysis['alertas'] }) {
+  if (!alertas.length) return null;
 
-function ChiperosTable({ chiperos }: { chiperos: ChipsAnalysis['chiperos'] }) {
+  const cfg = {
+    critico: { bg: '#FEF2F2', border: '#dc3545', text: '#991b1b', Icon: AlertCircle },
+    advertencia: { bg: '#FFF8F0', border: '#fd7e14', text: '#b45309', Icon: AlertTriangle },
+    info: { bg: '#EFF6FF', border: '#003DA5', text: '#1e40af', Icon: Info },
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {alertas.map((a, i) => {
+        const { bg, border, text, Icon } = cfg[a.nivel];
+        return (
+          <div
+            key={i}
+            className="flex items-start gap-3 rounded-xl px-4 py-3"
+            style={{ backgroundColor: bg, borderLeft: `4px solid ${border}` }}
+          >
+            <Icon size={15} style={{ color: border }} className="mt-0.5 flex-shrink-0" />
+            <span className="text-sm font-medium" style={{ color: text }}>{a.descripcion}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProgressBar({ value, color }: { value: number; color: string }) {
+  return (
+    <div className="h-1 bg-gray-200 rounded-full overflow-hidden w-full">
+      <div
+        className="h-full rounded-full"
+        style={{ width: `${Math.min(Math.max(value, 0), 100)}%`, backgroundColor: color }}
+      />
+    </div>
+  );
+}
+
+// ── Efectividad Table ─────────────────────────────────────────────────────────
+
+function EfectividadTable({ efectividad }: { efectividad: EfectividadRow[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   function toggle(nombre: string) {
     setExpanded(prev => {
       const next = new Set(prev);
-      if (next.has(nombre)) next.delete(nombre);
-      else next.add(nombre);
+      next.has(nombre) ? next.delete(nombre) : next.add(nombre);
       return next;
     });
   }
 
-  if (!chiperos.length) {
-    return <div className="text-center text-gray-400 py-8">Sin chiperos con datos</div>;
+  if (!efectividad.length) {
+    return <div className="text-center text-gray-400 py-8 text-sm">Sin datos de efectividad</div>;
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm min-w-[760px]">
         <thead>
           <tr className="bg-[#003DA5] text-white text-xs">
-            <th className="px-3 py-2 text-left font-semibold w-6"></th>
-            <th className="px-3 py-2 text-left font-semibold">Chipero</th>
-            <th className="px-3 py-2 text-right font-semibold">Total</th>
-            <th className="px-3 py-2 text-right font-semibold">En Tránsito</th>
-            <th className="px-3 py-2 text-right font-semibold">En PdV</th>
-            <th className="px-3 py-2 text-left font-semibold min-w-[160px]">% Colocado</th>
+            <th className="px-3 py-2.5 text-center font-semibold w-8">#</th>
+            <th className="px-3 py-2.5 text-left font-semibold">DISTRIBUIDOR</th>
+            <th className="px-3 py-2.5 text-right font-semibold">DÍAS TRAB.</th>
+            <th className="px-3 py-2.5 text-right font-semibold">CHIPS TOTAL</th>
+            <th className="px-3 py-2.5 text-right font-semibold">PROM CHIPS/DÍA</th>
+            <th className="px-3 py-2.5 text-right font-semibold">PROM PdV/DÍA</th>
+            <th className="px-3 py-2.5 text-right font-semibold">CHIPS/COMERCIO</th>
+            <th className="px-3 py-2.5 text-center font-semibold">RENDIMIENTO</th>
+            <th className="px-3 py-2.5 w-6"></th>
           </tr>
         </thead>
         <tbody>
-          {chiperos.map((c, i) => {
-            const isOpen = expanded.has(c.nombre);
-            const pctColor = c.pctColocado >= 70 ? '#28a745' : c.pctColocado >= 40 ? '#fd7e14' : '#dc3545';
+          {efectividad.map((e, i) => {
+            const isOpen = expanded.has(e.nombre);
+            const rColor = rendColor(e.promChipsPorComercio);
             return (
               <>
                 <tr
-                  key={c.nombre}
-                  className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50/40 transition-colors ${
-                    i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
-                  }`}
-                  onClick={() => toggle(c.nombre)}
+                  key={e.nombre}
+                  className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50/40 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
+                  onClick={() => toggle(e.nombre)}
                 >
-                  <td className="px-3 py-2.5 text-gray-400">
-                    {c.pdvs.length > 0
-                      ? isOpen
-                        ? <ChevronDown size={14} />
-                        : <ChevronRight size={14} />
-                      : null}
+                  <td className="px-3 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
+                  <td className="px-3 py-2.5 font-medium text-gray-800">{e.nombre}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{e.diasTrabajados}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{e.totalChips.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmt1(e.promChipsPorDia)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmt1(e.promPdVPorDia)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold" style={{ color: rColor }}>{fmt1(e.promChipsPorComercio)}</td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span
+                      className="inline-block px-2.5 py-0.5 rounded-full text-white text-xs font-semibold"
+                      style={{ backgroundColor: rColor }}
+                    >
+                      {rendLabel(e.promChipsPorComercio)}
+                    </span>
                   </td>
-                  <td className="px-3 py-2.5 font-medium text-gray-800">{c.nombre}</td>
-                  <td className="px-3 py-2.5 text-right font-semibold text-gray-800">{c.total.toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right text-orange-600 font-medium">{c.enTransito.toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right text-green-700 font-medium">{c.enPdv.toLocaleString()}</td>
-                  <td className="px-3 py-2.5">
-                    <ProgressBar value={c.pctColocado} color={pctColor} />
+                  <td className="px-3 py-2.5 text-gray-400">
+                    {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </td>
                 </tr>
-                {isOpen && c.pdvs.length > 0 && (
-                  <tr key={`${c.nombre}-pdvs`} className="bg-blue-50/30">
+                {isOpen && (
+                  <tr key={`${e.nombre}-detail`} className="bg-blue-50/20">
                     <td></td>
-                    <td colSpan={5} className="px-4 py-3">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                        {c.pdvs.map(pdv => (
-                          <div
-                            key={pdv.nombre}
-                            className="flex items-center justify-between bg-white border border-blue-100 rounded-lg px-3 py-1.5"
-                          >
-                            <span className="text-xs text-gray-700 truncate flex-1">{pdv.nombre}</span>
-                            <span className="text-xs font-bold text-[#003DA5] ml-2">{pdv.chips}</span>
-                          </div>
-                        ))}
+                    <td colSpan={8} className="px-4 py-3">
+                      <div className="overflow-x-auto rounded-lg border border-blue-100">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-blue-100/60 text-blue-900">
+                              <th className="px-3 py-2 text-left font-semibold">Fecha visita</th>
+                              <th className="px-3 py-2 text-right font-semibold">PdV visitados</th>
+                              <th className="px-3 py-2 text-right font-semibold">Chips entregados</th>
+                              <th className="px-3 py-2 text-right font-semibold">Chips/comercio</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {e.detalleDias.map(d => (
+                              <tr key={d.fecha} className="border-t border-blue-100/60 bg-white">
+                                <td className="px-3 py-1.5 text-gray-700">{d.fecha}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-gray-600">{d.pdvVisitados}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums font-medium text-gray-800">{d.chipsEntregados}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: rendColor(d.chipsPorComercio) }}>
+                                  {fmt1(d.chipsPorComercio)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </td>
                   </tr>
@@ -181,142 +276,79 @@ function ChiperosTable({ chiperos }: { chiperos: ChipsAnalysis['chiperos'] }) {
   );
 }
 
-// ── Efectividad Table ─────────────────────────────────────────────────────────
+// ── Chiperos Table ────────────────────────────────────────────────────────────
 
-function EfectividadTable({ efectividad }: { efectividad: ChipsAnalysis['efectividad'] }) {
-  const [showAll, setShowAll] = useState(false);
-  const maxChips = efectividad[0]?.chips ?? 1;
-  const visible = showAll ? efectividad : efectividad.slice(0, 20);
-
-  if (!efectividad.length) {
-    return <div className="text-center text-gray-400 py-6">Sin datos de efectividad</div>;
+function ChiperosTable({ chiperos }: { chiperos: ChiperoRow[] }) {
+  if (!chiperos.length) {
+    return <div className="text-center text-gray-400 py-8 text-sm">Sin datos de distribuidores</div>;
   }
 
-  return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-800 text-white text-xs">
-              <th className="px-3 py-2 text-left font-semibold">Distribuidor</th>
-              <th className="px-3 py-2 text-left font-semibold">Punto de Venta</th>
-              <th className="px-3 py-2 text-right font-semibold">Chips</th>
-              <th className="px-3 py-2 text-left font-semibold min-w-[100px]"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((e, i) => {
-              const barW = Math.max(4, Math.round((e.chips / maxChips) * 100));
-              return (
-                <tr key={`${e.distribuidor}-${e.pdv}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                  <td className="px-3 py-2 text-gray-700 font-medium">{e.distribuidor}</td>
-                  <td className="px-3 py-2 text-gray-600">{e.pdv}</td>
-                  <td className="px-3 py-2 text-right font-semibold text-[#003DA5]">{e.chips}</td>
-                  <td className="px-3 py-2">
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-[#003DA5]" style={{ width: `${barW}%` }} />
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {efectividad.length > 20 && (
-        <button
-          onClick={() => setShowAll(v => !v)}
-          className="mt-3 text-sm text-[#003DA5] font-medium hover:underline"
-        >
-          {showAll ? 'Ver menos' : `Ver todos (${efectividad.length})`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ── Lotes Section (collapsible) ───────────────────────────────────────────────
-
-function LotesSection({ lotes }: { lotes: ChipsAnalysis['lotes'] }) {
-  const [open, setOpen] = useState(() => {
-    try { return sessionStorage.getItem('elared_chips_lotes_open') === '1'; } catch { return false; }
-  });
-
-  function toggle() {
-    setOpen(v => {
-      try { sessionStorage.setItem('elared_chips_lotes_open', v ? '0' : '1'); } catch {}
-      return !v;
-    });
-  }
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <button
-        onClick={toggle}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Package size={18} className="text-[#003DA5]" />
-          <span className="font-semibold text-gray-800">Lotes ({lotes.length})</span>
-        </div>
-        {open ? <ChevronDown size={18} className="text-gray-400" /> : <ChevronRight size={18} className="text-gray-400" />}
-      </button>
-      {open && (
-        <div className="border-t border-gray-100 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-xs text-gray-600">
-                <th className="px-4 py-2.5 text-left font-semibold">Lote</th>
-                <th className="px-4 py-2.5 text-left font-semibold">Sub-lote</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Total</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Con Distribuidor</th>
-                <th className="px-4 py-2.5 text-right font-semibold">En PdV</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lotes.map((l, i) => (
-                <tr key={`${l.lote}-${l.subLote}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                  <td className="px-4 py-2 font-medium text-gray-800">{l.lote || '—'}</td>
-                  <td className="px-4 py-2 text-gray-600">{l.subLote || '—'}</td>
-                  <td className="px-4 py-2 text-right font-semibold text-gray-800">{l.total.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-right text-orange-600">{l.enDistribuidor.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-right text-green-700 font-medium">{l.enPdv.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Alertas Section ───────────────────────────────────────────────────────────
-
-function AlertasSection({ alertas }: { alertas: ChipsAnalysis['alertas'] }) {
-  if (!alertas.length) return null;
-
-  const colorMap = {
-    alta_transito: { bg: '#FFF3CD', border: '#ffc107', text: '#856404' },
-    stock_alto: { bg: '#FFF8F0', border: '#fd7e14', text: '#b45309' },
-    sin_pdv: { bg: '#FEF2F2', border: '#dc3545', text: '#991b1b' },
+  const totalRow = {
+    total: chiperos.reduce((s, c) => s + c.total, 0),
+    enTransito: chiperos.reduce((s, c) => s + c.enTransito, 0),
+    enPdV: chiperos.reduce((s, c) => s + c.enPdV, 0),
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      {alertas.map((a, i) => {
-        const colors = colorMap[a.tipo];
-        return (
-          <div
-            key={i}
-            className="flex items-start gap-3 rounded-xl px-4 py-3"
-            style={{ backgroundColor: colors.bg, borderLeft: `4px solid ${colors.border}` }}
-          >
-            <AlertTriangle size={16} style={{ color: colors.border }} className="mt-0.5 flex-shrink-0" />
-            <span className="text-sm font-medium" style={{ color: colors.text }}>{a.descripcion}</span>
-          </div>
-        );
-      })}
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[700px]">
+        <thead>
+          <tr className="bg-gray-800 text-white text-xs">
+            <th className="px-3 py-2.5 text-center font-semibold w-8">#</th>
+            <th className="px-3 py-2.5 text-left font-semibold">DISTRIBUIDOR</th>
+            <th className="px-3 py-2.5 text-right font-semibold">TOTAL</th>
+            <th className="px-3 py-2.5 text-right font-semibold">EN TRÁNSITO</th>
+            <th className="px-3 py-2.5 text-right font-semibold">EN PdV</th>
+            <th className="px-3 py-2.5 text-left font-semibold min-w-[140px]">% COLOCADO</th>
+            <th className="px-3 py-2.5 text-center font-semibold">ESTADO</th>
+          </tr>
+        </thead>
+        <tbody>
+          {chiperos.map((c, i) => {
+            const color = pctColor(c.pctColocado);
+            return (
+              <tr
+                key={c.nombre}
+                className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
+              >
+                <td className="px-3 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
+                <td className="px-3 py-2.5 font-medium text-gray-800">{c.nombre}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{c.total.toLocaleString()}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-orange-600">{c.enTransito.toLocaleString()}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-green-700 font-medium">{c.enPdV.toLocaleString()}</td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <ProgressBar value={c.pctColocado} color={color} />
+                    </div>
+                    <span className="text-xs font-semibold tabular-nums w-11 text-right" style={{ color }}>
+                      {fmt1(c.pctColocado)}%
+                    </span>
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <span
+                    className="inline-block px-2.5 py-0.5 rounded-full text-white text-xs font-semibold"
+                    style={{ backgroundColor: color }}
+                  >
+                    {pctLabel(c.pctColocado)}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+          {/* Totals row */}
+          <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold">
+            <td className="px-3 py-2.5"></td>
+            <td className="px-3 py-2.5 text-gray-700">TOTAL</td>
+            <td className="px-3 py-2.5 text-right tabular-nums text-gray-800">{totalRow.total.toLocaleString()}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums text-orange-700">{totalRow.enTransito.toLocaleString()}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums text-green-800">{totalRow.enPdV.toLocaleString()}</td>
+            <td className="px-3 py-2.5"></td>
+            <td className="px-3 py-2.5"></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -333,6 +365,14 @@ export default function ChipsModule() {
     () => (data ? analyzeChips(data.rows, empresaTab) : null),
     [data, empresaTab],
   );
+
+  // Tab counts: total chips per empresa
+  const tabCounts = useMemo<Record<string, number>>(() => {
+    if (!data) return {};
+    const counts: Record<string, number> = { Todas: data.totalOK };
+    for (const r of data.rows) counts[r.empresa] = (counts[r.empresa] ?? 0) + 1;
+    return counts;
+  }, [data]);
 
   const handleFile = useCallback(async (file: File) => {
     setStage('loading');
@@ -355,20 +395,18 @@ export default function ChipsModule() {
     setStage('upload');
   }
 
-  // ── Upload stage ────────────────────────────────────────────────────────────
-  if (stage === 'upload' || stage === 'loading') {
+  // ── Upload / Loading ────────────────────────────────────────────────────────
+  if (stage !== 'analysis') {
     return (
       <div className="flex flex-col min-h-screen">
-        <Header
-          title="Gestión de Chips"
-          subtitle="Análisis de activación y distribución de chips SIM"
-        />
+        <Header title="Chips" subtitle="Gestión y reportes de chips SIM" />
         <div className="flex-1 flex flex-col items-center justify-center p-8">
           <div className="w-full max-w-xl">
             {stage === 'loading' ? (
               <div className="flex flex-col items-center gap-4 py-16">
                 <div className="w-12 h-12 border-4 border-[#003DA5] border-t-transparent rounded-full animate-spin" />
                 <span className="text-gray-500 font-medium">Procesando archivo CSV...</span>
+                <span className="text-xs text-gray-400">Esto puede tardar unos segundos con archivos grandes</span>
               </div>
             ) : (
               <>
@@ -378,7 +416,7 @@ export default function ChipsModule() {
                   </div>
                   <h2 className="text-xl font-bold text-gray-800">Cargar archivo de chips</h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    Archivo CSV con separador <code className="bg-gray-100 px-1 rounded">;</code> exportado del sistema
+                    CSV con separador <code className="bg-gray-100 px-1 rounded">{';'}</code>, encoding latin1
                   </p>
                 </div>
                 <FileUploader
@@ -401,18 +439,17 @@ export default function ChipsModule() {
     );
   }
 
-  // ── Analysis stage ──────────────────────────────────────────────────────────
+  // ── Analysis ────────────────────────────────────────────────────────────────
   if (!data || !analysis) return null;
 
-  const pctColocado = analysis.chipsActivos > 0
-    ? `${Math.round((analysis.totalConPdv / analysis.chipsActivos) * 100)}% colocado`
-    : undefined;
+  const subtitle = `${data.totalOK.toLocaleString()} chips OK · ${data.empresas.length} empresa${data.empresas.length !== 1 ? 's' : ''} · ${data.distribuidores.length} distribuidor${data.distribuidores.length !== 1 ? 'es' : ''}`;
+  const showDesglose = empresaTab === 'Todas';
 
   return (
     <div className="flex flex-col min-h-screen">
       <Header
-        title="Gestión de Chips"
-        subtitle={`${data.totalOK.toLocaleString()} chips OK · ${new Date(data.fechaCarga).toLocaleDateString('es-UY')}`}
+        title="Chips"
+        subtitle={subtitle}
         actions={
           <div className="flex gap-2">
             <button
@@ -438,9 +475,10 @@ export default function ChipsModule() {
       />
 
       <div className="flex-1 p-6 space-y-6">
-        {/* Empresa tabs */}
+        {/* Tabs */}
         <EmpresaTabs
           empresas={data.empresas}
+          tabCounts={tabCounts}
           active={empresaTab}
           onChange={setEmpresaTab}
         />
@@ -454,61 +492,65 @@ export default function ChipsModule() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
             label="Chips Activos"
-            value={analysis.chipsActivos}
-            sub="Asignados a distribuidor"
-            icon={<Activity size={20} />}
+            value={analysis.chipsActivos.total}
+            sub="Con fecha asig. distribuidor"
+            desglose={analysis.chipsActivos.porEmpresa}
             borderColor="#28a745"
+            icon={<BarChart2 size={20} />}
+            showDesglose={showDesglose}
           />
           <KpiCard
             label="Stock en Sistema"
-            value={analysis.stockSistema}
+            value={analysis.stockSistema.total}
             sub="Sin distribuidor asignado"
-            icon={<Package size={20} />}
+            desglose={analysis.stockSistema.porEmpresa}
             borderColor="#fd7e14"
+            icon={<Package size={20} />}
+            showDesglose={showDesglose}
           />
           <KpiCard
-            label="En Tránsito"
-            value={analysis.stockTransito}
+            label="Stock en Tránsito"
+            value={analysis.stockTransito.total}
             sub="Con distribuidor, sin PdV"
-            icon={<Truck size={20} />}
+            desglose={analysis.stockTransito.porEmpresa}
             borderColor="#003DA5"
+            icon={<Truck size={20} />}
+            showDesglose={showDesglose}
           />
           <KpiCard
-            label="Colocados en PdV"
-            value={analysis.totalConPdv}
-            sub={pctColocado}
-            icon={<Store size={20} />}
+            label="Efectividad Promedio"
+            value={`${fmt1(analysis.promEquipoChipsPorComercio)} chips/comercio`}
+            sub="promedio de todos los distribuidores"
             borderColor="#6f42c1"
+            icon={<Store size={20} />}
           />
         </div>
 
-        {/* Chiperos Table */}
+        {/* Sección 1: Efectividad de visita */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-800 flex items-center gap-2">
               <Truck size={18} className="text-[#003DA5]" />
-              Tabla de Chiperos ({analysis.chiperos.length})
+              Efectividad de visita por distribuidor
             </h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Click en una fila para ver el detalle por día · Ordenado por chips total
+            </p>
           </div>
-          <ChiperosTable chiperos={analysis.chiperos} />
+          <EfectividadTable efectividad={analysis.efectividad} />
         </div>
 
-        {/* Efectividad */}
+        {/* Sección 2: Stock por chipero */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
             <h2 className="font-semibold text-gray-800 flex items-center gap-2">
               <Store size={18} className="text-[#003DA5]" />
-              Efectividad por Punto de Venta
+              Stock por distribuidor ({analysis.chiperos.length})
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">Chips colocados por distribuidor y PdV</p>
+            <p className="text-xs text-gray-400 mt-0.5">Ordenado por total desc</p>
           </div>
-          <div className="p-5">
-            <EfectividadTable efectividad={analysis.efectividad} />
-          </div>
+          <ChiperosTable chiperos={analysis.chiperos} />
         </div>
-
-        {/* Lotes */}
-        <LotesSection lotes={analysis.lotes} />
       </div>
     </div>
   );

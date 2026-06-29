@@ -1,145 +1,207 @@
 import type { ChipRow } from './chipsParser';
 
-export type PdvRow = {
+export type DiaVisita = {
+  fecha: string;
+  pdvVisitados: number;
+  chipsEntregados: number;
+  chipsPorComercio: number;
+};
+
+export type EfectividadRow = {
   nombre: string;
-  chips: number;
+  diasTrabajados: number;
+  totalChips: number;
+  promChipsPorDia: number;
+  promPdVPorDia: number;
+  promChipsPorComercio: number;
+  detalleDias: DiaVisita[];
 };
 
 export type ChiperoRow = {
   nombre: string;
   total: number;
   enTransito: number;
-  enPdv: number;
+  enPdV: number;
   pctColocado: number;
-  pdvs: PdvRow[];
 };
 
-export type EfectividadRow = {
-  distribuidor: string;
-  pdv: string;
-  chips: number;
-};
-
-export type LoteRow = {
-  lote: string;
-  subLote: string;
+export type KpiResult = {
   total: number;
-  enDistribuidor: number;
-  enPdv: number;
+  porEmpresa: Record<string, number>;
 };
 
 export type AlertaChip = {
-  tipo: 'alta_transito' | 'stock_alto' | 'sin_pdv';
+  nivel: 'critico' | 'advertencia' | 'info';
   descripcion: string;
-  valor: number;
 };
 
 export type ChipsAnalysis = {
-  chipsActivos: number;
-  stockSistema: number;
-  stockTransito: number;
-  totalConPdv: number;
-  chiperos: ChiperoRow[];
+  chipsActivos: KpiResult;
+  stockSistema: KpiResult;
+  stockTransito: KpiResult;
   efectividad: EfectividadRow[];
-  lotes: LoteRow[];
+  promEquipoChipsPorComercio: number;
+  chiperos: ChiperoRow[];
   alertas: AlertaChip[];
 };
 
-export function analyzeChips(rows: ChipRow[], empresaFiltro = 'Todas'): ChipsAnalysis {
-  const filtered = empresaFiltro === 'Todas' ? rows : rows.filter(r => r.empresa === empresaFiltro);
+export function analyzeChips(allRows: ChipRow[], empresaFiltro = 'Todas'): ChipsAnalysis {
+  const rows = empresaFiltro === 'Todas' ? allRows : allRows.filter(r => r.empresa === empresaFiltro);
 
-  const chipsActivos = filtered.filter(r => r.idDistribuidor !== null).length;
-  const stockSistema = filtered.filter(r => r.idDistribuidor === null).length;
-  const stockTransito = filtered.filter(r => r.idDistribuidor !== null && r.idPuntoVenta === null).length;
-  const totalConPdv = filtered.filter(r => r.idPuntoVenta !== null).length;
-
-  // Chiperos
-  const chiperoMap = new Map<string, { total: number; enTransito: number; enPdv: number; pdvs: Map<string, number> }>();
-  for (const r of filtered) {
-    if (!r.nombreDistribuidor) continue;
-    if (!chiperoMap.has(r.nombreDistribuidor)) {
-      chiperoMap.set(r.nombreDistribuidor, { total: 0, enTransito: 0, enPdv: 0, pdvs: new Map() });
+  // porEmpresa always computed from allRows so desglose is always available
+  function kpiResult(filterFn: (r: ChipRow) => boolean): KpiResult {
+    const porEmpresa: Record<string, number> = {};
+    for (const r of allRows) {
+      if (filterFn(r)) porEmpresa[r.empresa] = (porEmpresa[r.empresa] ?? 0) + 1;
     }
-    const entry = chiperoMap.get(r.nombreDistribuidor)!;
-    entry.total++;
-    if (r.idPuntoVenta === null) {
-      entry.enTransito++;
-    } else {
-      entry.enPdv++;
-      const pdvNombre = r.puntoVenta ?? r.idPuntoVenta ?? 'PdV sin nombre';
-      entry.pdvs.set(pdvNombre, (entry.pdvs.get(pdvNombre) ?? 0) + 1);
-    }
+    return { total: rows.filter(filterFn).length, porEmpresa };
   }
 
-  const chiperos: ChiperoRow[] = Array.from(chiperoMap.entries())
+  const chipsActivos = kpiResult(r => r.fechaAsignacionDistribuidor !== null);
+  const stockSistema = kpiResult(r => !r.idDistribuidor);
+  const stockTransito = kpiResult(r => !!r.idDistribuidor && !r.idPuntoVenta);
+
+  const efectividad = calcEfectividad(rows);
+  const promEquipoChipsPorComercio = efectividad.length > 0
+    ? efectividad.reduce((s, e) => s + e.promChipsPorComercio, 0) / efectividad.length
+    : 0;
+
+  const chiperos = calcChiperos(rows);
+  const alertas = buildAlertas(rows, stockSistema, stockTransito, chiperos, efectividad);
+
+  return { chipsActivos, stockSistema, stockTransito, efectividad, promEquipoChipsPorComercio, chiperos, alertas };
+}
+
+function calcEfectividad(rows: ChipRow[]): EfectividadRow[] {
+  // Group by (nombreDistribuidor, fechaAsignacionDistribuidor)
+  const dayMap = new Map<string, { pdvs: Set<string>; chips: number }>();
+
+  for (const r of rows) {
+    if (!r.nombreDistribuidor || !r.fechaAsignacionDistribuidor) continue;
+    const key = `${r.nombreDistribuidor}|||${r.fechaAsignacionDistribuidor}`;
+    if (!dayMap.has(key)) dayMap.set(key, { pdvs: new Set(), chips: 0 });
+    const entry = dayMap.get(key)!;
+    entry.chips++;
+    if (r.idPuntoVenta) entry.pdvs.add(r.idPuntoVenta);
+  }
+
+  // Collect days per distribuidor
+  const distribMap = new Map<string, DiaVisita[]>();
+  for (const [key, data] of dayMap.entries()) {
+    const sep = key.indexOf('|||');
+    const nombre = key.slice(0, sep);
+    const fecha = key.slice(sep + 3);
+    const pdvVisitados = data.pdvs.size;
+    const chipsEntregados = data.chips;
+    const chipsPorComercio = pdvVisitados > 0 ? chipsEntregados / pdvVisitados : 0;
+
+    if (!distribMap.has(nombre)) distribMap.set(nombre, []);
+    distribMap.get(nombre)!.push({ fecha, pdvVisitados, chipsEntregados, chipsPorComercio });
+  }
+
+  return Array.from(distribMap.entries())
+    .map(([nombre, dias]) => {
+      dias.sort((a, b) => b.fecha.localeCompare(a.fecha));
+      const diasTrabajados = dias.length;
+      const totalChips = dias.reduce((s, d) => s + d.chipsEntregados, 0);
+      const promChipsPorDia = diasTrabajados > 0 ? totalChips / diasTrabajados : 0;
+      const promPdVPorDia = diasTrabajados > 0
+        ? dias.reduce((s, d) => s + d.pdvVisitados, 0) / diasTrabajados
+        : 0;
+      // Mean of daily ratios (not ratio of means)
+      const promChipsPorComercio = diasTrabajados > 0
+        ? dias.reduce((s, d) => s + d.chipsPorComercio, 0) / diasTrabajados
+        : 0;
+      return { nombre, diasTrabajados, totalChips, promChipsPorDia, promPdVPorDia, promChipsPorComercio, detalleDias: dias };
+    })
+    .sort((a, b) => b.totalChips - a.totalChips);
+}
+
+function calcChiperos(rows: ChipRow[]): ChiperoRow[] {
+  const map = new Map<string, { total: number; enTransito: number; enPdV: number }>();
+
+  for (const r of rows) {
+    if (!r.idDistribuidor || !r.nombreDistribuidor) continue;
+    if (!map.has(r.nombreDistribuidor)) map.set(r.nombreDistribuidor, { total: 0, enTransito: 0, enPdV: 0 });
+    const entry = map.get(r.nombreDistribuidor)!;
+    entry.total++;
+    if (!r.idPuntoVenta) entry.enTransito++;
+    else entry.enPdV++;
+  }
+
+  return Array.from(map.entries())
     .map(([nombre, d]) => ({
       nombre,
       total: d.total,
       enTransito: d.enTransito,
-      enPdv: d.enPdv,
-      pctColocado: d.total > 0 ? Math.round((d.enPdv / d.total) * 100) : 0,
-      pdvs: Array.from(d.pdvs.entries())
-        .map(([pdvNombre, chips]) => ({ nombre: pdvNombre, chips }))
-        .sort((a, b) => b.chips - a.chips),
+      enPdV: d.enPdV,
+      pctColocado: d.total > 0 ? (d.enPdV / d.total) * 100 : 0,
     }))
     .sort((a, b) => b.total - a.total);
+}
 
-  // Efectividad (chips por PdV por distribuidor)
-  const efMap = new Map<string, number>();
-  for (const r of filtered) {
-    if (!r.nombreDistribuidor || !r.puntoVenta) continue;
-    const key = `${r.nombreDistribuidor}|||${r.puntoVenta}`;
-    efMap.set(key, (efMap.get(key) ?? 0) + 1);
-  }
-  const efectividad: EfectividadRow[] = Array.from(efMap.entries())
-    .map(([key, chips]) => {
-      const sep = key.indexOf('|||');
-      return { distribuidor: key.slice(0, sep), pdv: key.slice(sep + 3), chips };
-    })
-    .sort((a, b) => b.chips - a.chips);
-
-  // Lotes
-  const loteMap = new Map<string, { total: number; enDistribuidor: number; enPdv: number }>();
-  for (const r of filtered) {
-    const key = `${r.lote}|||${r.subLote}`;
-    if (!loteMap.has(key)) loteMap.set(key, { total: 0, enDistribuidor: 0, enPdv: 0 });
-    const entry = loteMap.get(key)!;
-    entry.total++;
-    if (r.idDistribuidor && !r.idPuntoVenta) entry.enDistribuidor++;
-    if (r.idPuntoVenta) entry.enPdv++;
-  }
-  const lotes: LoteRow[] = Array.from(loteMap.entries())
-    .map(([key, d]) => {
-      const sep = key.indexOf('|||');
-      return { lote: key.slice(0, sep), subLote: key.slice(sep + 3), ...d };
-    })
-    .sort((a, b) => b.total - a.total);
-
-  // Alertas
+function buildAlertas(
+  rows: ChipRow[],
+  stockSistema: KpiResult,
+  stockTransito: KpiResult,
+  chiperos: ChiperoRow[],
+  efectividad: EfectividadRow[],
+): AlertaChip[] {
+  const totalOK = rows.length;
   const alertas: AlertaChip[] = [];
-  const highTransito = chiperos.filter(c => c.pctColocado < 30 && c.total >= 10);
-  if (highTransito.length > 0) {
+
+  // CRÍTICO: chipero pctColocado < 60%
+  const critChiperos = chiperos.filter(c => c.pctColocado < 60);
+  if (critChiperos.length > 0) {
     alertas.push({
-      tipo: 'alta_transito',
-      descripcion: `${highTransito.length} chipero(s) con menos del 30% colocado (alta permanencia en tránsito)`,
-      valor: highTransito.length,
-    });
-  }
-  if (stockSistema > 0) {
-    alertas.push({
-      tipo: 'stock_alto',
-      descripcion: `${stockSistema.toLocaleString()} chips en sistema sin distribuidor asignado`,
-      valor: stockSistema,
-    });
-  }
-  const sinPdvPct = chipsActivos > 0 ? Math.round((stockTransito / chipsActivos) * 100) : 0;
-  if (sinPdvPct > 50) {
-    alertas.push({
-      tipo: 'sin_pdv',
-      descripcion: `${sinPdvPct}% de chips activos aún sin llegar a un PdV`,
-      valor: sinPdvPct,
+      nivel: 'critico',
+      descripcion: `${critChiperos.length} distribuidor(es) con menos del 60% colocado: ${critChiperos.map(c => c.nombre).join(', ')}`,
     });
   }
 
-  return { chipsActivos, stockSistema, stockTransito, totalConPdv, chiperos, efectividad, lotes, alertas };
+  // CRÍTICO: stock en sistema > 20% del total
+  if (totalOK > 0 && (stockSistema.total / totalOK) * 100 > 20) {
+    alertas.push({
+      nivel: 'critico',
+      descripcion: `Stock sin distribuidor: ${((stockSistema.total / totalOK) * 100).toFixed(1)}% del total (${stockSistema.total.toLocaleString()} chips)`,
+    });
+  }
+
+  // ADVERTENCIA: chipero pctColocado entre 60% y 79%
+  const warnChiperos = chiperos.filter(c => c.pctColocado >= 60 && c.pctColocado < 80);
+  if (warnChiperos.length > 0) {
+    alertas.push({
+      nivel: 'advertencia',
+      descripcion: `${warnChiperos.length} distribuidor(es) con colocación entre 60% y 79%`,
+    });
+  }
+
+  // ADVERTENCIA: stock en tránsito > 10% del total
+  if (totalOK > 0 && (stockTransito.total / totalOK) * 100 > 10) {
+    alertas.push({
+      nivel: 'advertencia',
+      descripcion: `Stock en tránsito: ${((stockTransito.total / totalOK) * 100).toFixed(1)}% del total (${stockTransito.total.toLocaleString()} chips)`,
+    });
+  }
+
+  // INFO: mejor chipero
+  if (chiperos.length > 0) {
+    const mejor = chiperos.reduce((b, c) => c.pctColocado > b.pctColocado ? c : b);
+    alertas.push({
+      nivel: 'info',
+      descripcion: `Mejor chipero: ${mejor.nombre} — ${mejor.pctColocado.toFixed(1)}% colocado`,
+    });
+  }
+
+  // INFO: mayor chips/comercio
+  if (efectividad.length > 0) {
+    const mejorEf = efectividad.reduce((b, e) => e.promChipsPorComercio > b.promChipsPorComercio ? e : b);
+    alertas.push({
+      nivel: 'info',
+      descripcion: `Mayor chips/comercio: ${mejorEf.nombre} — ${mejorEf.promChipsPorComercio.toFixed(1)} chips/comercio`,
+    });
+  }
+
+  const order: Record<string, number> = { critico: 0, advertencia: 1, info: 2 };
+  return alertas.sort((a, b) => order[a.nivel] - order[b.nivel]);
 }

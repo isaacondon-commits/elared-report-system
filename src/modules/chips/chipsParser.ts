@@ -5,7 +5,6 @@ export type ChipRow = {
   fechaActivacion: string;
   fechaImportacion: string;
   estadoActivacion: string;
-  tipoActivacion: string;
   lote: string;
   subLote: string;
   idDistribuidor: string | null;
@@ -57,6 +56,11 @@ function nullable(s: string): string | null {
   return t === '' ? null : t;
 }
 
+function nullableDate(s: string): string | null {
+  const d = parseDate(s);
+  return d === '' ? null : d;
+}
+
 export async function parseChips(file: File): Promise<ChipsData> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -80,10 +84,10 @@ export async function parseChips(file: File): Promise<ChipsData> {
           if (estadoActivacion !== 'OK') continue;
 
           const empresa = fixEncoding((parts[1] ?? '').trim());
-          const nombreDistribuidor = nullable(parts[10] ?? '');
           const idDistribuidor = nullable(parts[9] ?? '');
-          const puntoVenta = nullable(parts[13] ?? '');
+          const nombreDistribuidor = nullable(fixEncoding(parts[10] ?? ''));
           const idPuntoVenta = nullable(parts[12] ?? '');
+          const puntoVenta = nullable(fixEncoding(parts[13] ?? ''));
 
           if (empresa) empresaSet.add(empresa);
           if (nombreDistribuidor) distribSet.add(nombreDistribuidor);
@@ -95,15 +99,14 @@ export async function parseChips(file: File): Promise<ChipsData> {
             fechaActivacion: parseDate(parts[3] ?? ''),
             fechaImportacion: parseDate(parts[4] ?? ''),
             estadoActivacion,
-            tipoActivacion: fixEncoding((parts[6] ?? '').trim()),
             lote: fixEncoding((parts[7] ?? '').trim()),
             subLote: fixEncoding((parts[8] ?? '').trim()),
             idDistribuidor,
             nombreDistribuidor,
-            fechaAsignacionDistribuidor: parseDate(parts[11] ?? '') || null,
+            fechaAsignacionDistribuidor: nullableDate(parts[11] ?? ''),
             idPuntoVenta,
             puntoVenta,
-            fechaAsignacionPuntoVenta: parseDate(parts[14] ?? '') || null,
+            fechaAsignacionPuntoVenta: nullableDate(parts[14] ?? ''),
             fechaLiquidacion: nullable(parseDate(parts[15] ?? '')),
           });
         }

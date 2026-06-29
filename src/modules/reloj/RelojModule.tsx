@@ -510,6 +510,7 @@ function ResumenTable({ empleados, onSelectEmployee }: {
           <thead>
             <tr className="bg-[#003DA5] text-white">
               <SortTh col="nombre"      label="Empleado" />
+              <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap">Departamento</th>
               <SortTh col="presencia"   label="Presencia" />
               <SortTh col="tardanzas"   label="Tardanzas" />
               <SortTh col="ausencias"   label="Ausencias" />
@@ -522,7 +523,7 @@ function ResumenTable({ empleados, onSelectEmployee }: {
           <tbody>
             {pageData.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
                   Ningún empleado coincide con los filtros aplicados.
                 </td>
               </tr>
@@ -538,6 +539,9 @@ function ResumenTable({ empleados, onSelectEmployee }: {
                   onClick={() => onSelectEmployee?.(emp.nombre)}
                 >
                   <td className="px-4 py-2.5 font-semibold text-gray-800">{emp.nombre}</td>
+                  <td className="px-4 py-2.5">
+                    <DepartamentoBadge depto={emp.horario.horarioPersona?.departamento} />
+                  </td>
                   <td className="px-4 py-2.5 text-center text-gray-600">
                     {emp.diasPresentes}/{emp.diasLaborables}
                   </td>
@@ -751,6 +755,26 @@ function ExtrasPanel({ empleados, onSelectEmployee }: {
   );
 }
 
+// ─── DepartamentoBadge ────────────────────────────────────────────────────────
+
+const DEPTO_COLORS: Record<string, string> = {
+  'Call Fibra': '#003DA5',
+  'Call Móvil': '#6f42c1',
+  'RRHH':       '#28a745',
+  'Atención':   '#20c997',
+};
+
+function DepartamentoBadge({ depto }: { depto?: string }) {
+  if (!depto) return <span className="text-gray-300 text-xs">—</span>;
+  const color = DEPTO_COLORS[depto] ?? '#6c757d';
+  return (
+    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold text-white whitespace-nowrap"
+      style={{ background: color }}>
+      {depto}
+    </span>
+  );
+}
+
 // ─── SinHorarioCard ───────────────────────────────────────────────────────────
 
 function SinHorarioCard({ empleados, onGuardar }: {
@@ -760,10 +784,24 @@ function SinHorarioCard({ empleados, onGuardar }: {
   const sinHorario = empleados.filter(e => e.horario.fuenteHorario === 'inferido');
   if (sinHorario.length === 0) return null;
 
+  const [expandido, setExpandido] = useState(() => {
+    try { return sessionStorage.getItem('elared_reloj_sinhorario_expandido') === 'true'; }
+    catch { return false; }
+  });
+
+  const toggle = () => {
+    const next = !expandido;
+    setExpandido(next);
+    try { sessionStorage.setItem('elared_reloj_sinhorario_expandido', String(next)); } catch {}
+  };
+
   return (
-    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-      <div className="flex items-start gap-3">
-        <AlertCircle size={18} className="text-orange-500 flex-shrink-0 mt-0.5" />
+    <div
+      className="border border-orange-200 rounded-xl overflow-hidden"
+      style={{ background: '#FFF8F0', borderLeft: '4px solid #fd7e14' }}
+    >
+      <div className="flex items-center gap-3 p-4 cursor-pointer select-none" onClick={toggle}>
+        <AlertCircle size={18} className="text-orange-500 flex-shrink-0" />
         <div className="flex-1">
           <h3 className="font-semibold text-orange-800 text-sm">
             {sinHorario.length} persona{sinHorario.length !== 1 ? 's' : ''} sin horario oficial configurado
@@ -771,26 +809,32 @@ function SinHorarioCard({ empleados, onGuardar }: {
           <p className="text-xs text-orange-600 mt-0.5">
             Sus análisis usan horario inferido por mediana de marcaciones
           </p>
-          <div className="mt-3 space-y-2">
-            {sinHorario.map(emp => (
-              <div key={emp.nombre} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-orange-100">
-                <div>
-                  <span className="text-sm font-medium text-gray-800">{emp.nombre}</span>
-                  <span className="ml-2 text-xs text-gray-400">
-                    inferido: {emp.horario.ingresoEsperado}–{emp.horario.salidaEsperada}
-                  </span>
-                </div>
-                <button
-                  onClick={() => onGuardar(emp)}
-                  className="text-xs text-[#003DA5] font-medium hover:bg-blue-50 px-2 py-1 rounded transition-colors flex-shrink-0"
-                >
-                  Guardar horario
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
+        {expandido
+          ? <ChevronUp size={16} className="text-orange-400 flex-shrink-0" />
+          : <ChevronDown size={16} className="text-orange-400 flex-shrink-0" />
+        }
       </div>
+      {expandido && (
+        <div className="px-4 pb-4 space-y-2">
+          {sinHorario.map(emp => (
+            <div key={emp.nombre} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-orange-100">
+              <div>
+                <span className="text-sm font-medium text-gray-800">{emp.nombre}</span>
+                <span className="ml-2 text-xs text-gray-400">
+                  inferido: {emp.horario.ingresoEsperado}–{emp.horario.salidaEsperada}
+                </span>
+              </div>
+              <button
+                onClick={e => { e.stopPropagation(); onGuardar(emp); }}
+                className="text-xs text-[#003DA5] font-medium hover:bg-blue-50 px-2 py-1 rounded transition-colors flex-shrink-0"
+              >
+                Guardar horario
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -806,34 +850,47 @@ function HorarioCustomModal({ emp, onSave, onClose }: {
   const [jueVie, setJueVie] = useState<HorarioDia>({ ingreso: emp.horario.ingresoEsperado, salida: emp.horario.salidaEsperada, trabaja: true });
   const [sab,    setSab]    = useState<HorarioDia>({ ingreso: '10:00', salida: '14:00', trabaja: false });
   const [dom,    setDom]    = useState<HorarioDia>({ ingreso: '10:00', salida: '14:00', trabaja: false });
+  const [mismoLunMie, setMismoLunMie] = useState(true);
+  const [departamento, setDepartamento] = useState(emp.horario.horarioPersona?.departamento ?? '');
+
+  const jueVieEfectivo: HorarioDia = mismoLunMie ? { ...lunMie } : jueVie;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    onSave({ nombre: emp.nombre, lunesAMiercoles: lunMie, jueveYViernes: jueVie, sabado: sab, domingo: dom });
+    onSave({
+      nombre: emp.nombre,
+      lunesAMiercoles: lunMie,
+      jueveYViernes: jueVieEfectivo,
+      sabado: sab,
+      domingo: dom,
+      departamento: departamento.trim() || undefined,
+    });
     onClose();
   }
 
-  function TurnoRow({ label, val, setVal }: { label: string; val: HorarioDia; setVal: (v: HorarioDia) => void }) {
+  function TurnoRow({ label, val, setVal, locked = false }: {
+    label: string; val: HorarioDia; setVal?: (v: HorarioDia) => void; locked?: boolean;
+  }) {
+    const disabled = locked || !val.trabaja;
+    const inputCls = `border rounded px-2 py-1 text-xs focus:outline-none focus:border-[#003DA5] ${
+      disabled ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed' : 'border-gray-200'
+    }`;
     return (
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-xs font-medium text-gray-600 w-20 flex-shrink-0">{label}</span>
-        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-          <input type="checkbox" checked={val.trabaja}
-            onChange={e => setVal({ ...val, trabaja: e.target.checked })}
+        <label className={`flex items-center gap-1.5 text-xs cursor-pointer ${locked ? 'text-gray-300' : 'text-gray-500'}`}>
+          <input type="checkbox" checked={val.trabaja} disabled={locked}
+            onChange={e => setVal?.({ ...val, trabaja: e.target.checked })}
             className="accent-[#003DA5]" />
           Trabaja
         </label>
-        {val.trabaja && (
-          <>
-            <input type="time" value={val.ingreso}
-              onChange={e => setVal({ ...val, ingreso: e.target.value })}
-              className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-[#003DA5]" />
-            <span className="text-xs text-gray-400">a</span>
-            <input type="time" value={val.salida}
-              onChange={e => setVal({ ...val, salida: e.target.value })}
-              className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-[#003DA5]" />
-          </>
-        )}
+        <input type="time" value={val.ingreso} disabled={disabled}
+          onChange={e => setVal?.({ ...val, ingreso: e.target.value })}
+          className={inputCls} />
+        <span className={`text-xs ${disabled ? 'text-gray-300' : 'text-gray-400'}`}>a</span>
+        <input type="time" value={val.salida} disabled={disabled}
+          onChange={e => setVal?.({ ...val, salida: e.target.value })}
+          className={inputCls} />
       </div>
     );
   }
@@ -845,9 +902,34 @@ function HorarioCustomModal({ emp, onSave, onClose }: {
         <p className="text-xs text-gray-400 mb-4">Confirmá o ajustá el horario inferido. Se guardará localmente.</p>
         <form onSubmit={handleSubmit} className="space-y-3">
           <TurnoRow label="Lun – Mié" val={lunMie} setVal={setLunMie} />
-          <TurnoRow label="Jue – Vie" val={jueVie} setVal={setJueVie} />
-          <TurnoRow label="Sábado"    val={sab}    setVal={setSab} />
-          <TurnoRow label="Domingo"   val={dom}    setVal={setDom} />
+          <div>
+            <TurnoRow label="Jue – Vie" val={jueVieEfectivo} setVal={mismoLunMie ? undefined : setJueVie} locked={mismoLunMie} />
+            <label className="flex items-center gap-2 mt-1 ml-[92px] text-xs text-gray-400 cursor-pointer">
+              <input type="checkbox" checked={mismoLunMie}
+                onChange={e => setMismoLunMie(e.target.checked)}
+                className="accent-[#003DA5]" />
+              Mismo que Lun – Mié
+            </label>
+          </div>
+          <TurnoRow label="Sábado"  val={sab} setVal={setSab} />
+          <TurnoRow label="Domingo" val={dom} setVal={setDom} />
+          <div className="pt-2 border-t border-gray-100">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">Departamento</label>
+            <input
+              type="text"
+              value={departamento}
+              onChange={e => setDepartamento(e.target.value)}
+              list="depto-options"
+              placeholder="Ej: Call Fibra, Call Móvil, RRHH…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+            />
+            <datalist id="depto-options">
+              <option value="Call Fibra" />
+              <option value="Call Móvil" />
+              <option value="RRHH" />
+              <option value="Atención" />
+            </datalist>
+          </div>
           <div className="flex gap-2 pt-3 border-t border-gray-100">
             <button type="button" onClick={onClose}
               className="flex-1 border border-gray-300 rounded-lg py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -907,6 +989,9 @@ interface FilterBarProps {
   onIncidenciaChange: (v: IncidenciaFiltro) => void;
   sortBy: SortBy;
   onSortByChange: (v: SortBy) => void;
+  departamentoFiltro: string | null;
+  onDepartamentoChange: (v: string | null) => void;
+  availableDepartamentos: string[];
   total: number;
   filtered: number;
   onClear: () => void;
@@ -917,9 +1002,10 @@ function FilterBar({
   estadoFiltros, onEstadoChange,
   incidenciaFiltro, onIncidenciaChange,
   sortBy, onSortByChange,
+  departamentoFiltro, onDepartamentoChange, availableDepartamentos,
   total, filtered, onClear,
 }: FilterBarProps) {
-  type OpenPanel = 'estado' | 'incidencia' | 'ordenar' | null;
+  type OpenPanel = 'estado' | 'incidencia' | 'ordenar' | 'depto' | null;
   const [open, setOpen] = useState<OpenPanel>(null);
   const [pendingEstado, setPendingEstado] = useState<Set<EstadoDia>>(new Set(estadoFiltros));
 
@@ -932,7 +1018,8 @@ function FilterBar({
   const estadoIsActive    = estadoFiltros.size < ALL_ESTADOS_FILTER.length;
   const incidenciaIsActive = incidenciaFiltro !== 'all';
   const sortIsActive      = sortBy !== 'nombre';
-  const hasFilters = searchQuery.trim() !== '' || estadoIsActive || incidenciaIsActive || sortIsActive;
+  const deptoIsActive     = departamentoFiltro !== null;
+  const hasFilters = searchQuery.trim() !== '' || estadoIsActive || incidenciaIsActive || sortIsActive || deptoIsActive;
 
   const panelStyle: React.CSSProperties = {
     boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
@@ -1089,6 +1176,44 @@ function FilterBar({
         )}
       </div>
 
+      {/* Departamento */}
+      {availableDepartamentos.length > 0 && (
+        <div className="relative flex-shrink-0">
+          <button onClick={() => toggle('depto')} className={btnCls(deptoIsActive)}>
+            {deptoIsActive ? departamentoFiltro : 'Departamento: Todos'}
+            {chevron('depto')}
+          </button>
+          {open === 'depto' && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setOpen(null)} />
+              <div
+                className="absolute top-full mt-1.5 left-0 z-50 bg-white border border-[#E2E8F0] rounded-lg p-3"
+                style={{ minWidth: 200, ...panelStyle }}
+              >
+                <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1.5">
+                  <input type="radio" name="depto-filter" value=""
+                    checked={departamentoFiltro === null}
+                    onChange={() => { onDepartamentoChange(null); setOpen(null); }}
+                    className="accent-[#003DA5]"
+                  />
+                  <span className="text-sm text-gray-700">Todos los departamentos</span>
+                </label>
+                {availableDepartamentos.map(d => (
+                  <label key={d} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1.5">
+                    <input type="radio" name="depto-filter" value={d}
+                      checked={departamentoFiltro === d}
+                      onChange={() => { onDepartamentoChange(d); setOpen(null); }}
+                      className="accent-[#003DA5]"
+                    />
+                    <DepartamentoBadge depto={d} />
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Limpiar todos */}
       {hasFilters && (
         <button
@@ -1166,6 +1291,14 @@ function IndividualView({ emp, onEditHorario }: {
           </div>
         </div>
       </div>
+
+      {/* Departamento */}
+      {emp.horario.horarioPersona?.departamento && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 font-medium">Departamento:</span>
+          <DepartamentoBadge depto={emp.horario.horarioPersona.departamento} />
+        </div>
+      )}
 
       {/* Horario card */}
       <HorarioCard emp={emp} onEdit={onEditHorario} />
@@ -1263,13 +1396,24 @@ export default function RelojModule() {
   const [estadoFiltros, setEstadoFiltros]       = useState<Set<EstadoDia>>(DEFAULT_ESTADO_FILTROS);
   const [incidenciaFiltro, setIncidenciaFiltro] = useState<IncidenciaFiltro>('all');
   const [sortBy, setSortBy]                     = useState<SortBy>('nombre');
+  const [departamentoFiltro, setDepartamentoFiltro] = useState<string | null>(null);
 
   const resetFilters = () => {
     setSearchQuery('');
     setEstadoFiltros(new Set(ALL_ESTADOS_FILTER));
     setIncidenciaFiltro('all');
     setSortBy('nombre');
+    setDepartamentoFiltro(null);
   };
+
+  const availableDepartamentos = useMemo(() => {
+    const depts = new Set<string>();
+    empleados.forEach(e => {
+      const d = e.horario.horarioPersona?.departamento;
+      if (d) depts.add(d);
+    });
+    return Array.from(depts).sort();
+  }, [empleados]);
 
   const empleadosFiltrados = useMemo(() => {
     let result = [...empleados];
@@ -1298,6 +1442,10 @@ export default function RelojModule() {
       ); break;
     }
 
+    if (departamentoFiltro) {
+      result = result.filter(e => e.horario.horarioPersona?.departamento === departamentoFiltro);
+    }
+
     switch (sortBy) {
       case 'tardanzas':   result.sort((a, b) => b.tardanzas - a.tardanzas   || a.nombre.localeCompare(b.nombre, 'es')); break;
       case 'ausencias':   result.sort((a, b) => b.ausencias - a.ausencias   || a.nombre.localeCompare(b.nombre, 'es')); break;
@@ -1306,7 +1454,7 @@ export default function RelojModule() {
     }
 
     return result;
-  }, [empleados, searchQuery, estadoFiltros, incidenciaFiltro, sortBy]);
+  }, [empleados, searchQuery, estadoFiltros, incidenciaFiltro, sortBy, departamentoFiltro]);
 
   const handleFile = useCallback(async (file: File) => {
     setError('');
@@ -1492,6 +1640,9 @@ export default function RelojModule() {
                 onIncidenciaChange={setIncidenciaFiltro}
                 sortBy={sortBy}
                 onSortByChange={setSortBy}
+                departamentoFiltro={departamentoFiltro}
+                onDepartamentoChange={setDepartamentoFiltro}
+                availableDepartamentos={availableDepartamentos}
                 total={empleados.length}
                 filtered={empleadosFiltrados.length}
                 onClear={resetFilters}

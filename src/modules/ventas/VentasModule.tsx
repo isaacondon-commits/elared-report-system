@@ -899,16 +899,11 @@ export default function VentasModule() {
             {/* KPI Cards — fila 2: estado + métricas adicionales */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {stats.hasEstado && stats.estadoKpis && (
-                <>
-                  <KPICard size="small" color="green" icon={CheckCircle}
-                    label="Vendidos"
-                    value={`${stats.estadoKpis.vendido.toLocaleString()} (${stats.estadoKpis.vendidoPct}%)`} />
-                  <KPICard size="small" color="red" icon={XCircle}
-                    label="Rechazos"
-                    value={stats.tasaRechazoEquipo !== null
-                      ? `${stats.estadoKpis.rechazo} (${stats.tasaRechazoEquipo.toFixed(1)}%)`
-                      : stats.estadoKpis.rechazo.toLocaleString()} />
-                </>
+                <KPICard size="small" color="red" icon={XCircle}
+                  label="Rechazos"
+                  value={stats.tasaRechazoEquipo !== null
+                    ? `${stats.estadoKpis.rechazo} (${stats.tasaRechazoEquipo.toFixed(1)}%)`
+                    : stats.estadoKpis.rechazo.toLocaleString()} />
               )}
               {stats.byDia.length > 0 && (
                 <KPICard size="small" color="blue" icon={Calendar}

@@ -43,23 +43,26 @@ const ESTADO_BADGE: Record<EstadoDia, { label: string; bg: string; text: string 
   TARDANZA_GRAVE:     { label: 'T. Grave',      bg: '#fee2e2', text: '#991b1b' },
   DESCANSO_EXTENDIDO: { label: 'Desc. ext.',    bg: '#fef3c7', text: '#92400e' },
   SALIDA_ANTICIPADA:  { label: 'Sal. anticip.', bg: '#ffedd5', text: '#9a3412' },
-  DATO_INCOMPLETO:    { label: 'Incompleto',    bg: '#dbeafe', text: '#1e40af' },
+  DATO_INCOMPLETO:    { label: 'Incompleto',    bg: '#dbeafe', text: '#4D94FF' },
   AUSENTE:            { label: 'Ausente',       bg: '#fee2e2', text: '#991b1b' },
   FIN_SEMANA:         { label: 'Fin semana',    bg: '#f9fafb', text: '#9ca3af' },
 };
 
-function EstadoBadge({ estado }: { estado: EstadoDia }) {
+function EstadoBadge({ estado, tooltip }: { estado: EstadoDia; tooltip?: string }) {
   const b = ESTADO_BADGE[estado];
   return (
     <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full"
-      style={{ background: b.bg, color: b.text }}>
+      style={{ background: b.bg, color: b.text }}
+      title={tooltip}>
       {b.label}
     </span>
   );
 }
 
 function TimeCell({ value, warn = false, missing = false }: { value: string | null; warn?: boolean; missing?: boolean }) {
-  if (!value || missing) return <span className="text-gray-300 font-mono text-sm">—</span>;
+  if (!value || missing) return (
+    <span className="font-mono text-sm" style={{ color: '#CBD5E1' }} title="Marcación no registrada">—</span>
+  );
   return (
     <span className={`font-mono text-sm font-medium ${warn ? 'text-red-600' : 'text-gray-800'}`}>
       {value}
@@ -276,6 +279,28 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
             const isExpanded = expandedDate === dia.fecha;
             const tardanza = dia.minutosTardanza > 0;
             const salAnt   = dia.minutosSalidaAnticipada > 0;
+            const isIncompleto = dia.estado === 'DATO_INCOMPLETO';
+
+            // Positional display for incomplete days: assign marcaciones by position
+            let displayIngreso: string | null = null;
+            let displaySalDesc: string | null = null;
+            let displayRegDesc: string | null = null;
+            let displaySalida: string | null = null;
+            let extrasBadge = 0;
+
+            if (isIncompleto && dia.marcaciones.length > 0) {
+              const mcs = dia.marcaciones; // sorted by time from parser
+              const n = mcs.length;
+              displayIngreso = mcs[0]?.hora ?? null;
+              displaySalDesc = n >= 3 ? (mcs[1]?.hora ?? null) : null;
+              displayRegDesc = n >= 4 ? (mcs[2]?.hora ?? null) : null;
+              displaySalida  = n >= 2 ? (mcs[Math.min(n - 1, 3)]?.hora ?? null) : null;
+              extrasBadge    = n > 4 ? n - 4 : 0;
+            }
+
+            const badgeTooltip = isIncompleto
+              ? `Se detectaron ${dia.marcaciones.length} de 4 marcaciones esperadas. Las horas mostradas son las registradas en el reloj.`
+              : undefined;
 
             return (
               <Fragment key={dia.fecha}>
@@ -289,25 +314,54 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
                     {fmtFecha(dia.fecha)}
                   </td>
                   <td className="px-3 py-2.5">
-                    <TimeCell value={dia.ingreso} warn={tardanza} missing={!dia.ingreso} />
-                    {dia.minutosTardanza > 0 && (
-                      <span className="ml-1 text-[10px] text-red-500">+{dia.minutosTardanza}m</span>
+                    {isIncompleto ? (
+                      <TimeCell value={displayIngreso} missing={!displayIngreso} />
+                    ) : (
+                      <>
+                        <TimeCell value={dia.ingreso} warn={tardanza} missing={!dia.ingreso} />
+                        {dia.minutosTardanza > 0 && (
+                          <span className="ml-1 text-[10px] text-red-500">+{dia.minutosTardanza}m</span>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="px-3 py-2.5">
-                    <TimeCell value={dia.salidaDescanso} missing={!dia.salidaDescanso} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <TimeCell value={dia.regresoDescanso} missing={!dia.regresoDescanso}
-                      warn={dia.minutosDescansoExtra > 0} />
-                    {dia.minutosDescansoExtra > 0 && (
-                      <span className="ml-1 text-[10px] text-amber-500">+{dia.minutosDescansoExtra}m</span>
+                    {isIncompleto ? (
+                      <TimeCell value={displaySalDesc} missing={!displaySalDesc} />
+                    ) : (
+                      <TimeCell value={dia.salidaDescanso} missing={!dia.salidaDescanso} />
                     )}
                   </td>
                   <td className="px-3 py-2.5">
-                    <TimeCell value={dia.salidaFinal} warn={salAnt} missing={!dia.salidaFinal} />
-                    {dia.minutosSalidaAnticipada > 0 && (
-                      <span className="ml-1 text-[10px] text-orange-500">-{dia.minutosSalidaAnticipada}m</span>
+                    {isIncompleto ? (
+                      <TimeCell value={displayRegDesc} missing={!displayRegDesc} />
+                    ) : (
+                      <>
+                        <TimeCell value={dia.regresoDescanso} missing={!dia.regresoDescanso}
+                          warn={dia.minutosDescansoExtra > 0} />
+                        {dia.minutosDescansoExtra > 0 && (
+                          <span className="ml-1 text-[10px] text-amber-500">+{dia.minutosDescansoExtra}m</span>
+                        )}
+                      </>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {isIncompleto ? (
+                      <>
+                        <TimeCell value={displaySalida} missing={!displaySalida} />
+                        {extrasBadge > 0 && (
+                          <span className="ml-1 text-[10px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded">
+                            +{extrasBadge}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <TimeCell value={dia.salidaFinal} warn={salAnt} missing={!dia.salidaFinal} />
+                        {dia.minutosSalidaAnticipada > 0 && (
+                          <span className="ml-1 text-[10px] text-orange-500">-{dia.minutosSalidaAnticipada}m</span>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-xs font-mono">
@@ -320,7 +374,7 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
                       ? minsToHHMM(dia.minutosJornada) : '—'}
                   </td>
                   <td className="px-3 py-2.5">
-                    <EstadoBadge estado={dia.estado} />
+                    <EstadoBadge estado={dia.estado} tooltip={badgeTooltip} />
                   </td>
                   <td className="px-3 py-2.5 text-gray-400">
                     {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

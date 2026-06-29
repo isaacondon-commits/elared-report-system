@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, EyeOff } from 'lucide-react';
 import type { VentasStats, FuncionarioStat } from './VentasModule';
 import { getEquivalente, getEquivalenteColor } from '../../utils/smartParser';
+import { abreviarPlan } from './VentasCharts';
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 
 const RANK_BADGES = [
   { bg: '#FFD700', text: '#7a5800', emoji: '🥇' },
@@ -165,7 +166,7 @@ function DetailTabs({ f, onClose }: { f: FuncionarioStat; onClose: () => void })
               {planesData.map((p, i) => (
                 <tr key={p.plan} style={trStyle(i)}>
                   <td style={{ ...tdStyle, color: '#374151', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.plan}>
-                    {p.plan}
+                    {abreviarPlan(p.plan)}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#003DA5' }}>{p.cantidad}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', color: '#6c757d' }}>{p.pct}%</td>
@@ -230,18 +231,39 @@ interface Props {
   onHideVendedor?: (nombre: string) => void;
 }
 
+function getPageNums(current: number, total: number): (number | '…')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i);
+  if (current < 4) {
+    const nums: (number | '…')[] = Array.from({ length: Math.min(5, total) }, (_, i) => i);
+    if (total > 5) { nums.push('…'); nums.push(total - 1); }
+    return nums;
+  }
+  if (current > total - 5) {
+    const nums: (number | '…')[] = [0, '…'];
+    for (let i = Math.max(0, total - 5); i < total; i++) nums.push(i);
+    return nums;
+  }
+  return [0, '…', current - 1, current, current + 1, '…', total - 1];
+}
+
 export default function VentasPerformanceTable({ stats, onHideVendedor }: Props) {
   const [page, setPage]             = useState(0);
   const [expandedNombre, setExpanded] = useState<string | null>(null);
   const [sortCol, setSortCol]       = useState<SortCol>('rank');
   const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('asc');
   const [hovered, setHovered]       = useState<string | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   const [lastEmpresa, setLastEmpresa] = useState(stats.empresaActiva);
   if (stats.empresaActiva !== lastEmpresa) {
     setLastEmpresa(stats.empresaActiva);
     setPage(0);
     setExpanded(null);
+  }
+
+  function goToPage(p: number) {
+    setPage(p);
+    setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 
   const sortedRows = useMemo(() => {
@@ -273,7 +295,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
   function toggleSort(col: SortCol) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortCol(col); setSortDir(col === 'rank' ? 'asc' : 'desc'); }
-    setPage(0);
+    goToPage(0);
   }
 
   function SortTh({ col, label, right }: { col: SortCol; label: string; right?: boolean }) {
@@ -295,10 +317,12 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div ref={tableRef} className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900">Tabla de Vendedores</h3>
-        <span className="text-xs text-gray-400">{sortedRows.length} vendedores</span>
+        <span className="text-xs text-gray-400">
+          Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sortedRows.length)} de {sortedRows.length} vendedores
+        </span>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -460,21 +484,51 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-3 px-1">
-          <span className="text-xs text-gray-500">
-            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sortedRows.length)} de {sortedRows.length} vendedores
-          </span>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-              className="p-1.5 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
-              <ChevronLeft size={14} />
-            </button>
-            <span className="text-xs text-gray-600 px-2">{page + 1}/{totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
-              className="p-1.5 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
-              <ChevronRight size={14} />
-            </button>
-          </div>
+        <div className="flex items-center justify-center gap-1 mt-4 flex-wrap">
+          <button
+            onClick={() => goToPage(Math.max(0, page - 1))}
+            disabled={page === 0}
+            style={{
+              padding: '5px 10px', fontSize: 12, borderRadius: 6, cursor: page === 0 ? 'not-allowed' : 'pointer',
+              border: '1px solid #e2e8f0', background: '#fff', color: '#374151',
+              opacity: page === 0 ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', gap: 2,
+            }}
+          >
+            <ChevronLeft size={13} /> Anterior
+          </button>
+
+          {getPageNums(page, totalPages).map((p, i) =>
+            p === '…' ? (
+              <span key={`ellipsis-${i}`} style={{ padding: '5px 4px', fontSize: 12, color: '#9ca3af' }}>…</span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => goToPage(p as number)}
+                style={{
+                  minWidth: 32, padding: '5px 8px', fontSize: 12, borderRadius: 6, cursor: 'pointer',
+                  border: `1px solid #003DA5`,
+                  background: p === page ? '#003DA5' : '#fff',
+                  color: p === page ? '#fff' : '#003DA5',
+                  fontWeight: p === page ? 700 : 400,
+                }}
+              >
+                {(p as number) + 1}
+              </button>
+            )
+          )}
+
+          <button
+            onClick={() => goToPage(Math.min(totalPages - 1, page + 1))}
+            disabled={page === totalPages - 1}
+            style={{
+              padding: '5px 10px', fontSize: 12, borderRadius: 6,
+              cursor: page === totalPages - 1 ? 'not-allowed' : 'pointer',
+              border: '1px solid #e2e8f0', background: '#fff', color: '#374151',
+              opacity: page === totalPages - 1 ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', gap: 2,
+            }}
+          >
+            Siguiente <ChevronRight size={13} />
+          </button>
         </div>
       )}
     </div>

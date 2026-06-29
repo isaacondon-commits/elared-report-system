@@ -261,7 +261,7 @@ export function processVentas(
 
     const estadoRawVal = (mapping.estado ? String(r[mapping.estado] ?? '') : '').trim();
     const estadoNorm   = hasEstado ? normalizeEstado(estadoRawVal) : 'Otro';
-    const esVendido    = estadoRawVal === 'VENDIDO' || estadoNorm === 'Vendido';
+    const esVendido    = estadoRawVal.trim() === 'VENDIDO';
     const esRechazo    = hasEstado ? getEquivalente(estadoRawVal) === 'Rechazado' : false;
 
     // Departamento
@@ -414,7 +414,7 @@ export function processVentas(
 
   let estadoKpis: EstadoKpis | null = null;
   if (hasEstado) {
-    const vendido = estadoNormMap.get('Vendido') ?? 0;
+    const vendido = estadoRawMap.get('VENDIDO') ?? 0;
     const rechazo = estadoNormMap.get('Rechazo') ?? 0;
     estadoKpis = {
       vendido,  vendidoPct: total > 0 ? Math.round((vendido / total) * 100) : 0,

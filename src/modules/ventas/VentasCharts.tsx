@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, LabelList, ReferenceLine, Cell,
@@ -28,8 +29,19 @@ const PIE_PALETA = [P.azul1, P.rojo, P.verde, P.naranja, P.teal, P.violeta, P.az
 
 function fmt(v: unknown): [string, string] { return [Number(v).toLocaleString(), '']; }
 
-function truncate(s: string, max = 22): string {
-  return s.length > max ? s.slice(0, max) + '…' : s;
+const PLAN_ABREVIATURAS: Record<string, string> = {
+  'FIBRA ENTRETENIMIENTO ESTANDAR':  'FIBRA ENT. ESTANDAR',
+  'FIBRA ENTRETENIMIENTO PREMIUM':   'FIBRA ENT. PREMIUM',
+  'FIBRA ENTRETENIMIENTO NETFLIX':   'FIBRA ENT. NETFLIX',
+  'FIBRA SUPER ENTRETENIMIENTO':     'FIBRA SUPER ENT.',
+  'FIBRA CON LIMITE 1':              'FIBRA C/LIMITE 1',
+  'FIBRA CON LIMITE 2':              'FIBRA C/LIMITE 2',
+  'CANCELADO POR CLIENTE':           'CANC. X CLIENTE',
+  'VENDIDO POR OTRA EMPRESA':        'VEND. OTRA EMP.',
+  'GESTION DISTRIBUCION':            'GEST. DISTRIB.',
+};
+export function abreviarPlan(nombre: string): string {
+  return PLAN_ABREVIATURAS[nombre.toUpperCase()] ?? (nombre.length > 22 ? nombre.substring(0, 20) + '…' : nombre);
 }
 
 function formatFechaLabel(iso: string): string {
@@ -52,86 +64,125 @@ interface Props {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Promedio de Ventas por Vendedor
+// Promedio de Ventas por Vendedor — colapsable, con buscador
 // ─────────────────────────────────────────────────────────────────────────────
 function MetricasDiariasEquipo({ stats }: Pick<Props, 'stats'>) {
   if (stats.byDia.length === 0) return null;
+
+  const [expanded, setExpanded] = useState(() => {
+    try { return sessionStorage.getItem('elared_ventas_actividad_expandida') === 'true'; }
+    catch { return false; }
+  });
+  const [busqueda, setBusqueda] = useState('');
+
+  function toggleExpanded() {
+    const next = !expanded;
+    setExpanded(next);
+    try { sessionStorage.setItem('elared_ventas_actividad_expandida', String(next)); }
+    catch {}
+  }
 
   const maxProm = Math.max(...stats.byDia.map(d => d.promVendedor));
   const validDias = stats.byDia.filter(d => d.vendedoresActivos > 1);
   const minProm = validDias.length > 0 ? Math.min(...validDias.map(d => d.promVendedor)) : -1;
 
-  // Gráfico line — últimos 30 días, asc
   const chartData = [...stats.byDia].reverse().slice(-30).map(d => ({
     ...d,
     label: formatFechaLabel(d.fecha),
-    promFmt: d.promVendedor.toFixed(1),
   }));
   const avgProm = stats.promedioEquipoDia;
 
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Promedio de Ventas por Vendedor</h3>
+  const filasVisibles = busqueda.trim()
+    ? stats.byDia.filter(d => formatFecha(d.fecha).includes(busqueda.trim()))
+    : stats.byDia;
 
-      {/* Mini line chart */}
-      {chartData.length > 1 && (
-        <div className="mb-5">
-          <ResponsiveContainer width="100%" height={160}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={Math.max(0, Math.floor(chartData.length / 10) - 1)} />
-              <YAxis tick={{ fontSize: 10 }} allowDecimals />
-              <Tooltip
-                formatter={(v: unknown) => [`${Number(v).toFixed(1)} v/vend`, 'Prom/vend']}
-                labelFormatter={(_: unknown, payload: readonly { payload?: { fecha?: string } }[]) =>
-                  formatFecha(payload?.[0]?.payload?.fecha ?? '')}
-              />
-              <ReferenceLine y={avgProm} stroke={P.naranja} strokeDasharray="4 2"
-                label={{ value: `Avg ${avgProm.toFixed(1)}`, position: 'right', fontSize: 9, fill: P.naranja }} />
-              <Line type="monotone" dataKey="promVendedor" stroke={P.azul1} strokeWidth={2}
-                dot={{ r: 2, fill: P.azul1 }} activeDot={{ r: 4 }} name="Prom/vend" />
-            </LineChart>
-          </ResponsiveContainer>
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <button
+        onClick={toggleExpanded}
+        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 rounded-xl"
+        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+      >
+        <h3 className="font-semibold text-gray-900">
+          <span className="mr-2 text-gray-400">{expanded ? '▼' : '▶'}</span>
+          Promedio de Ventas por Vendedor
+        </h3>
+        <span className="text-xs text-gray-400">{stats.byDia.length} días · click para {expanded ? 'colapsar' : 'expandir'}</span>
+      </button>
+
+      {expanded && (
+        <div className="px-5 pb-5 border-t border-gray-100">
+          {chartData.length > 1 && (
+            <div className="mt-4 mb-5">
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={Math.max(0, Math.floor(chartData.length / 10) - 1)} />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals />
+                  <Tooltip
+                    formatter={(v: unknown) => [`${Number(v).toFixed(1)} v/vend`, 'Prom/vend']}
+                    labelFormatter={(_: unknown, payload: readonly { payload?: { fecha?: string } }[]) =>
+                      formatFecha(payload?.[0]?.payload?.fecha ?? '')}
+                  />
+                  <ReferenceLine y={avgProm} stroke={P.naranja} strokeDasharray="4 2"
+                    label={{ value: `Avg ${avgProm.toFixed(1)}`, position: 'right', fontSize: 9, fill: P.naranja }} />
+                  <Line type="monotone" dataKey="promVendedor" stroke={P.azul1} strokeWidth={2}
+                    dot={{ r: 2, fill: P.azul1 }} activeDot={{ r: 4 }} name="Prom/vend" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          <div className="mb-3">
+            <input
+              type="text"
+              placeholder="🔍 Buscar fecha (ej: 12/06)..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              className="w-full sm:w-64 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#003DA5]"
+            />
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#003DA5] text-white">
+                  <th className="px-3 py-2 text-left text-xs font-semibold">Fecha</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Vendedores activos</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Ventas del día</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">Prom / vendedor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filasVisibles.map((d, i) => {
+                  const isMax = Math.abs(d.promVendedor - maxProm) < 0.01;
+                  const isMin = d.vendedoresActivos > 1 && Math.abs(d.promVendedor - minProm) < 0.01;
+                  return (
+                    <tr key={d.fecha} className="border-t border-gray-100"
+                      style={{ background: isMax ? '#f0fff4' : isMin ? '#fff5f5' : i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                      <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{formatFecha(d.fecha)}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-700">{d.vendedoresActivos}</td>
+                      <td className="px-3 py-1.5 text-right font-semibold text-[#003DA5]">{d.ventas}</td>
+                      <td className="px-3 py-1.5 text-right">
+                        <span className={`font-bold text-sm ${isMax ? 'text-green-700' : isMin ? 'text-red-600' : 'text-gray-700'}`}>
+                          {d.promVendedor.toFixed(1)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filasVisibles.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-4 text-center text-gray-400 text-sm">
+                      Sin resultados para "{busqueda}"
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
-
-      {/* Tabla */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-[#003DA5] text-white">
-              <th className="px-3 py-2 text-left text-xs font-semibold">Fecha</th>
-              <th className="px-3 py-2 text-right text-xs font-semibold">Vendedores activos</th>
-              <th className="px-3 py-2 text-right text-xs font-semibold">Ventas del día</th>
-              <th className="px-3 py-2 text-right text-xs font-semibold">Prom / vendedor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.byDia.map((d, i) => {
-              const isMax = Math.abs(d.promVendedor - maxProm) < 0.01;
-              const isMin = d.vendedoresActivos > 1 && Math.abs(d.promVendedor - minProm) < 0.01;
-              return (
-                <tr
-                  key={d.fecha}
-                  className="border-t border-gray-100"
-                  style={{
-                    background: isMax ? '#f0fff4' : isMin ? '#fff5f5' : i % 2 === 0 ? '#fff' : '#f8fafc',
-                  }}
-                >
-                  <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{formatFecha(d.fecha)}</td>
-                  <td className="px-3 py-1.5 text-right text-gray-700">{d.vendedoresActivos}</td>
-                  <td className="px-3 py-1.5 text-right font-semibold text-[#003DA5]">{d.ventas}</td>
-                  <td className="px-3 py-1.5 text-right">
-                    <span className={`font-bold text-sm ${isMax ? 'text-green-700' : isMin ? 'text-red-600' : 'text-gray-700'}`}>
-                      {d.promVendedor.toFixed(1)}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
@@ -470,7 +521,8 @@ function RechazosChart({ stats }: Pick<Props, 'stats'>) {
   const conRechazos = stats.byFuncionario
     .filter(f => f.total >= 5 && f.rechazos > 0)
     .map(f => ({ ...f, pctRechazo: f.total > 0 ? (f.rechazos / f.total) * 100 : 0 }))
-    .sort((a, b) => b.pctRechazo - a.pctRechazo);
+    .sort((a, b) => b.pctRechazo - a.pctRechazo)
+    .slice(0, 12);
 
   if (conRechazos.length === 0) return null;
 
@@ -585,7 +637,7 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
 function PlanChart({ stats }: Pick<Props, 'stats'>) {
   if (!stats.byPlan.length) return null;
   const data = stats.byPlan.slice(0, 12).map(p => ({
-    nombre: truncate(p.nombre),
+    nombre: abreviarPlan(p.nombre),
     ventas: p.ventas,
     fullNombre: p.nombre,
   }));

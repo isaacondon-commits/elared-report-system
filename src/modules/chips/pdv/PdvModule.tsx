@@ -4,6 +4,9 @@ import {
   FileSpreadsheet, Download, RefreshCw,
   ChevronDown, ChevronRight, Upload, Loader2,
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
 import KPICard from '../../../components/KPICard';
 import FileUploader from '../../../components/FileUploader';
 import { parsePdv, type PdvData } from './pdvParser';
@@ -176,11 +179,10 @@ export default function PdvModule() {
   const vencList  = useMemo(() => vencimiento ? (vencTab === 'porVencer' ? vencimiento.porVencer.puntos : vencimiento.yaVencidos.puntos) : [], [vencimiento, vencTab]);
   const vencPaged = useMemo(() => vencList.slice((vencPage - 1) * PER_PAGE, vencPage * PER_PAGE), [vencList, vencPage]);
 
-  const inacTop10    = useMemo(() => inactividad?.porDistribuidor.slice(0, 10) ?? [], [inactividad]);
-  const inacTop10Max = inacTop10[0]?.cantidad ?? 1;
+  const inacTop10 = useMemo(() => inactividad?.porDistribuidor.slice(0, 10) ?? [], [inactividad]);
 
-  const npMeses = useMemo(() => nuevosPuntos?.porMes ?? [], [nuevosPuntos]);
-  const npMax   = useMemo(() => Math.max(1, ...npMeses.map(m => m.cantidad)), [npMeses]);
+  const npMeses    = useMemo(() => nuevosPuntos?.porMes ?? [], [nuevosPuntos]);
+  const npMesesMax = useMemo(() => npMeses.slice(-12), [npMeses]);
 
   const exportData = useMemo((): PdvExportData | null => {
     if (!inactividad || !vencimiento || !nuevosPuntos) return null;
@@ -404,19 +406,33 @@ export default function PdvModule() {
         </div>
         <Pagination page={inacPage} total={inacFiltered.length} perPage={PER_PAGE} onChange={setInacPage} />
 
-        {/* Top 10 horizontal bar chart */}
+        {/* Top 10 bar chart — vertical, Recharts */}
         {inacTop10.length > 0 && (
           <div className="mt-5 w-full overflow-hidden">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Top 10 distribuidores con más inactivos</p>
-            {inacTop10.map((d, i) => (
-              <div key={i} className="flex items-center gap-3 mb-2 w-full">
-                <div className="w-32 text-xs text-gray-600 truncate shrink-0">{d.distribuidor}</div>
-                <div className="flex-1 min-w-0 h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div className="h-3 bg-red-500 rounded-full" style={{ width: `${(d.cantidad / inacTop10Max) * 100}%` }} />
-                </div>
-                <div className="w-10 text-xs font-bold text-red-600 text-right shrink-0 tabular-nums">{d.cantidad}</div>
-              </div>
-            ))}
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart
+                data={inacTop10}
+                margin={{ top: 20, right: 20, left: 10, bottom: 60 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="distribuidor"
+                  angle={-35}
+                  textAnchor="end"
+                  height={70}
+                  tick={{ fontSize: 10 }}
+                  interval={0}
+                  tickFormatter={(v: string) => v.length > 22 ? v.slice(0, 20) + '…' : v}
+                />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip
+                  formatter={(value) => [value, 'Inactivos']}
+                  labelFormatter={(label) => String(label)}
+                />
+                <Bar dataKey="cantidad" fill="#E3000F" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         )}
       </SectionCard>
@@ -546,19 +562,31 @@ export default function PdvModule() {
           <p className="text-center text-sm text-gray-400 py-4">Sin datos en el rango seleccionado</p>
         ) : (
           <>
-            {/* Vertical bar chart */}
-            <div className="w-full overflow-x-auto">
-            <div className="flex items-end gap-1.5 pb-2 mb-5" style={{ height: 140, minWidth: 'max-content' }}>
-              {npMeses.map((m, i) => (
-                <div key={i} className="flex flex-col items-center gap-1 shrink-0" style={{ minWidth: 42 }}>
-                  <span className="text-[10px] font-bold text-[#003DA5]">{m.cantidad}</span>
-                  <div className="w-8 bg-[#003DA5] rounded-t" style={{ height: `${Math.max(4, (m.cantidad / npMax) * 80)}px` }} />
-                  <span className="text-[9px] text-gray-500 mt-1" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap' }}>
-                    {formatMes(m.mes)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {/* Evolución mensual — vertical bar chart, Recharts, últimos 12 meses */}
+            <div className="w-full overflow-hidden mb-5">
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart
+                  data={npMesesMax}
+                  margin={{ top: 20, right: 20, left: 10, bottom: 40 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="mes"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v: string) => formatMes(v)}
+                    angle={-30}
+                    textAnchor="end"
+                    height={50}
+                    interval={0}
+                  />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip
+                    formatter={(value) => [value, 'Nuevos PdV']}
+                    labelFormatter={(label) => formatMes(String(label))}
+                  />
+                  <Bar dataKey="cantidad" fill="#003DA5" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
 
             {/* Table */}

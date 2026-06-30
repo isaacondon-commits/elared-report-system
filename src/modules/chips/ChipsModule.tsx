@@ -26,26 +26,18 @@ function pctColor(pct: number): string {
   if (pct >= 50) return '#fd7e14';
   return '#dc3545';
 }
-
 function pctLabel(pct: number): string {
   if (pct >= 90) return 'Eficiente';
   if (pct >= 70) return 'Normal';
   if (pct >= 50) return 'Bajo';
   return 'Crítico';
 }
-
 function rendLabel(v: number): string {
-  if (v >= 7) return 'Alto';
-  if (v >= 5) return 'Normal';
-  return 'Bajo';
+  return v >= 7 ? 'Alto' : v >= 5 ? 'Normal' : 'Bajo';
 }
-
 function rendColor(v: number): string {
-  if (v >= 7) return '#28a745';
-  if (v >= 5) return '#003DA5';
-  return '#fd7e14';
+  return v >= 7 ? '#28a745' : v >= 5 ? '#003DA5' : '#fd7e14';
 }
-
 function fmt1(n: number): string {
   return n.toFixed(1);
 }
@@ -64,7 +56,6 @@ function KpiCard({
   showDesglose?: boolean;
 }) {
   const displayValue = typeof value === 'number' ? value.toLocaleString() : value;
-
   const desgloseText = showDesglose && desglose
     ? Object.entries(desglose)
         .filter(([, n]) => n > 0)
@@ -78,10 +69,7 @@ function KpiCard({
     : null;
 
   return (
-    <div
-      className="bg-white rounded-xl p-5 shadow-sm flex flex-col gap-1"
-      style={{ borderTop: `4px solid ${borderColor}` }}
-    >
+    <div className="bg-white rounded-xl p-5 shadow-sm flex flex-col gap-1" style={{ borderTop: `4px solid ${borderColor}` }}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide leading-tight">{label}</span>
         <span style={{ color: borderColor }}>{icon}</span>
@@ -97,13 +85,8 @@ function KpiCard({
   );
 }
 
-function EmpresaTabs({
-  empresas, tabCounts, active, onChange,
-}: {
-  empresas: string[];
-  tabCounts: Record<string, number>;
-  active: string;
-  onChange: (e: string) => void;
+function EmpresaTabs({ empresas, tabCounts, active, onChange }: {
+  empresas: string[]; tabCounts: Record<string, number>; active: string; onChange: (e: string) => void;
 }) {
   const tabs = useMemo(() => {
     const known = ['Todas', ...EMPRESA_ORDER.filter(e => empresas.includes(e))];
@@ -114,9 +97,7 @@ function EmpresaTabs({
   return (
     <div className="flex gap-1.5 flex-wrap">
       {tabs.map(tab => (
-        <button
-          key={tab}
-          onClick={() => onChange(tab)}
+        <button key={tab} onClick={() => onChange(tab)}
           className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
             active === tab
               ? 'bg-[#003DA5] text-white shadow-sm'
@@ -137,23 +118,18 @@ function EmpresaTabs({
 
 function AlertasSection({ alertas }: { alertas: ChipsAnalysis['alertas'] }) {
   if (!alertas.length) return null;
-
   const cfg = {
-    critico: { bg: '#FEF2F2', border: '#dc3545', text: '#991b1b', Icon: AlertCircle },
-    advertencia: { bg: '#FFF8F0', border: '#fd7e14', text: '#b45309', Icon: AlertTriangle },
-    info: { bg: '#EFF6FF', border: '#003DA5', text: '#1e40af', Icon: Info },
+    critico:    { bg: '#FEF2F2', border: '#dc3545', text: '#991b1b', Icon: AlertCircle },
+    advertencia:{ bg: '#FFF8F0', border: '#fd7e14', text: '#b45309', Icon: AlertTriangle },
+    info:       { bg: '#EFF6FF', border: '#003DA5', text: '#1e40af', Icon: Info },
   };
-
   return (
     <div className="flex flex-col gap-2">
       {alertas.map((a, i) => {
         const { bg, border, text, Icon } = cfg[a.nivel];
         return (
-          <div
-            key={i}
-            className="flex items-start gap-3 rounded-xl px-4 py-3"
-            style={{ backgroundColor: bg, borderLeft: `4px solid ${border}` }}
-          >
+          <div key={i} className="flex items-start gap-3 rounded-xl px-4 py-3"
+            style={{ backgroundColor: bg, borderLeft: `4px solid ${border}` }}>
             <Icon size={15} style={{ color: border }} className="mt-0.5 flex-shrink-0" />
             <span className="text-sm font-medium" style={{ color: text }}>{a.descripcion}</span>
           </div>
@@ -166,19 +142,14 @@ function AlertasSection({ alertas }: { alertas: ChipsAnalysis['alertas'] }) {
 function ProgressBar({ value, color }: { value: number; color: string }) {
   return (
     <div className="h-1 bg-gray-200 rounded-full overflow-hidden w-full">
-      <div
-        className="h-full rounded-full"
-        style={{ width: `${Math.min(Math.max(value, 0), 100)}%`, backgroundColor: color }}
-      />
+      <div className="h-full rounded-full"
+        style={{ width: `${Math.min(Math.max(value, 0), 100)}%`, backgroundColor: color }} />
     </div>
   );
 }
 
-// ── Efectividad Table ─────────────────────────────────────────────────────────
-
 function EfectividadTable({ efectividad }: { efectividad: EfectividadRow[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
   function toggle(nombre: string) {
     setExpanded(prev => {
       const next = new Set(prev);
@@ -186,11 +157,7 @@ function EfectividadTable({ efectividad }: { efectividad: EfectividadRow[] }) {
       return next;
     });
   }
-
-  if (!efectividad.length) {
-    return <div className="text-center text-gray-400 py-8 text-sm">Sin datos de efectividad</div>;
-  }
-
+  if (!efectividad.length) return <div className="text-center text-gray-400 py-8 text-sm">Sin datos de efectividad</div>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm min-w-[760px]">
@@ -213,11 +180,9 @@ function EfectividadTable({ efectividad }: { efectividad: EfectividadRow[] }) {
             const rColor = rendColor(e.promChipsPorComercio);
             return (
               <>
-                <tr
-                  key={e.nombre}
+                <tr key={e.nombre}
                   className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50/40 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
-                  onClick={() => toggle(e.nombre)}
-                >
+                  onClick={() => toggle(e.nombre)}>
                   <td className="px-3 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
                   <td className="px-3 py-2.5 font-medium text-gray-800">{e.nombre}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{e.diasTrabajados}</td>
@@ -226,16 +191,11 @@ function EfectividadTable({ efectividad }: { efectividad: EfectividadRow[] }) {
                   <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmt1(e.promPdVPorDia)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums font-semibold" style={{ color: rColor }}>{fmt1(e.promChipsPorComercio)}</td>
                   <td className="px-3 py-2.5 text-center">
-                    <span
-                      className="inline-block px-2.5 py-0.5 rounded-full text-white text-xs font-semibold"
-                      style={{ backgroundColor: rColor }}
-                    >
+                    <span className="inline-block px-2.5 py-0.5 rounded-full text-white text-xs font-semibold" style={{ backgroundColor: rColor }}>
                       {rendLabel(e.promChipsPorComercio)}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-gray-400">
-                    {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  </td>
+                  <td className="px-3 py-2.5 text-gray-400">{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
                 </tr>
                 {isOpen && (
                   <tr key={`${e.nombre}-detail`} className="bg-blue-50/20">
@@ -277,19 +237,13 @@ function EfectividadTable({ efectividad }: { efectividad: EfectividadRow[] }) {
   );
 }
 
-// ── Chiperos Table ────────────────────────────────────────────────────────────
-
 function ChiperosTable({ chiperos }: { chiperos: ChiperoRow[] }) {
-  if (!chiperos.length) {
-    return <div className="text-center text-gray-400 py-8 text-sm">Sin datos de distribuidores</div>;
-  }
-
+  if (!chiperos.length) return <div className="text-center text-gray-400 py-8 text-sm">Sin datos de distribuidores</div>;
   const totalRow = {
     total: chiperos.reduce((s, c) => s + c.total, 0),
     enTransito: chiperos.reduce((s, c) => s + c.enTransito, 0),
     enPdV: chiperos.reduce((s, c) => s + c.enPdV, 0),
   };
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm min-w-[700px]">
@@ -308,10 +262,7 @@ function ChiperosTable({ chiperos }: { chiperos: ChiperoRow[] }) {
           {chiperos.map((c, i) => {
             const color = pctColor(c.pctColocado);
             return (
-              <tr
-                key={c.nombre}
-                className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
-              >
+              <tr key={c.nombre} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
                 <td className="px-3 py-2.5 text-center text-gray-400 text-xs">{i + 1}</td>
                 <td className="px-3 py-2.5 font-medium text-gray-800">{c.nombre}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{c.total.toLocaleString()}</td>
@@ -319,26 +270,20 @@ function ChiperosTable({ chiperos }: { chiperos: ChiperoRow[] }) {
                 <td className="px-3 py-2.5 text-right tabular-nums text-green-700 font-medium">{c.enPdV.toLocaleString()}</td>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <ProgressBar value={c.pctColocado} color={color} />
-                    </div>
+                    <div className="flex-1"><ProgressBar value={c.pctColocado} color={color} /></div>
                     <span className="text-xs font-semibold tabular-nums w-11 text-right" style={{ color }}>
                       {fmt1(c.pctColocado)}%
                     </span>
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-center">
-                  <span
-                    className="inline-block px-2.5 py-0.5 rounded-full text-white text-xs font-semibold"
-                    style={{ backgroundColor: color }}
-                  >
+                  <span className="inline-block px-2.5 py-0.5 rounded-full text-white text-xs font-semibold" style={{ backgroundColor: color }}>
                     {pctLabel(c.pctColocado)}
                   </span>
                 </td>
               </tr>
             );
           })}
-          {/* Totals row */}
           <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold">
             <td className="px-3 py-2.5"></td>
             <td className="px-3 py-2.5 text-gray-700">TOTAL</td>
@@ -357,18 +302,17 @@ function ChiperosTable({ chiperos }: { chiperos: ChiperoRow[] }) {
 // ── Main Module ───────────────────────────────────────────────────────────────
 
 export default function ChipsModule() {
+  const [moduleTab, setModuleTab] = useState<'prepagos' | 'pdv'>('prepagos');
   const [stage, setStage] = useState<Stage>('upload');
   const [data, setData] = useState<ChipsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [empresaTab, setEmpresaTab] = useState('Todas');
-  const [moduleTab, setModuleTab] = useState<'prepagos' | 'pdv'>('prepagos');
 
   const analysis = useMemo(
     () => (data ? analyzeChips(data.rows, empresaTab) : null),
     [data, empresaTab],
   );
 
-  // Tab counts: total chips per empresa
   const tabCounts = useMemo<Record<string, number>>(() => {
     if (!data) return {};
     const counts: Record<string, number> = { Todas: data.totalOK };
@@ -397,202 +341,141 @@ export default function ChipsModule() {
     setStage('upload');
   }
 
-  // ── Module tab bar ──────────────────────────────────────────────────────────
-  const moduleTabBar = (
-    <div style={{ display: 'flex', gap: 0, background: '#fff', borderBottom: '2px solid #dee2e6', padding: '0 24px', width: '100%', boxSizing: 'border-box', flexWrap: 'wrap' }}>
-      {(['prepagos', 'pdv'] as const).map(t => {
-        const labels = { prepagos: 'CHIP — DESDE PREPAGOS', pdv: 'CHIP — PUNTO DE VENTA' };
-        const active = moduleTab === t;
-        return (
-          <button
-            key={t}
-            onClick={() => setModuleTab(t)}
-            style={{
-              padding: '12px 20px',
-              border: 'none',
-              borderBottom: active ? '3px solid #003DA5' : '3px solid transparent',
-              background: 'none',
-              fontWeight: active ? 700 : 500,
-              color: active ? '#003DA5' : '#6c757d',
-              cursor: 'pointer',
-              fontSize: 13,
-              letterSpacing: 0.5,
-              transition: 'color 0.15s',
-            }}
-          >
-            {labels[t]}
-          </button>
-        );
-      })}
+  const showDesglose = empresaTab === 'Todas';
+
+  // Header subtitle and actions depend on active tab + stage
+  const subtitle = moduleTab === 'pdv'
+    ? 'Punto de Venta'
+    : (stage === 'analysis' && data
+        ? `${data.totalOK.toLocaleString()} chips OK · ${data.empresas.length} empresa${data.empresas.length !== 1 ? 's' : ''} · ${data.distribuidores.length} distribuidor${data.distribuidores.length !== 1 ? 'es' : ''}`
+        : 'Gestión y reportes de chips SIM');
+
+  const headerActions = (moduleTab === 'prepagos' && stage === 'analysis' && data && analysis) ? (
+    <div className="flex gap-2">
+      <button onClick={() => exportChipsExcel(data, analysis, empresaTab)}
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors">
+        <FileSpreadsheet size={15} /> Excel
+      </button>
+      <button onClick={() => exportChipsPDF(data, analysis, empresaTab)}
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
+        <Download size={15} /> PDF
+      </button>
+      <button onClick={handleReset}
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+        <RefreshCw size={15} /> Nuevo archivo
+      </button>
     </div>
-  );
-
-  // ── Prepagos content ────────────────────────────────────────────────────────
-  const prepagosContent = (() => {
-    if (stage !== 'analysis') {
-      return (
-        <div className="flex flex-col min-h-screen">
-          <Header title="Chips" subtitle="Gestión y reportes de chips SIM" />
-          <div className="flex-1 flex flex-col items-center justify-center p-8">
-            <div className="w-full max-w-xl">
-              {stage === 'loading' ? (
-                <div className="flex flex-col items-center gap-4 py-16">
-                  <div className="w-12 h-12 border-4 border-[#003DA5] border-t-transparent rounded-full animate-spin" />
-                  <span className="text-gray-500 font-medium">Procesando archivo CSV...</span>
-                  <span className="text-xs text-gray-400">Esto puede tardar unos segundos con archivos grandes</span>
-                </div>
-              ) : (
-                <>
-                  <div className="text-center mb-6">
-                    <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
-                      <Upload size={28} className="text-[#003DA5]" />
-                    </div>
-                    <h2 className="text-xl font-bold text-gray-800">Cargar archivo de chips</h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      CSV con separador <code className="bg-gray-100 px-1 rounded">{';'}</code>, encoding latin1
-                    </p>
-                  </div>
-                  <FileUploader
-                    onFile={handleFile}
-                    accept=".csv"
-                    label="Arrastrá tu archivo CSV aquí"
-                    sublabel="o hacé clic para seleccionarlo"
-                  />
-                  {error && (
-                    <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center gap-2">
-                      <AlertTriangle size={16} className="flex-shrink-0" />
-                      {error}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (!data || !analysis) return null;
-
-    const subtitle = `${data.totalOK.toLocaleString()} chips OK · ${data.empresas.length} empresa${data.empresas.length !== 1 ? 's' : ''} · ${data.distribuidores.length} distribuidor${data.distribuidores.length !== 1 ? 'es' : ''}`;
-    const showDesglose = empresaTab === 'Todas';
-
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header
-          title="Chips"
-          subtitle={subtitle}
-          actions={
-            <div className="flex gap-2">
-              <button
-                onClick={() => exportChipsExcel(data, analysis, empresaTab)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                <FileSpreadsheet size={15} /> Excel
-              </button>
-              <button
-                onClick={() => exportChipsPDF(data, analysis, empresaTab)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                <Download size={15} /> PDF
-              </button>
-              <button
-                onClick={handleReset}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
-              >
-                <RefreshCw size={15} /> Nuevo archivo
-              </button>
-            </div>
-          }
-        />
-
-        <div className="flex-1 p-6 space-y-6">
-          {/* Empresa tabs */}
-          <EmpresaTabs
-            empresas={data.empresas}
-            tabCounts={tabCounts}
-            active={empresaTab}
-            onChange={setEmpresaTab}
-          />
-
-          {/* Alertas */}
-          {analysis.alertas.length > 0 && (
-            <AlertasSection alertas={analysis.alertas} />
-          )}
-
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard
-              label="Chips Activos"
-              value={analysis.chipsActivos.total}
-              sub="Con fecha asig. distribuidor"
-              desglose={analysis.chipsActivos.porEmpresa}
-              borderColor="#28a745"
-              icon={<BarChart2 size={20} />}
-              showDesglose={showDesglose}
-            />
-            <KpiCard
-              label="Stock en Sistema"
-              value={analysis.stockSistema.total}
-              sub="Sin distribuidor asignado"
-              desglose={analysis.stockSistema.porEmpresa}
-              borderColor="#fd7e14"
-              icon={<Package size={20} />}
-              showDesglose={showDesglose}
-            />
-            <KpiCard
-              label="Stock en Tránsito"
-              value={analysis.stockTransito.total}
-              sub="Con distribuidor, sin PdV"
-              desglose={analysis.stockTransito.porEmpresa}
-              borderColor="#003DA5"
-              icon={<Truck size={20} />}
-              showDesglose={showDesglose}
-            />
-            <KpiCard
-              label="Efectividad Promedio"
-              value={`${fmt1(analysis.promEquipoChipsPorComercio)} chips/comercio`}
-              sub="promedio de todos los distribuidores"
-              borderColor="#6f42c1"
-              icon={<Store size={20} />}
-            />
-          </div>
-
-          {/* Sección 1: Efectividad de visita */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                <Truck size={18} className="text-[#003DA5]" />
-                Efectividad de visita por distribuidor
-              </h2>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Click en una fila para ver el detalle por día · Ordenado por chips total
-              </p>
-            </div>
-            <EfectividadTable efectividad={analysis.efectividad} />
-          </div>
-
-          {/* Sección 2: Stock por chipero */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                <Store size={18} className="text-[#003DA5]" />
-                Stock por distribuidor ({analysis.chiperos.length})
-              </h2>
-              <p className="text-xs text-gray-400 mt-0.5">Ordenado por total desc</p>
-            </div>
-            <ChiperosTable chiperos={analysis.chiperos} />
-          </div>
-        </div>
-      </div>
-    );
-  })();
+  ) : null;
 
   return (
-    <div className="flex flex-col min-h-screen">
-      {moduleTabBar}
-      {moduleTab === 'prepagos' && prepagosContent}
-      {moduleTab === 'pdv' && <PdvModule />}
+    // Same root pattern as VentasModule: flex flex-col h-full
+    <div className="flex flex-col h-full">
+
+      <Header title="Chips" subtitle={subtitle} actions={headerActions} />
+
+      {/* Module tab bar — between Header and scrollable content, never scrolls */}
+      <div className="shrink-0 bg-white border-b border-gray-200 flex px-6">
+        {(['prepagos', 'pdv'] as const).map(t => {
+          const labels = { prepagos: 'CHIP — DESDE PREPAGOS', pdv: 'CHIP — PUNTO DE VENTA' };
+          const active = moduleTab === t;
+          return (
+            <button key={t} onClick={() => setModuleTab(t)}
+              className={`px-5 py-3 text-xs font-bold tracking-wide border-b-2 transition-colors ${
+                active ? 'border-[#003DA5] text-[#003DA5]' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}>
+              {labels[t]}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Single scrollable content area — same as VentasModule's flex-1 overflow-y-auto p-6 */}
+      <div className="flex-1 overflow-y-auto p-6">
+
+        {/* ── PREPAGOS TAB ── */}
+        {moduleTab === 'prepagos' && (
+          <>
+            {stage === 'upload' && (
+              <div className="max-w-xl mx-auto">
+                <div className="text-center mb-6">
+                  <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
+                    <Upload size={28} className="text-[#003DA5]" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-800">Cargar archivo de chips</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    CSV con separador <code className="bg-gray-100 px-1 rounded">{';'}</code>, encoding latin1
+                  </p>
+                </div>
+                <FileUploader onFile={handleFile} accept=".csv" label="Arrastrá tu archivo CSV aquí" sublabel="o hacé clic para seleccionarlo" />
+                {error && (
+                  <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+                    <AlertTriangle size={16} className="flex-shrink-0" /> {error}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {stage === 'loading' && (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="w-12 h-12 border-4 border-[#003DA5] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <p className="text-gray-500 font-medium">Procesando archivo CSV...</p>
+                  <p className="text-xs text-gray-400 mt-1">Esto puede tardar unos segundos</p>
+                </div>
+              </div>
+            )}
+
+            {stage === 'analysis' && data && analysis && (
+              <div className="space-y-6">
+                <EmpresaTabs empresas={data.empresas} tabCounts={tabCounts} active={empresaTab} onChange={setEmpresaTab} />
+
+                {analysis.alertas.length > 0 && <AlertasSection alertas={analysis.alertas} />}
+
+                {/* KPI Cards — same grid as VentasModule */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <KpiCard label="Chips Activos" value={analysis.chipsActivos.total}
+                    sub="Con fecha asig. distribuidor" desglose={analysis.chipsActivos.porEmpresa}
+                    borderColor="#28a745" icon={<BarChart2 size={20} />} showDesglose={showDesglose} />
+                  <KpiCard label="Stock en Sistema" value={analysis.stockSistema.total}
+                    sub="Sin distribuidor asignado" desglose={analysis.stockSistema.porEmpresa}
+                    borderColor="#fd7e14" icon={<Package size={20} />} showDesglose={showDesglose} />
+                  <KpiCard label="Stock en Tránsito" value={analysis.stockTransito.total}
+                    sub="Con distribuidor, sin PdV" desglose={analysis.stockTransito.porEmpresa}
+                    borderColor="#003DA5" icon={<Truck size={20} />} showDesglose={showDesglose} />
+                  <KpiCard label="Efectividad Promedio" value={`${fmt1(analysis.promEquipoChipsPorComercio)} chips/comercio`}
+                    sub="promedio de todos los distribuidores" borderColor="#6f42c1" icon={<Store size={20} />} />
+                </div>
+
+                {/* Efectividad de visita */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-100">
+                    <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                      <Truck size={18} className="text-[#003DA5]" /> Efectividad de visita por distribuidor
+                    </h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Click en una fila para ver el detalle por día · Ordenado por chips total</p>
+                  </div>
+                  <EfectividadTable efectividad={analysis.efectividad} />
+                </div>
+
+                {/* Stock por chipero */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-100">
+                    <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                      <Store size={18} className="text-[#003DA5]" /> Stock por distribuidor ({analysis.chiperos.length})
+                    </h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Ordenado por total desc</p>
+                  </div>
+                  <ChiperosTable chiperos={analysis.chiperos} />
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── PDV TAB — PdvModule renders its own content here ── */}
+        {moduleTab === 'pdv' && <PdvModule />}
+
+      </div>
     </div>
   );
 }

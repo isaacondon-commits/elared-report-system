@@ -1,4 +1,11 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import {
+  MapPin, Clock, AlertTriangle, TrendingUp,
+  FileSpreadsheet, Download, RefreshCw,
+  ChevronDown, ChevronRight, Upload, Loader2,
+} from 'lucide-react';
+import KPICard from '../../../components/KPICard';
+import FileUploader from '../../../components/FileUploader';
 import { parsePdv, type PdvData } from './pdvParser';
 import {
   getDistribucionChiperos, getEstadosPdv,
@@ -11,26 +18,28 @@ import { exportPdvExcel, exportPdvPDF, type PdvExportData } from './PdvExport';
 type Stage = 'upload' | 'loading' | 'analysis';
 type PeriodKey = 'todo' | 'u30' | 'u60' | 'estemes' | 'mesant' | 'custom';
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function getRange(key: PeriodKey, desde: string, hasta: string): { desde?: Date; hasta?: Date } {
   const hoy = new Date();
   if (key === 'todo') return {};
   if (key === 'u30') { const d = new Date(hoy); d.setDate(d.getDate() - 30); return { desde: d, hasta: hoy }; }
   if (key === 'u60') { const d = new Date(hoy); d.setDate(d.getDate() - 60); return { desde: d, hasta: hoy }; }
-  if (key === 'estemes') {
-    return { desde: new Date(hoy.getFullYear(), hoy.getMonth(), 1), hasta: hoy };
-  }
+  if (key === 'estemes') return { desde: new Date(hoy.getFullYear(), hoy.getMonth(), 1), hasta: hoy };
   if (key === 'mesant') {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-    const h = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
-    return { desde: d, hasta: h };
+    return { desde: new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1), hasta: new Date(hoy.getFullYear(), hoy.getMonth(), 0) };
   }
   if (key === 'custom') {
-    return {
-      desde: desde ? new Date(desde) : undefined,
-      hasta: hasta ? new Date(hasta) : undefined,
-    };
+    return { desde: desde ? new Date(desde) : undefined, hasta: hasta ? new Date(hasta) : undefined };
   }
   return {};
+}
+
+function formatMes(mes: string): string {
+  if (!mes) return '';
+  const [y, m] = mes.split('-');
+  const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  return `${meses[parseInt(m) - 1] ?? m} ${y}`;
 }
 
 const ESTADO_COLORS: Record<string, string> = {
@@ -42,66 +51,80 @@ const ESTADO_COLORS: Record<string, string> = {
   'Visita de autor suprimida': '#6c757d',
 };
 
-function estadoBadge(estado: string) {
+function EstadoBadge({ estado }: { estado: string }) {
   const color = ESTADO_COLORS[estado] ?? '#6c757d';
   return (
-    <span style={{ background: color, color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-      {estado}
-    </span>
+    <span className="inline-block px-2 py-0.5 rounded text-white text-xs font-semibold whitespace-nowrap"
+      style={{ background: color }}>{estado}</span>
   );
 }
 
-function inacBadge(dias: number) {
-  if (dias >= 180) return <span style={{ background: '#7b0000', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Crítico</span>;
-  if (dias >= 90) return <span style={{ background: '#E3000F', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>{dias}d</span>;
-  return <span style={{ background: '#fd7e14', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>{dias}d</span>;
+function InacBadge({ dias }: { dias: number }) {
+  const [bg, label] =
+    dias >= 180 ? ['#7b0000', 'Crítico'] :
+    dias >= 90  ? ['#E3000F', `${dias}d`] :
+                  ['#fd7e14', `${dias}d`];
+  return <span className="inline-block px-2 py-0.5 rounded text-white text-xs font-bold" style={{ background: bg }}>{label}</span>;
 }
 
-function vencBadge(dias: number) {
-  if (dias <= 7) return <span style={{ background: '#E3000F', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Urgente</span>;
-  if (dias <= 15) return <span style={{ background: '#fd7e14', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Pronto</span>;
-  return <span style={{ background: '#ffc107', color: '#212529', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Atención</span>;
+function VencBadge({ dias }: { dias: number }) {
+  const [bg, label] =
+    dias <= 7  ? ['#E3000F', 'Urgente'] :
+    dias <= 15 ? ['#fd7e14', 'Pronto'] :
+                 ['#ffc107', 'Atención'];
+  const textColor = dias <= 15 ? '#fff' : '#212529';
+  return <span className="inline-block px-2 py-0.5 rounded text-xs font-bold" style={{ background: bg, color: textColor }}>{label}</span>;
 }
 
-function rendBadge(prom: number) {
-  if (prom >= 10) return <span style={{ background: '#28a745', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Alto</span>;
-  if (prom >= 6) return <span style={{ background: '#003DA5', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Normal</span>;
-  return <span style={{ background: '#fd7e14', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Bajo</span>;
+function RendBadge({ prom }: { prom: number }) {
+  const [bg, label] =
+    prom >= 10 ? ['#28a745', 'Alto'] :
+    prom >= 6  ? ['#003DA5', 'Normal'] :
+                 ['#fd7e14', 'Bajo'];
+  return <span className="inline-block px-2 py-0.5 rounded text-white text-xs font-bold" style={{ background: bg }}>{label}</span>;
 }
 
-function KpiCard({ label, value, color, sub }: { label: string; value: number | string; color: string; sub?: string }) {
+// ── Section wrapper — same visual as ChipsModule sections ─────────────────────
+
+function SectionCard({ title, badge, children }: { title: string; badge?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.10)', padding: '18px 22px', borderTop: `4px solid ${color}`, width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-      <div style={{ fontSize: 12, color: '#6c757d', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 800, color }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>{sub}</div>}
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <h2 className="font-semibold text-gray-800">
+          {title}
+          {badge && <span className="ml-2 text-sm font-normal text-gray-400">{badge}</span>}
+        </h2>
+      </div>
+      <div className="p-5">
+        {children}
+      </div>
     </div>
   );
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', padding: '20px 24px' }}>
-      <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700, color: '#003DA5', borderLeft: '4px solid #E3000F', paddingLeft: 10 }}>{title}</h3>
-      {children}
-    </div>
-  );
-}
+// ── Table header / cell style helpers ─────────────────────────────────────────
+
+const TH = 'px-3 py-2.5 text-left text-xs font-semibold text-white bg-[#003DA5] whitespace-nowrap';
+const TD = 'px-3 py-2 text-sm border-b border-gray-100';
 
 function Pagination({ page, total, perPage, onChange }: { page: number; total: number; perPage: number; onChange: (p: number) => void }) {
   const pages = Math.ceil(total / perPage);
   if (pages <= 1) return null;
   return (
-    <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 10, alignItems: 'center', fontSize: 13 }}>
-      <button onClick={() => onChange(Math.max(1, page - 1))} disabled={page === 1} style={{ padding: '3px 10px', border: '1px solid #dee2e6', borderRadius: 4, cursor: 'pointer', background: page === 1 ? '#f8f9fa' : '#fff' }}>‹</button>
-      <span style={{ padding: '3px 8px', color: '#6c757d' }}>{page} / {pages}</span>
-      <button onClick={() => onChange(Math.min(pages, page + 1))} disabled={page === pages} style={{ padding: '3px 10px', border: '1px solid #dee2e6', borderRadius: 4, cursor: 'pointer', background: page === pages ? '#f8f9fa' : '#fff' }}>›</button>
+    <div className="flex items-center justify-end gap-1 mt-3 text-sm">
+      <button onClick={() => onChange(Math.max(1, page - 1))} disabled={page === 1}
+        className="px-3 py-1 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40">‹</button>
+      <span className="px-3 py-1 text-gray-500">{page} / {pages}</span>
+      <button onClick={() => onChange(Math.min(pages, page + 1))} disabled={page === pages}
+        className="px-3 py-1 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40">›</button>
     </div>
   );
 }
 
-const TH: React.CSSProperties = { padding: '8px 10px', background: '#003DA5', color: '#fff', fontSize: 12, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap' };
-const TD: React.CSSProperties = { padding: '7px 10px', fontSize: 13, borderBottom: '1px solid #f0f0f0' };
+// ── Main Component ────────────────────────────────────────────────────────────
+
+// PdvModule renders INSIDE ChipsModule's flex-1 overflow-y-auto p-6 scrollable area.
+// It does NOT have its own outer container — it just returns content.
 
 export default function PdvModule() {
   const [stage, setStage] = useState<Stage>('upload');
@@ -122,47 +145,45 @@ export default function PdvModule() {
   const [expandedRend, setExpandedRend] = useState<Set<string>>(new Set());
 
   const PER_PAGE = 20;
-
-  const hoy = useMemo(() => (data ? new Date() : new Date()), [data]);
-
+  const hoy = useMemo(() => new Date(), []);
   const range = useMemo(() => getRange(periodKey, desdeStr, hastaStr), [periodKey, desdeStr, hastaStr]);
 
   const distribucion = useMemo(() => data ? getDistribucionChiperos(data.rows) : [], [data]);
-  const estados = useMemo(() => data ? getEstadosPdv(data.rows) : [], [data]);
-  const inactividad = useMemo(() => data ? getAlertaInactividad(data.rows, hoy) : null, [data, hoy]);
-  const vencimiento = useMemo(() => data ? getAlertaVencimiento(data.rows, hoy) : null, [data, hoy]);
-  const rendimiento = useMemo(() => data ? getRendimientoChiperos(data.rows) : [], [data]);
+  const estados      = useMemo(() => data ? getEstadosPdv(data.rows) : [], [data]);
+  const inactividad  = useMemo(() => data ? getAlertaInactividad(data.rows, hoy) : null, [data, hoy]);
+  const vencimiento  = useMemo(() => data ? getAlertaVencimiento(data.rows, hoy) : null, [data, hoy]);
+  const rendimiento  = useMemo(() => data ? getRendimientoChiperos(data.rows) : [], [data]);
   const nuevosPuntos = useMemo(() => data ? getNuevosPuntos(data.rows, range.desde, range.hasta) : null, [data, range]);
 
   const nuevosEsteMes = useMemo(() => {
     if (!data) return 0;
     const hoyDate = new Date();
     const mesKey = `${hoyDate.getFullYear()}-${String(hoyDate.getMonth() + 1).padStart(2, '0')}`;
-    const np = getNuevosPuntos(data.rows);
-    return np.porMes.find(m => m.mes === mesKey)?.cantidad ?? 0;
+    return getNuevosPuntos(data.rows).porMes.find(m => m.mes === mesKey)?.cantidad ?? 0;
   }, [data]);
 
   const inacFiltered = useMemo(() => {
     if (!inactividad) return [];
     return inactividad.puntos.filter(p => {
-      const matchSearch = !inacSearch || p.nombre.toLowerCase().includes(inacSearch.toLowerCase()) || p.distribuidor.toLowerCase().includes(inacSearch.toLowerCase());
-      const matchDist = inacDist === 'Todos' || p.distribuidor === inacDist;
-      return matchSearch && matchDist;
+      const matchSearch = !inacSearch
+        || p.nombre.toLowerCase().includes(inacSearch.toLowerCase())
+        || p.distribuidor.toLowerCase().includes(inacSearch.toLowerCase());
+      return matchSearch && (inacDist === 'Todos' || p.distribuidor === inacDist);
     });
   }, [inactividad, inacSearch, inacDist]);
 
   const inacPaged = useMemo(() => inacFiltered.slice((inacPage - 1) * PER_PAGE, inacPage * PER_PAGE), [inacFiltered, inacPage]);
-  const vencList = useMemo(() => vencimiento ? (vencTab === 'porVencer' ? vencimiento.porVencer.puntos : vencimiento.yaVencidos.puntos) : [], [vencimiento, vencTab]);
+  const vencList  = useMemo(() => vencimiento ? (vencTab === 'porVencer' ? vencimiento.porVencer.puntos : vencimiento.yaVencidos.puntos) : [], [vencimiento, vencTab]);
   const vencPaged = useMemo(() => vencList.slice((vencPage - 1) * PER_PAGE, vencPage * PER_PAGE), [vencList, vencPage]);
 
-  const inacTop10 = useMemo(() => inactividad?.porDistribuidor.slice(0, 10) ?? [], [inactividad]);
+  const inacTop10    = useMemo(() => inactividad?.porDistribuidor.slice(0, 10) ?? [], [inactividad]);
   const inacTop10Max = inacTop10[0]?.cantidad ?? 1;
 
-  const npMax = useMemo(() => Math.max(1, ...(nuevosPuntos?.porMes.map(m => m.cantidad) ?? [0])), [nuevosPuntos]);
   const npMeses = useMemo(() => nuevosPuntos?.porMes ?? [], [nuevosPuntos]);
+  const npMax   = useMemo(() => Math.max(1, ...npMeses.map(m => m.cantidad)), [npMeses]);
 
   const exportData = useMemo((): PdvExportData | null => {
-    if (!distribucion || !estados || !inactividad || !vencimiento || !rendimiento || !nuevosPuntos) return null;
+    if (!inactividad || !vencimiento || !nuevosPuntos) return null;
     return { distribucion, estados, inactividad, vencimiento, rendimiento, nuevosPuntos };
   }, [distribucion, estados, inactividad, vencimiento, rendimiento, nuevosPuntos]);
 
@@ -179,122 +200,134 @@ export default function PdvModule() {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+  function handleReset() {
+    setData(null); setStage('upload'); setError(null);
+    setInacSearch(''); setInacDist('Todos'); setInacPage(1);
+    setVencPage(1); setExpandedRend(new Set()); setPeriodKey('todo');
+  }
 
-  const handleReset = () => {
-    setData(null);
-    setStage('upload');
-    setError(null);
-    setInacSearch('');
-    setInacDist('Todos');
-    setInacPage(1);
-    setVencPage(1);
-    setExpandedRend(new Set());
-    setPeriodKey('todo');
-  };
+  // ── Upload stage ──────────────────────────────────────────────────────────
 
   if (stage === 'upload') {
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <div
-          onDrop={handleDrop}
-          onDragOver={e => e.preventDefault()}
-          style={{ border: '2px dashed #003DA5', borderRadius: 12, padding: '48px 32px', background: '#f0f4ff', cursor: 'pointer', maxWidth: 480, margin: '0 auto' }}
-          onClick={() => document.getElementById('pdv-file-input')?.click()}
-        >
-          <div style={{ fontSize: 42, marginBottom: 12 }}>📋</div>
-          <div style={{ fontWeight: 700, fontSize: 16, color: '#003DA5', marginBottom: 6 }}>Cargar CSV de Puntos de Venta</div>
-          <div style={{ fontSize: 13, color: '#6c757d' }}>Arrastrá el archivo aquí o hacé clic para seleccionar</div>
-          <div style={{ fontSize: 11, color: '#aaa', marginTop: 8 }}>CSV separado por `;`, codificación latin1/windows-1252</div>
+      <div className="max-w-xl mx-auto">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
+            <Upload size={28} className="text-[#003DA5]" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800">Cargar CSV de Puntos de Venta</h2>
+          <p className="text-sm text-gray-500 mt-1">CSV separado por <code className="bg-gray-100 px-1 rounded">;</code>, codificación latin1/windows-1252</p>
         </div>
-        <input id="pdv-file-input" type="file" accept=".csv" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-        {error && <div style={{ marginTop: 16, color: '#E3000F', fontWeight: 600 }}>{error}</div>}
+        <FileUploader onFile={handleFile} accept=".csv" label="Arrastrá tu archivo CSV aquí" sublabel="o hacé clic para seleccionarlo" />
+        {error && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+            <AlertTriangle size={16} className="flex-shrink-0" /> {error}
+          </div>
+        )}
       </div>
     );
   }
 
+  // ── Loading stage ─────────────────────────────────────────────────────────
+
   if (stage === 'loading') {
     return (
-      <div style={{ padding: 60, textAlign: 'center' }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
-        <div style={{ fontWeight: 600, color: '#003DA5' }}>Procesando archivo...</div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Loader2 size={36} className="animate-spin text-[#003DA5] mx-auto mb-3" />
+          <p className="text-gray-500">Procesando archivo...</p>
+        </div>
       </div>
     );
   }
+
+  // ── Analysis stage ────────────────────────────────────────────────────────
 
   if (!data || !inactividad || !vencimiento || !nuevosPuntos || !exportData) return null;
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    // Same content pattern as VentasModule analysis: space-y-6 div with sections
     <div className="space-y-6">
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+
+      {/* Action bar with export buttons — mirrors VentasModule's controls bar */}
+      <div className="flex items-center justify-between flex-wrap gap-3 bg-white rounded-xl border border-gray-200 px-5 py-3">
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#003DA5' }}>Punto de Venta</div>
-          <div style={{ fontSize: 12, color: '#6c757d' }}>{data.total.toLocaleString()} puntos cargados · {new Date(data.fechaCarga).toLocaleDateString('es-UY')}</div>
+          <span className="font-semibold text-gray-800">Punto de Venta</span>
+          <span className="ml-3 text-sm text-gray-400">
+            {data.total.toLocaleString()} puntos · {data.distribuidores.length} distribuidores · cargado {new Date(data.fechaCarga).toLocaleDateString('es-UY')}
+          </span>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => exportPdvExcel(data, exportData)} style={{ padding: '7px 14px', background: '#1a7a4a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Excel</button>
-          <button onClick={() => exportPdvPDF(data, exportData)} style={{ padding: '7px 14px', background: '#E3000F', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>PDF</button>
-          <button onClick={handleReset} style={{ padding: '7px 14px', background: '#f8f9fa', color: '#495057', border: '1px solid #dee2e6', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Cambiar archivo</button>
+        <div className="flex gap-2">
+          <button onClick={() => exportPdvExcel(data, exportData)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors">
+            <FileSpreadsheet size={15} /> Excel
+          </button>
+          <button onClick={() => exportPdvPDF(data, exportData)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
+            <Download size={15} /> PDF
+          </button>
+          <button onClick={handleReset}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+            <RefreshCw size={15} /> Cambiar archivo
+          </button>
         </div>
       </div>
 
       {/* Period filter bar */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', background: '#fff', padding: '12px 16px', borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#6c757d', marginRight: 6 }}>PERÍODO:</span>
+      <div className="flex gap-2 flex-wrap items-center bg-white rounded-xl border border-gray-200 px-5 py-3">
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">Período:</span>
         {(['todo', 'u30', 'u60', 'estemes', 'mesant', 'custom'] as PeriodKey[]).map(k => {
           const labels: Record<PeriodKey, string> = { todo: 'Todo', u30: 'Últimos 30d', u60: 'Últimos 60d', estemes: 'Este mes', mesant: 'Mes anterior', custom: 'Personalizado' };
           const active = periodKey === k;
           return (
             <button key={k} onClick={() => { setPeriodKey(k); setInacPage(1); setVencPage(1); }}
-              style={{ padding: '5px 12px', borderRadius: 5, border: active ? 'none' : '1px solid #dee2e6', background: active ? '#003DA5' : '#fff', color: active ? '#fff' : '#495057', fontWeight: active ? 700 : 400, fontSize: 13, cursor: 'pointer' }}>
+              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                active ? 'bg-[#003DA5] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}>
               {labels[k]}
             </button>
           );
         })}
         {periodKey === 'custom' && (
-          <>
-            <input type="date" value={desdeStr} onChange={e => setDesdeStr(e.target.value)} style={{ padding: '4px 8px', border: '1px solid #dee2e6', borderRadius: 5, fontSize: 13 }} />
-            <span style={{ fontSize: 13, color: '#6c757d' }}>—</span>
-            <input type="date" value={hastaStr} onChange={e => setHastaStr(e.target.value)} style={{ padding: '4px 8px', border: '1px solid #dee2e6', borderRadius: 5, fontSize: 13 }} />
-          </>
+          <div className="flex items-center gap-2">
+            <input type="date" value={desdeStr} onChange={e => setDesdeStr(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1 text-sm" />
+            <span className="text-gray-400">—</span>
+            <input type="date" value={hastaStr} onChange={e => setHastaStr(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1 text-sm" />
+          </div>
         )}
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total PdV" value={data.total} color="#003DA5" sub={`${data.distribuidores.length} distribuidores`} />
-        <KpiCard label="Inactivos +60d" value={inactividad.total} color="#E3000F" sub="Sin visita reciente" />
-        <KpiCard label="Chips por vencer 30d" value={vencimiento.porVencer.total} color="#fd7e14" sub={`Ya vencidos: ${vencimiento.yaVencidos.total}`} />
-        <KpiCard label="Nuevos este mes" value={nuevosEsteMes} color="#28a745" sub={`${nuevosPuntos.totalEnRango} en rango seleccionado`} />
+      {/* KPI Cards — exact same grid pattern as VentasModule */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KPICard label="Total PdV"           value={data.total.toLocaleString()}               icon={MapPin}        color="blue"  sub={`${data.distribuidores.length} distribuidores`} />
+        <KPICard label="Inactivos +60d"      value={inactividad.total.toLocaleString()}         icon={Clock}         color="red"   sub="Sin visita reciente" />
+        <KPICard label="Chips por vencer 30d" value={vencimiento.porVencer.total.toLocaleString()} icon={AlertTriangle} color="amber" sub={`Ya vencidos: ${vencimiento.yaVencidos.total}`} />
+        <KPICard label="Nuevos este mes"     value={nuevosEsteMes.toLocaleString()}              icon={TrendingUp}    color="green" sub={`${nuevosPuntos.totalEnRango} en rango`} />
       </div>
 
       {/* Section 1: Distribución por chipero */}
       <SectionCard title="Distribución por Chipero">
-        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6 }}>
-          <table style={{ width: '100%', minWidth: 420, borderCollapse: 'collapse' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[400px]">
             <thead>
               <tr>
-                <th style={TH}>Distribuidor</th>
-                <th style={{ ...TH, width: 100 }}>Puntos</th>
-                <th style={{ ...TH, width: 70 }}>%</th>
-                <th style={TH}></th>
+                <th className={TH}>Distribuidor</th>
+                <th className={`${TH} text-right w-24`}>Puntos</th>
+                <th className={`${TH} text-right w-16`}>%</th>
+                <th className={`${TH} min-w-[120px]`}></th>
               </tr>
             </thead>
             <tbody>
               {distribucion.map((d, i) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                  <td style={TD}>{d.distribuidor}</td>
-                  <td style={{ ...TD, fontWeight: 700 }}>{d.cantidad.toLocaleString()}</td>
-                  <td style={TD}>{d.porcentaje.toFixed(1)}%</td>
-                  <td style={{ ...TD, width: 200 }}>
-                    <div style={{ background: '#e9ecef', borderRadius: 4, height: 10 }}>
-                      <div style={{ background: '#003DA5', width: `${d.porcentaje}%`, height: 10, borderRadius: 4 }} />
+                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                  <td className={TD}>{d.distribuidor}</td>
+                  <td className={`${TD} text-right font-semibold tabular-nums`}>{d.cantidad.toLocaleString()}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{d.porcentaje.toFixed(1)}%</td>
+                  <td className={TD}>
+                    <div className="h-2 bg-gray-200 rounded-full">
+                      <div className="h-2 bg-[#003DA5] rounded-full" style={{ width: `${d.porcentaje}%` }} />
                     </div>
                   </td>
                 </tr>
@@ -306,21 +339,21 @@ export default function PdvModule() {
 
       {/* Section 2: Estados de visita */}
       <SectionCard title="Estados de Visita">
-        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6 }}>
-          <table style={{ width: '100%', minWidth: 320, borderCollapse: 'collapse' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[320px]">
             <thead>
               <tr>
-                <th style={TH}>Estado</th>
-                <th style={{ ...TH, width: 100 }}>Cantidad</th>
-                <th style={{ ...TH, width: 70 }}>%</th>
+                <th className={TH}>Estado</th>
+                <th className={`${TH} text-right w-24`}>Cantidad</th>
+                <th className={`${TH} text-right w-16`}>%</th>
               </tr>
             </thead>
             <tbody>
               {estados.map((e, i) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                  <td style={TD}>{estadoBadge(e.estado)}</td>
-                  <td style={{ ...TD, fontWeight: 700 }}>{e.cantidad.toLocaleString()}</td>
-                  <td style={TD}>{e.porcentaje.toFixed(1)}%</td>
+                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                  <td className={TD}><EstadoBadge estado={e.estado} /></td>
+                  <td className={`${TD} text-right font-semibold tabular-nums`}>{e.cantidad.toLocaleString()}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{e.porcentaje.toFixed(1)}%</td>
                 </tr>
               ))}
             </tbody>
@@ -329,64 +362,59 @@ export default function PdvModule() {
       </SectionCard>
 
       {/* Section 3: Alerta inactividad */}
-      <SectionCard title={`Alerta Inactividad — ${inactividad.total.toLocaleString()} puntos sin visita +60 días`}>
+      <SectionCard title="Alerta Inactividad" badge={`${inactividad.total.toLocaleString()} puntos sin visita +60 días`}>
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            placeholder="Buscar punto de venta o distribuidor..."
-            value={inacSearch}
-            onChange={e => { setInacSearch(e.target.value); setInacPage(1); }}
-            style={{ flex: 1, minWidth: 200, padding: '6px 10px', border: '1px solid #dee2e6', borderRadius: 5, fontSize: 13 }}
-          />
+        <div className="flex gap-3 mb-4 flex-wrap">
+          <input type="text" placeholder="Buscar punto o distribuidor..."
+            value={inacSearch} onChange={e => { setInacSearch(e.target.value); setInacPage(1); }}
+            className="flex-1 min-w-48 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5]" />
           <select value={inacDist} onChange={e => { setInacDist(e.target.value); setInacPage(1); }}
-            style={{ padding: '6px 10px', border: '1px solid #dee2e6', borderRadius: 5, fontSize: 13 }}>
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5]">
             <option>Todos</option>
             {data.distribuidores.map(d => <option key={d}>{d}</option>)}
           </select>
         </div>
 
-        {/* Table */}
-        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6, marginBottom: 12 }}>
-          <table style={{ width: '100%', minWidth: 540, borderCollapse: 'collapse' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[540px]">
             <thead>
               <tr>
-                <th style={TH}>Punto de Venta</th>
-                <th style={TH}>Distribuidor</th>
-                <th style={TH}>Departamento</th>
-                <th style={TH}>Última Visita</th>
-                <th style={{ ...TH, width: 90 }}>Inactividad</th>
+                <th className={TH}>Punto de Venta</th>
+                <th className={TH}>Distribuidor</th>
+                <th className={TH}>Departamento</th>
+                <th className={TH}>Última Visita</th>
+                <th className={`${TH} w-24`}>Inactividad</th>
               </tr>
             </thead>
             <tbody>
               {inacPaged.map((p: PdvInactivo, i: number) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                  <td style={TD}>{p.nombre}</td>
-                  <td style={TD}>{p.distribuidor}</td>
-                  <td style={TD}>{p.departamento}</td>
-                  <td style={TD}>{p.visitadoPorDistribuidor ?? 'Nunca'}</td>
-                  <td style={TD}>{inacBadge(p.diasInactivo)}</td>
+                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                  <td className={TD}>{p.nombre}</td>
+                  <td className={TD}>{p.distribuidor}</td>
+                  <td className={TD}>{p.departamento}</td>
+                  <td className={TD}>{p.visitadoPorDistribuidor ?? 'Nunca'}</td>
+                  <td className={TD}><InacBadge dias={p.diasInactivo} /></td>
                 </tr>
               ))}
               {inacPaged.length === 0 && (
-                <tr><td colSpan={5} style={{ ...TD, textAlign: 'center', color: '#6c757d' }}>Sin resultados</td></tr>
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-sm text-gray-400">Sin resultados</td></tr>
               )}
             </tbody>
           </table>
         </div>
-        <Pagination page={inacPage} total={inacFiltered.length} perPage={PER_PAGE} onChange={p => setInacPage(p)} />
+        <Pagination page={inacPage} total={inacFiltered.length} perPage={PER_PAGE} onChange={setInacPage} />
 
-        {/* Bar chart: top 10 distributors */}
+        {/* Top 10 horizontal bar chart */}
         {inacTop10.length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#003DA5', marginBottom: 10 }}>Top 10 distribuidores con más inactivos</div>
+          <div className="mt-5">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Top 10 distribuidores con más inactivos</p>
             {inacTop10.map((d, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{ width: 160, fontSize: 12, color: '#495057', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.distribuidor}</div>
-                <div style={{ flex: 1, background: '#e9ecef', borderRadius: 4, height: 14 }}>
-                  <div style={{ background: '#E3000F', width: `${(d.cantidad / inacTop10Max) * 100}%`, height: 14, borderRadius: 4 }} />
+              <div key={i} className="flex items-center gap-3 mb-2">
+                <div className="w-36 text-xs text-gray-600 truncate shrink-0">{d.distribuidor}</div>
+                <div className="flex-1 h-3 bg-gray-200 rounded-full">
+                  <div className="h-3 bg-red-500 rounded-full" style={{ width: `${(d.cantidad / inacTop10Max) * 100}%` }} />
                 </div>
-                <div style={{ width: 32, fontSize: 12, fontWeight: 700, color: '#E3000F', textAlign: 'right' }}>{d.cantidad}</div>
+                <div className="w-8 text-xs font-bold text-red-600 text-right shrink-0">{d.cantidad}</div>
               </div>
             ))}
           </div>
@@ -396,171 +424,169 @@ export default function PdvModule() {
       {/* Section 4: Alerta vencimiento */}
       <SectionCard title="Alerta Vencimiento de Chips">
         {/* Inner tabs */}
-        <div style={{ display: 'flex', gap: 0, marginBottom: 14, borderBottom: '2px solid #dee2e6' }}>
+        <div className="flex border-b border-gray-200 mb-4">
           {(['porVencer', 'yaVencidos'] as const).map(t => {
             const labels = { porVencer: `Por vencer (${vencimiento.porVencer.total})`, yaVencidos: `Ya vencidos (${vencimiento.yaVencidos.total})` };
             const active = vencTab === t;
             return (
               <button key={t} onClick={() => { setVencTab(t); setVencPage(1); }}
-                style={{ padding: '8px 16px', border: 'none', borderBottom: active ? '3px solid #003DA5' : '3px solid transparent', background: 'none', fontWeight: active ? 700 : 400, color: active ? '#003DA5' : '#6c757d', cursor: 'pointer', fontSize: 13 }}>
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  active ? 'border-[#003DA5] text-[#003DA5]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}>
                 {labels[t]}
               </button>
             );
           })}
         </div>
-        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6, marginBottom: 12 }}>
-          <table style={{ width: '100%', minWidth: 540, borderCollapse: 'collapse' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[540px]">
             <thead>
               <tr>
-                <th style={TH}>Punto de Venta</th>
-                <th style={TH}>Distribuidor</th>
-                <th style={TH}>Departamento</th>
-                <th style={TH}>Fecha Vencimiento</th>
-                <th style={{ ...TH, width: 90 }}>Urgencia</th>
+                <th className={TH}>Punto de Venta</th>
+                <th className={TH}>Distribuidor</th>
+                <th className={TH}>Departamento</th>
+                <th className={TH}>Fecha Vencimiento</th>
+                <th className={`${TH} w-24`}>Urgencia</th>
               </tr>
             </thead>
             <tbody>
               {vencPaged.map((p: PdvVencimiento, i: number) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                  <td style={TD}>{p.nombre}</td>
-                  <td style={TD}>{p.distribuidor}</td>
-                  <td style={TD}>{p.departamento}</td>
-                  <td style={TD}>{p.fechaVencimientoChipMasViejo ?? '—'}</td>
-                  <td style={TD}>
+                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                  <td className={TD}>{p.nombre}</td>
+                  <td className={TD}>{p.distribuidor}</td>
+                  <td className={TD}>{p.departamento}</td>
+                  <td className={TD}>{p.fechaVencimientoChipMasViejo ?? '—'}</td>
+                  <td className={TD}>
                     {vencTab === 'porVencer'
-                      ? vencBadge(p.diasParaVencer)
-                      : <span style={{ background: '#7b0000', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Vencido {Math.abs(p.diasParaVencer)}d</span>
+                      ? <VencBadge dias={p.diasParaVencer} />
+                      : <span className="inline-block px-2 py-0.5 rounded text-white text-xs font-bold" style={{ background: '#7b0000' }}>Vencido {Math.abs(p.diasParaVencer)}d</span>
                     }
                   </td>
                 </tr>
               ))}
               {vencPaged.length === 0 && (
-                <tr><td colSpan={5} style={{ ...TD, textAlign: 'center', color: '#6c757d' }}>Sin registros</td></tr>
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-sm text-gray-400">Sin registros</td></tr>
               )}
             </tbody>
           </table>
         </div>
-        <Pagination page={vencPage} total={vencList.length} perPage={PER_PAGE} onChange={p => setVencPage(p)} />
+        <Pagination page={vencPage} total={vencList.length} perPage={PER_PAGE} onChange={setVencPage} />
       </SectionCard>
 
       {/* Section 5: Rendimiento chiperos */}
       <SectionCard title="Rendimiento por Chipero">
-        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6 }}>
-        <table style={{ width: '100%', minWidth: 500, borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={{ ...TH, width: 32 }}></th>
-              <th style={TH}>Distribuidor</th>
-              <th style={{ ...TH, width: 100 }}>Días Activos</th>
-              <th style={{ ...TH, width: 110 }}>Total Visitas</th>
-              <th style={{ ...TH, width: 130 }}>Prom. Visitas/Día</th>
-              <th style={{ ...TH, width: 100 }}>Rendimiento</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rendimiento.map((r: RendimientoRow, i: number) => {
-              const expanded = expandedRend.has(r.nombre);
-              return (
-                <React.Fragment key={i}>
-                  <tr
-                    style={{ background: i % 2 === 0 ? '#fafafa' : '#fff', cursor: 'pointer' }}
-                    onClick={() => {
-                      setExpandedRend(prev => {
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
+            <thead>
+              <tr>
+                <th className={`${TH} w-8`}></th>
+                <th className={TH}>Distribuidor</th>
+                <th className={`${TH} text-right w-24`}>Días Activos</th>
+                <th className={`${TH} text-right w-28`}>Total Visitas</th>
+                <th className={`${TH} text-right w-32`}>Prom. Visitas/Día</th>
+                <th className={`${TH} w-24`}>Rendimiento</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rendimiento.map((r: RendimientoRow, i: number) => {
+                const expanded = expandedRend.has(r.nombre);
+                return (
+                  <React.Fragment key={i}>
+                    <tr className={`cursor-pointer hover:bg-blue-50/40 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
+                      onClick={() => setExpandedRend(prev => {
                         const next = new Set(prev);
-                        if (next.has(r.nombre)) next.delete(r.nombre); else next.add(r.nombre);
+                        next.has(r.nombre) ? next.delete(r.nombre) : next.add(r.nombre);
                         return next;
-                      });
-                    }}
-                  >
-                    <td style={{ ...TD, textAlign: 'center', color: '#003DA5' }}>{expanded ? '▼' : '▶'}</td>
-                    <td style={{ ...TD, fontWeight: 600 }}>{r.nombre}</td>
-                    <td style={TD}>{r.diasActivos}</td>
-                    <td style={TD}>{r.totalVisitas.toLocaleString()}</td>
-                    <td style={TD}>{r.promedioVisitasDia.toFixed(1)}</td>
-                    <td style={TD}>{rendBadge(r.promedioVisitasDia)}</td>
-                  </tr>
-                  {expanded && (
-                    <tr>
-                      <td colSpan={6} style={{ padding: '0 0 0 40px', background: '#f0f4ff' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                          <thead>
-                            <tr>
-                              <th style={{ ...TH, background: '#c8d8f5', color: '#003DA5', fontSize: 11 }}>Fecha</th>
-                              <th style={{ ...TH, background: '#c8d8f5', color: '#003DA5', fontSize: 11, width: 100 }}>Visitas</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {r.detalleDias.map((d, j) => (
-                              <tr key={j}>
-                                <td style={{ ...TD, fontSize: 12 }}>{d.fecha}</td>
-                                <td style={{ ...TD, fontSize: 12 }}>{d.visitas}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </td>
+                      })}>
+                      <td className={`${TD} text-center text-gray-400`}>{expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
+                      <td className={`${TD} font-medium text-gray-800`}>{r.nombre}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{r.diasActivos}</td>
+                      <td className={`${TD} text-right tabular-nums font-semibold`}>{r.totalVisitas.toLocaleString()}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{r.promedioVisitasDia.toFixed(1)}</td>
+                      <td className={TD}><RendBadge prom={r.promedioVisitasDia} /></td>
                     </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-            {rendimiento.length === 0 && (
-              <tr><td colSpan={6} style={{ ...TD, textAlign: 'center', color: '#6c757d' }}>Sin datos de visitas</td></tr>
-            )}
-          </tbody>
-        </table>
+                    {expanded && (
+                      <tr>
+                        <td colSpan={6} className="bg-blue-50/20 px-4 py-2">
+                          <div className="overflow-x-auto rounded-lg border border-blue-100">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="bg-blue-100/60 text-blue-900">
+                                  <th className="px-3 py-2 text-left font-semibold">Fecha</th>
+                                  <th className="px-3 py-2 text-right font-semibold">Visitas</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {r.detalleDias.map((d, j) => (
+                                  <tr key={j} className="border-t border-blue-100/60 bg-white">
+                                    <td className="px-3 py-1.5 text-gray-700">{d.fecha}</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums">{d.visitas}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+              {rendimiento.length === 0 && (
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-gray-400">Sin datos de visitas</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </SectionCard>
 
       {/* Section 6: Nuevos puntos */}
       <SectionCard title="Nuevos Puntos de Venta">
-        {nuevosPuntos.porMes.length === 0 ? (
-          <div style={{ color: '#6c757d', textAlign: 'center', padding: 20 }}>Sin datos en el rango seleccionado</div>
+        {npMeses.length === 0 ? (
+          <p className="text-center text-sm text-gray-400 py-4">Sin datos en el rango seleccionado</p>
         ) : (
           <>
             {/* Vertical bar chart */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120, marginBottom: 20, overflowX: 'auto', padding: '4px 0 0' }}>
-              {npMeses.map((m, i) => {
-                const pct = (m.cantidad / npMax) * 100;
-                const label = m.mes.slice(0, 7);
-                return (
-                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 44 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#003DA5' }}>{m.cantidad}</div>
-                    <div style={{ width: 36, height: `${pct}%`, minHeight: 4, background: '#003DA5', borderRadius: '3px 3px 0 0' }} />
-                    <div style={{ fontSize: 9, color: '#6c757d', transform: 'rotate(-40deg)', whiteSpace: 'nowrap', marginTop: 4 }}>{label}</div>
-                  </div>
-                );
-              })}
+            <div className="flex items-end gap-1.5 overflow-x-auto pb-2 mb-5" style={{ height: 140 }}>
+              {npMeses.map((m, i) => (
+                <div key={i} className="flex flex-col items-center gap-1 shrink-0" style={{ minWidth: 42 }}>
+                  <span className="text-[10px] font-bold text-[#003DA5]">{m.cantidad}</span>
+                  <div className="w-8 bg-[#003DA5] rounded-t" style={{ height: `${Math.max(4, (m.cantidad / npMax) * 80)}px` }} />
+                  <span className="text-[9px] text-gray-500 mt-1" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap' }}>
+                    {formatMes(m.mes)}
+                  </span>
+                </div>
+              ))}
             </div>
 
             {/* Table */}
-            <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6 }}>
-              <table style={{ width: '100%', minWidth: 320, borderCollapse: 'collapse' }}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[320px]">
                 <thead>
                   <tr>
-                    <th style={TH}>Mes</th>
-                    <th style={{ ...TH, width: 120 }}>Nuevos PdV</th>
-                    <th style={{ ...TH, width: 130 }}>VS Mes Anterior</th>
+                    <th className={TH}>Mes</th>
+                    <th className={`${TH} text-right w-28`}>Nuevos PdV</th>
+                    <th className={`${TH} text-right w-32`}>VS Mes Anterior</th>
                   </tr>
                 </thead>
                 <tbody>
                   {npMeses.map((m, i) => {
                     const prev = i > 0 ? npMeses[i - 1].cantidad : null;
-                    const cambio = prev !== null && prev > 0 ? ((m.cantidad - prev) / prev * 100) : null;
+                    const cambio = prev !== null && prev > 0 ? (m.cantidad - prev) / prev * 100 : null;
                     const cambioStr = cambio !== null ? `${cambio >= 0 ? '+' : ''}${cambio.toFixed(1)}%` : '—';
-                    const cambioColor = cambio === null ? '#6c757d' : cambio >= 0 ? '#28a745' : '#E3000F';
+                    const cambioColor = cambio === null ? 'text-gray-400' : cambio >= 0 ? 'text-green-600' : 'text-red-600';
                     return (
-                      <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                        <td style={TD}>{m.mes}</td>
-                        <td style={{ ...TD, fontWeight: 700 }}>{m.cantidad}</td>
-                        <td style={{ ...TD, fontWeight: 700, color: cambioColor }}>{cambioStr}</td>
+                      <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                        <td className={TD}>{formatMes(m.mes)}</td>
+                        <td className={`${TD} text-right font-semibold tabular-nums`}>{m.cantidad}</td>
+                        <td className={`${TD} text-right font-semibold tabular-nums ${cambioColor}`}>{cambioStr}</td>
                       </tr>
                     );
                   })}
-                  <tr style={{ background: '#e8f0fe', fontWeight: 700 }}>
-                    <td style={{ ...TD, fontWeight: 700 }}>Total en rango</td>
-                    <td style={{ ...TD, fontWeight: 700 }}>{nuevosPuntos.totalEnRango.toLocaleString()}</td>
-                    <td style={{ ...TD, color: '#6c757d', fontSize: 12 }}>Prom. mensual: {nuevosPuntos.promedioMensual}</td>
+                  <tr className="bg-blue-50 border-t-2 border-blue-200">
+                    <td className="px-3 py-2 text-sm font-bold text-gray-700">Total en rango</td>
+                    <td className="px-3 py-2 text-right text-sm font-bold tabular-nums">{nuevosPuntos.totalEnRango.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-xs text-gray-400">Prom. mensual: {nuevosPuntos.promedioMensual}</td>
                   </tr>
                 </tbody>
               </table>
@@ -568,7 +594,7 @@ export default function PdvModule() {
           </>
         )}
       </SectionCard>
-    </div>
+
     </div>
   );
 }

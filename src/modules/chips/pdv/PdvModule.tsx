@@ -369,7 +369,7 @@ export default function PdvModule() {
             value={inacSearch} onChange={e => { setInacSearch(e.target.value); setInacPage(1); }}
             className="flex-1 min-w-48 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5]" />
           <select value={inacDist} onChange={e => { setInacDist(e.target.value); setInacPage(1); }}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5]">
+            className="max-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5]">
             <option>Todos</option>
             {data.distribuidores.map(d => <option key={d}>{d}</option>)}
           </select>
@@ -406,15 +406,15 @@ export default function PdvModule() {
 
         {/* Top 10 horizontal bar chart */}
         {inacTop10.length > 0 && (
-          <div className="mt-5">
+          <div className="mt-5 w-full overflow-hidden">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Top 10 distribuidores con más inactivos</p>
             {inacTop10.map((d, i) => (
-              <div key={i} className="flex items-center gap-3 mb-2">
-                <div className="w-36 text-xs text-gray-600 truncate shrink-0">{d.distribuidor}</div>
-                <div className="flex-1 h-3 bg-gray-200 rounded-full">
+              <div key={i} className="flex items-center gap-3 mb-2 w-full">
+                <div className="w-32 text-xs text-gray-600 truncate shrink-0">{d.distribuidor}</div>
+                <div className="flex-1 min-w-0 h-3 bg-gray-200 rounded-full overflow-hidden">
                   <div className="h-3 bg-red-500 rounded-full" style={{ width: `${(d.cantidad / inacTop10Max) * 100}%` }} />
                 </div>
-                <div className="w-8 text-xs font-bold text-red-600 text-right shrink-0">{d.cantidad}</div>
+                <div className="w-10 text-xs font-bold text-red-600 text-right shrink-0 tabular-nums">{d.cantidad}</div>
               </div>
             ))}
           </div>
@@ -547,7 +547,8 @@ export default function PdvModule() {
         ) : (
           <>
             {/* Vertical bar chart */}
-            <div className="flex items-end gap-1.5 overflow-x-auto pb-2 mb-5" style={{ height: 140 }}>
+            <div className="w-full overflow-x-auto">
+            <div className="flex items-end gap-1.5 pb-2 mb-5" style={{ height: 140, minWidth: 'max-content' }}>
               {npMeses.map((m, i) => (
                 <div key={i} className="flex flex-col items-center gap-1 shrink-0" style={{ minWidth: 42 }}>
                   <span className="text-[10px] font-bold text-[#003DA5]">{m.cantidad}</span>
@@ -557,6 +558,7 @@ export default function PdvModule() {
                   </span>
                 </div>
               ))}
+            </div>
             </div>
 
             {/* Table */}

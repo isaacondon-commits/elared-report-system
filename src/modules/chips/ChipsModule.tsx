@@ -12,6 +12,7 @@ import { analyzeChips } from './chipAnalysis';
 import type { ChipsAnalysis, EfectividadRow, ChiperoRow } from './chipAnalysis';
 import { exportChipsExcel, exportChipsPDF } from './ChipsExport';
 import { recordActivity } from '../../utils/activityTracker';
+import PdvModule from './pdv/PdvModule';
 
 type Stage = 'upload' | 'loading' | 'analysis';
 
@@ -360,6 +361,7 @@ export default function ChipsModule() {
   const [data, setData] = useState<ChipsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [empresaTab, setEmpresaTab] = useState('Todas');
+  const [moduleTab, setModuleTab] = useState<'prepagos' | 'pdv'>('prepagos');
 
   const analysis = useMemo(
     () => (data ? analyzeChips(data.rows, empresaTab) : null),
@@ -395,163 +397,202 @@ export default function ChipsModule() {
     setStage('upload');
   }
 
-  // ── Upload / Loading ────────────────────────────────────────────────────────
-  if (stage !== 'analysis') {
+  // ── Module tab bar ──────────────────────────────────────────────────────────
+  const moduleTabBar = (
+    <div style={{ display: 'flex', gap: 0, background: '#fff', borderBottom: '2px solid #dee2e6', padding: '0 24px' }}>
+      {(['prepagos', 'pdv'] as const).map(t => {
+        const labels = { prepagos: 'CHIP — DESDE PREPAGOS', pdv: 'CHIP — PUNTO DE VENTA' };
+        const active = moduleTab === t;
+        return (
+          <button
+            key={t}
+            onClick={() => setModuleTab(t)}
+            style={{
+              padding: '12px 20px',
+              border: 'none',
+              borderBottom: active ? '3px solid #003DA5' : '3px solid transparent',
+              background: 'none',
+              fontWeight: active ? 700 : 500,
+              color: active ? '#003DA5' : '#6c757d',
+              cursor: 'pointer',
+              fontSize: 13,
+              letterSpacing: 0.5,
+              transition: 'color 0.15s',
+            }}
+          >
+            {labels[t]}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // ── Prepagos content ────────────────────────────────────────────────────────
+  const prepagosContent = (() => {
+    if (stage !== 'analysis') {
+      return (
+        <div className="flex flex-col min-h-screen">
+          <Header title="Chips" subtitle="Gestión y reportes de chips SIM" />
+          <div className="flex-1 flex flex-col items-center justify-center p-8">
+            <div className="w-full max-w-xl">
+              {stage === 'loading' ? (
+                <div className="flex flex-col items-center gap-4 py-16">
+                  <div className="w-12 h-12 border-4 border-[#003DA5] border-t-transparent rounded-full animate-spin" />
+                  <span className="text-gray-500 font-medium">Procesando archivo CSV...</span>
+                  <span className="text-xs text-gray-400">Esto puede tardar unos segundos con archivos grandes</span>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center mb-6">
+                    <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
+                      <Upload size={28} className="text-[#003DA5]" />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-800">Cargar archivo de chips</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      CSV con separador <code className="bg-gray-100 px-1 rounded">{';'}</code>, encoding latin1
+                    </p>
+                  </div>
+                  <FileUploader
+                    onFile={handleFile}
+                    accept=".csv"
+                    label="Arrastrá tu archivo CSV aquí"
+                    sublabel="o hacé clic para seleccionarlo"
+                  />
+                  {error && (
+                    <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+                      <AlertTriangle size={16} className="flex-shrink-0" />
+                      {error}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (!data || !analysis) return null;
+
+    const subtitle = `${data.totalOK.toLocaleString()} chips OK · ${data.empresas.length} empresa${data.empresas.length !== 1 ? 's' : ''} · ${data.distribuidores.length} distribuidor${data.distribuidores.length !== 1 ? 'es' : ''}`;
+    const showDesglose = empresaTab === 'Todas';
+
     return (
       <div className="flex flex-col min-h-screen">
-        <Header title="Chips" subtitle="Gestión y reportes de chips SIM" />
-        <div className="flex-1 flex flex-col items-center justify-center p-8">
-          <div className="w-full max-w-xl">
-            {stage === 'loading' ? (
-              <div className="flex flex-col items-center gap-4 py-16">
-                <div className="w-12 h-12 border-4 border-[#003DA5] border-t-transparent rounded-full animate-spin" />
-                <span className="text-gray-500 font-medium">Procesando archivo CSV...</span>
-                <span className="text-xs text-gray-400">Esto puede tardar unos segundos con archivos grandes</span>
-              </div>
-            ) : (
-              <>
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
-                    <Upload size={28} className="text-[#003DA5]" />
-                  </div>
-                  <h2 className="text-xl font-bold text-gray-800">Cargar archivo de chips</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    CSV con separador <code className="bg-gray-100 px-1 rounded">{';'}</code>, encoding latin1
-                  </p>
-                </div>
-                <FileUploader
-                  onFile={handleFile}
-                  accept=".csv"
-                  label="Arrastrá tu archivo CSV aquí"
-                  sublabel="o hacé clic para seleccionarlo"
-                />
-                {error && (
-                  <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center gap-2">
-                    <AlertTriangle size={16} className="flex-shrink-0" />
-                    {error}
-                  </div>
-                )}
-              </>
-            )}
+        <Header
+          title="Chips"
+          subtitle={subtitle}
+          actions={
+            <div className="flex gap-2">
+              <button
+                onClick={() => exportChipsExcel(data, analysis, empresaTab)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <FileSpreadsheet size={15} /> Excel
+              </button>
+              <button
+                onClick={() => exportChipsPDF(data, analysis, empresaTab)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <Download size={15} /> PDF
+              </button>
+              <button
+                onClick={handleReset}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+              >
+                <RefreshCw size={15} /> Nuevo archivo
+              </button>
+            </div>
+          }
+        />
+
+        <div className="flex-1 p-6 space-y-6">
+          {/* Empresa tabs */}
+          <EmpresaTabs
+            empresas={data.empresas}
+            tabCounts={tabCounts}
+            active={empresaTab}
+            onChange={setEmpresaTab}
+          />
+
+          {/* Alertas */}
+          {analysis.alertas.length > 0 && (
+            <AlertasSection alertas={analysis.alertas} />
+          )}
+
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard
+              label="Chips Activos"
+              value={analysis.chipsActivos.total}
+              sub="Con fecha asig. distribuidor"
+              desglose={analysis.chipsActivos.porEmpresa}
+              borderColor="#28a745"
+              icon={<BarChart2 size={20} />}
+              showDesglose={showDesglose}
+            />
+            <KpiCard
+              label="Stock en Sistema"
+              value={analysis.stockSistema.total}
+              sub="Sin distribuidor asignado"
+              desglose={analysis.stockSistema.porEmpresa}
+              borderColor="#fd7e14"
+              icon={<Package size={20} />}
+              showDesglose={showDesglose}
+            />
+            <KpiCard
+              label="Stock en Tránsito"
+              value={analysis.stockTransito.total}
+              sub="Con distribuidor, sin PdV"
+              desglose={analysis.stockTransito.porEmpresa}
+              borderColor="#003DA5"
+              icon={<Truck size={20} />}
+              showDesglose={showDesglose}
+            />
+            <KpiCard
+              label="Efectividad Promedio"
+              value={`${fmt1(analysis.promEquipoChipsPorComercio)} chips/comercio`}
+              sub="promedio de todos los distribuidores"
+              borderColor="#6f42c1"
+              icon={<Store size={20} />}
+            />
+          </div>
+
+          {/* Sección 1: Efectividad de visita */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                <Truck size={18} className="text-[#003DA5]" />
+                Efectividad de visita por distribuidor
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Click en una fila para ver el detalle por día · Ordenado por chips total
+              </p>
+            </div>
+            <EfectividadTable efectividad={analysis.efectividad} />
+          </div>
+
+          {/* Sección 2: Stock por chipero */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                <Store size={18} className="text-[#003DA5]" />
+                Stock por distribuidor ({analysis.chiperos.length})
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">Ordenado por total desc</p>
+            </div>
+            <ChiperosTable chiperos={analysis.chiperos} />
           </div>
         </div>
       </div>
     );
-  }
-
-  // ── Analysis ────────────────────────────────────────────────────────────────
-  if (!data || !analysis) return null;
-
-  const subtitle = `${data.totalOK.toLocaleString()} chips OK · ${data.empresas.length} empresa${data.empresas.length !== 1 ? 's' : ''} · ${data.distribuidores.length} distribuidor${data.distribuidores.length !== 1 ? 'es' : ''}`;
-  const showDesglose = empresaTab === 'Todas';
+  })();
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header
-        title="Chips"
-        subtitle={subtitle}
-        actions={
-          <div className="flex gap-2">
-            <button
-              onClick={() => exportChipsExcel(data, analysis, empresaTab)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              <FileSpreadsheet size={15} /> Excel
-            </button>
-            <button
-              onClick={() => exportChipsPDF(data, analysis, empresaTab)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              <Download size={15} /> PDF
-            </button>
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
-            >
-              <RefreshCw size={15} /> Nuevo archivo
-            </button>
-          </div>
-        }
-      />
-
-      <div className="flex-1 p-6 space-y-6">
-        {/* Tabs */}
-        <EmpresaTabs
-          empresas={data.empresas}
-          tabCounts={tabCounts}
-          active={empresaTab}
-          onChange={setEmpresaTab}
-        />
-
-        {/* Alertas */}
-        {analysis.alertas.length > 0 && (
-          <AlertasSection alertas={analysis.alertas} />
-        )}
-
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard
-            label="Chips Activos"
-            value={analysis.chipsActivos.total}
-            sub="Con fecha asig. distribuidor"
-            desglose={analysis.chipsActivos.porEmpresa}
-            borderColor="#28a745"
-            icon={<BarChart2 size={20} />}
-            showDesglose={showDesglose}
-          />
-          <KpiCard
-            label="Stock en Sistema"
-            value={analysis.stockSistema.total}
-            sub="Sin distribuidor asignado"
-            desglose={analysis.stockSistema.porEmpresa}
-            borderColor="#fd7e14"
-            icon={<Package size={20} />}
-            showDesglose={showDesglose}
-          />
-          <KpiCard
-            label="Stock en Tránsito"
-            value={analysis.stockTransito.total}
-            sub="Con distribuidor, sin PdV"
-            desglose={analysis.stockTransito.porEmpresa}
-            borderColor="#003DA5"
-            icon={<Truck size={20} />}
-            showDesglose={showDesglose}
-          />
-          <KpiCard
-            label="Efectividad Promedio"
-            value={`${fmt1(analysis.promEquipoChipsPorComercio)} chips/comercio`}
-            sub="promedio de todos los distribuidores"
-            borderColor="#6f42c1"
-            icon={<Store size={20} />}
-          />
-        </div>
-
-        {/* Sección 1: Efectividad de visita */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-              <Truck size={18} className="text-[#003DA5]" />
-              Efectividad de visita por distribuidor
-            </h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Click en una fila para ver el detalle por día · Ordenado por chips total
-            </p>
-          </div>
-          <EfectividadTable efectividad={analysis.efectividad} />
-        </div>
-
-        {/* Sección 2: Stock por chipero */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-              <Store size={18} className="text-[#003DA5]" />
-              Stock por distribuidor ({analysis.chiperos.length})
-            </h2>
-            <p className="text-xs text-gray-400 mt-0.5">Ordenado por total desc</p>
-          </div>
-          <ChiperosTable chiperos={analysis.chiperos} />
-        </div>
-      </div>
+      {moduleTabBar}
+      {moduleTab === 'prepagos' && prepagosContent}
+      {moduleTab === 'pdv' && <PdvModule />}
     </div>
   );
 }

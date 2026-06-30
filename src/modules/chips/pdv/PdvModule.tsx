@@ -81,7 +81,7 @@ function KpiCard({ label, value, color, sub }: { label: string; value: number | 
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', padding: '20px 24px', marginBottom: 24 }}>
+    <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', padding: '20px 24px' }}>
       <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700, color: '#003DA5', borderLeft: '4px solid #E3000F', paddingLeft: 10 }}>{title}</h3>
       {children}
     </div>
@@ -229,9 +229,10 @@ export default function PdvModule() {
   if (!data || !inactividad || !vencimiento || !nuevosPuntos || !exportData) return null;
 
   return (
-    <div style={{ padding: '16px 24px 40px', width: '100%', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
+    <div className="flex-1 overflow-y-auto p-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 800, color: '#003DA5' }}>Punto de Venta</div>
           <div style={{ fontSize: 12, color: '#6c757d' }}>{data.total.toLocaleString()} puntos cargados · {new Date(data.fechaCarga).toLocaleDateString('es-UY')}</div>
@@ -244,7 +245,7 @@ export default function PdvModule() {
       </div>
 
       {/* Period filter bar */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 20, background: '#fff', padding: '12px 16px', borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', background: '#fff', padding: '12px 16px', borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#6c757d', marginRight: 6 }}>PERÍODO:</span>
         {(['todo', 'u30', 'u60', 'estemes', 'mesant', 'custom'] as PeriodKey[]).map(k => {
           const labels: Record<PeriodKey, string> = { todo: 'Todo', u30: 'Últimos 30d', u60: 'Últimos 60d', estemes: 'Este mes', mesant: 'Mes anterior', custom: 'Personalizado' };
@@ -266,7 +267,7 @@ export default function PdvModule() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" style={{ marginBottom: 24 }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total PdV" value={data.total} color="#003DA5" sub={`${data.distribuidores.length} distribuidores`} />
         <KpiCard label="Inactivos +60d" value={inactividad.total} color="#E3000F" sub="Sin visita reciente" />
         <KpiCard label="Chips por vencer 30d" value={vencimiento.porVencer.total} color="#fd7e14" sub={`Ya vencidos: ${vencimiento.yaVencidos.total}`} />
@@ -567,6 +568,7 @@ export default function PdvModule() {
           </>
         )}
       </SectionCard>
+    </div>
     </div>
   );
 }

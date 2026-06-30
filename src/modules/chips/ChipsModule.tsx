@@ -399,7 +399,7 @@ export default function ChipsModule() {
 
   // ── Module tab bar ──────────────────────────────────────────────────────────
   const moduleTabBar = (
-    <div style={{ display: 'flex', gap: 0, background: '#fff', borderBottom: '2px solid #dee2e6', padding: '0 24px' }}>
+    <div style={{ display: 'flex', gap: 0, background: '#fff', borderBottom: '2px solid #dee2e6', padding: '0 24px', width: '100%', boxSizing: 'border-box', flexWrap: 'wrap' }}>
       {(['prepagos', 'pdv'] as const).map(t => {
         const labels = { prepagos: 'CHIP — DESDE PREPAGOS', pdv: 'CHIP — PUNTO DE VENTA' };
         const active = moduleTab === t;

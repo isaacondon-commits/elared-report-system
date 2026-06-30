@@ -71,7 +71,7 @@ function rendBadge(prom: number) {
 
 function KpiCard({ label, value, color, sub }: { label: string; value: number | string; color: string; sub?: string }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.10)', padding: '18px 22px', borderTop: `4px solid ${color}`, flex: 1, minWidth: 160 }}>
+    <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.10)', padding: '18px 22px', borderTop: `4px solid ${color}`, width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
       <div style={{ fontSize: 12, color: '#6c757d', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 800, color }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
       {sub && <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>{sub}</div>}
@@ -229,7 +229,7 @@ export default function PdvModule() {
   if (!data || !inactividad || !vencimiento || !nuevosPuntos || !exportData) return null;
 
   return (
-    <div style={{ padding: '16px 24px 40px' }}>
+    <div style={{ padding: '16px 24px 40px', width: '100%', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
@@ -266,7 +266,7 @@ export default function PdvModule() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'flex', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" style={{ marginBottom: 24 }}>
         <KpiCard label="Total PdV" value={data.total} color="#003DA5" sub={`${data.distribuidores.length} distribuidores`} />
         <KpiCard label="Inactivos +60d" value={inactividad.total} color="#E3000F" sub="Sin visita reciente" />
         <KpiCard label="Chips por vencer 30d" value={vencimiento.porVencer.total} color="#fd7e14" sub={`Ya vencidos: ${vencimiento.yaVencidos.total}`} />
@@ -275,52 +275,56 @@ export default function PdvModule() {
 
       {/* Section 1: Distribución por chipero */}
       <SectionCard title="Distribución por Chipero">
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={TH}>Distribuidor</th>
-              <th style={{ ...TH, width: 100 }}>Puntos</th>
-              <th style={{ ...TH, width: 70 }}>%</th>
-              <th style={TH}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {distribucion.map((d, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                <td style={TD}>{d.distribuidor}</td>
-                <td style={{ ...TD, fontWeight: 700 }}>{d.cantidad.toLocaleString()}</td>
-                <td style={TD}>{d.porcentaje.toFixed(1)}%</td>
-                <td style={{ ...TD, width: 200 }}>
-                  <div style={{ background: '#e9ecef', borderRadius: 4, height: 10 }}>
-                    <div style={{ background: '#003DA5', width: `${d.porcentaje}%`, height: 10, borderRadius: 4 }} />
-                  </div>
-                </td>
+        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6 }}>
+          <table style={{ width: '100%', minWidth: 420, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={TH}>Distribuidor</th>
+                <th style={{ ...TH, width: 100 }}>Puntos</th>
+                <th style={{ ...TH, width: 70 }}>%</th>
+                <th style={TH}></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {distribucion.map((d, i) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
+                  <td style={TD}>{d.distribuidor}</td>
+                  <td style={{ ...TD, fontWeight: 700 }}>{d.cantidad.toLocaleString()}</td>
+                  <td style={TD}>{d.porcentaje.toFixed(1)}%</td>
+                  <td style={{ ...TD, width: 200 }}>
+                    <div style={{ background: '#e9ecef', borderRadius: 4, height: 10 }}>
+                      <div style={{ background: '#003DA5', width: `${d.porcentaje}%`, height: 10, borderRadius: 4 }} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </SectionCard>
 
       {/* Section 2: Estados de visita */}
       <SectionCard title="Estados de Visita">
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={TH}>Estado</th>
-              <th style={{ ...TH, width: 100 }}>Cantidad</th>
-              <th style={{ ...TH, width: 70 }}>%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {estados.map((e, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                <td style={TD}>{estadoBadge(e.estado)}</td>
-                <td style={{ ...TD, fontWeight: 700 }}>{e.cantidad.toLocaleString()}</td>
-                <td style={TD}>{e.porcentaje.toFixed(1)}%</td>
+        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6 }}>
+          <table style={{ width: '100%', minWidth: 320, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={TH}>Estado</th>
+                <th style={{ ...TH, width: 100 }}>Cantidad</th>
+                <th style={{ ...TH, width: 70 }}>%</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {estados.map((e, i) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
+                  <td style={TD}>{estadoBadge(e.estado)}</td>
+                  <td style={{ ...TD, fontWeight: 700 }}>{e.cantidad.toLocaleString()}</td>
+                  <td style={TD}>{e.porcentaje.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </SectionCard>
 
       {/* Section 3: Alerta inactividad */}
@@ -342,31 +346,33 @@ export default function PdvModule() {
         </div>
 
         {/* Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
-          <thead>
-            <tr>
-              <th style={TH}>Punto de Venta</th>
-              <th style={TH}>Distribuidor</th>
-              <th style={TH}>Departamento</th>
-              <th style={TH}>Última Visita</th>
-              <th style={{ ...TH, width: 90 }}>Inactividad</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inacPaged.map((p: PdvInactivo, i: number) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                <td style={TD}>{p.nombre}</td>
-                <td style={TD}>{p.distribuidor}</td>
-                <td style={TD}>{p.departamento}</td>
-                <td style={TD}>{p.visitadoPorDistribuidor ?? 'Nunca'}</td>
-                <td style={TD}>{inacBadge(p.diasInactivo)}</td>
+        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6, marginBottom: 12 }}>
+          <table style={{ width: '100%', minWidth: 540, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={TH}>Punto de Venta</th>
+                <th style={TH}>Distribuidor</th>
+                <th style={TH}>Departamento</th>
+                <th style={TH}>Última Visita</th>
+                <th style={{ ...TH, width: 90 }}>Inactividad</th>
               </tr>
-            ))}
-            {inacPaged.length === 0 && (
-              <tr><td colSpan={5} style={{ ...TD, textAlign: 'center', color: '#6c757d' }}>Sin resultados</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {inacPaged.map((p: PdvInactivo, i: number) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
+                  <td style={TD}>{p.nombre}</td>
+                  <td style={TD}>{p.distribuidor}</td>
+                  <td style={TD}>{p.departamento}</td>
+                  <td style={TD}>{p.visitadoPorDistribuidor ?? 'Nunca'}</td>
+                  <td style={TD}>{inacBadge(p.diasInactivo)}</td>
+                </tr>
+              ))}
+              {inacPaged.length === 0 && (
+                <tr><td colSpan={5} style={{ ...TD, textAlign: 'center', color: '#6c757d' }}>Sin resultados</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         <Pagination page={inacPage} total={inacFiltered.length} perPage={PER_PAGE} onChange={p => setInacPage(p)} />
 
         {/* Bar chart: top 10 distributors */}
@@ -401,42 +407,45 @@ export default function PdvModule() {
             );
           })}
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
-          <thead>
-            <tr>
-              <th style={TH}>Punto de Venta</th>
-              <th style={TH}>Distribuidor</th>
-              <th style={TH}>Departamento</th>
-              <th style={TH}>Fecha Vencimiento</th>
-              <th style={{ ...TH, width: 90 }}>Urgencia</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vencPaged.map((p: PdvVencimiento, i: number) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                <td style={TD}>{p.nombre}</td>
-                <td style={TD}>{p.distribuidor}</td>
-                <td style={TD}>{p.departamento}</td>
-                <td style={TD}>{p.fechaVencimientoChipMasViejo ?? '—'}</td>
-                <td style={TD}>
-                  {vencTab === 'porVencer'
-                    ? vencBadge(p.diasParaVencer)
-                    : <span style={{ background: '#7b0000', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Vencido {Math.abs(p.diasParaVencer)}d</span>
-                  }
-                </td>
+        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6, marginBottom: 12 }}>
+          <table style={{ width: '100%', minWidth: 540, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={TH}>Punto de Venta</th>
+                <th style={TH}>Distribuidor</th>
+                <th style={TH}>Departamento</th>
+                <th style={TH}>Fecha Vencimiento</th>
+                <th style={{ ...TH, width: 90 }}>Urgencia</th>
               </tr>
-            ))}
-            {vencPaged.length === 0 && (
-              <tr><td colSpan={5} style={{ ...TD, textAlign: 'center', color: '#6c757d' }}>Sin registros</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {vencPaged.map((p: PdvVencimiento, i: number) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
+                  <td style={TD}>{p.nombre}</td>
+                  <td style={TD}>{p.distribuidor}</td>
+                  <td style={TD}>{p.departamento}</td>
+                  <td style={TD}>{p.fechaVencimientoChipMasViejo ?? '—'}</td>
+                  <td style={TD}>
+                    {vencTab === 'porVencer'
+                      ? vencBadge(p.diasParaVencer)
+                      : <span style={{ background: '#7b0000', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>Vencido {Math.abs(p.diasParaVencer)}d</span>
+                    }
+                  </td>
+                </tr>
+              ))}
+              {vencPaged.length === 0 && (
+                <tr><td colSpan={5} style={{ ...TD, textAlign: 'center', color: '#6c757d' }}>Sin registros</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         <Pagination page={vencPage} total={vencList.length} perPage={PER_PAGE} onChange={p => setVencPage(p)} />
       </SectionCard>
 
       {/* Section 5: Rendimiento chiperos */}
       <SectionCard title="Rendimiento por Chipero">
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6 }}>
+        <table style={{ width: '100%', minWidth: 500, borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               <th style={{ ...TH, width: 32 }}></th>
@@ -499,6 +508,7 @@ export default function PdvModule() {
             )}
           </tbody>
         </table>
+        </div>
       </SectionCard>
 
       {/* Section 6: Nuevos puntos */}
@@ -523,35 +533,37 @@ export default function PdvModule() {
             </div>
 
             {/* Table */}
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={TH}>Mes</th>
-                  <th style={{ ...TH, width: 120 }}>Nuevos PdV</th>
-                  <th style={{ ...TH, width: 130 }}>VS Mes Anterior</th>
-                </tr>
-              </thead>
-              <tbody>
-                {npMeses.map((m, i) => {
-                  const prev = i > 0 ? npMeses[i - 1].cantidad : null;
-                  const cambio = prev !== null && prev > 0 ? ((m.cantidad - prev) / prev * 100) : null;
-                  const cambioStr = cambio !== null ? `${cambio >= 0 ? '+' : ''}${cambio.toFixed(1)}%` : '—';
-                  const cambioColor = cambio === null ? '#6c757d' : cambio >= 0 ? '#28a745' : '#E3000F';
-                  return (
-                    <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
-                      <td style={TD}>{m.mes}</td>
-                      <td style={{ ...TD, fontWeight: 700 }}>{m.cantidad}</td>
-                      <td style={{ ...TD, fontWeight: 700, color: cambioColor }}>{cambioStr}</td>
-                    </tr>
-                  );
-                })}
-                <tr style={{ background: '#e8f0fe', fontWeight: 700 }}>
-                  <td style={{ ...TD, fontWeight: 700 }}>Total en rango</td>
-                  <td style={{ ...TD, fontWeight: 700 }}>{nuevosPuntos.totalEnRango.toLocaleString()}</td>
-                  <td style={{ ...TD, color: '#6c757d', fontSize: 12 }}>Prom. mensual: {nuevosPuntos.promedioMensual}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div style={{ width: '100%', overflowX: 'auto', borderRadius: 6 }}>
+              <table style={{ width: '100%', minWidth: 320, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={TH}>Mes</th>
+                    <th style={{ ...TH, width: 120 }}>Nuevos PdV</th>
+                    <th style={{ ...TH, width: 130 }}>VS Mes Anterior</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {npMeses.map((m, i) => {
+                    const prev = i > 0 ? npMeses[i - 1].cantidad : null;
+                    const cambio = prev !== null && prev > 0 ? ((m.cantidad - prev) / prev * 100) : null;
+                    const cambioStr = cambio !== null ? `${cambio >= 0 ? '+' : ''}${cambio.toFixed(1)}%` : '—';
+                    const cambioColor = cambio === null ? '#6c757d' : cambio >= 0 ? '#28a745' : '#E3000F';
+                    return (
+                      <tr key={i} style={{ background: i % 2 === 0 ? '#fafafa' : '#fff' }}>
+                        <td style={TD}>{m.mes}</td>
+                        <td style={{ ...TD, fontWeight: 700 }}>{m.cantidad}</td>
+                        <td style={{ ...TD, fontWeight: 700, color: cambioColor }}>{cambioStr}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr style={{ background: '#e8f0fe', fontWeight: 700 }}>
+                    <td style={{ ...TD, fontWeight: 700 }}>Total en rango</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{nuevosPuntos.totalEnRango.toLocaleString()}</td>
+                    <td style={{ ...TD, color: '#6c757d', fontSize: 12 }}>Prom. mensual: {nuevosPuntos.promedioMensual}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </SectionCard>

@@ -285,155 +285,162 @@ export default function ChipsModule() {
     <div className="flex flex-col h-full">
       <Header title="Chips" subtitle={subtitle} actions={headerActions} />
 
-      <div className="bg-white border-b border-gray-200 px-6 pt-3 flex gap-2">
-        <button
-          onClick={() => setModuleTab('asignar')}
-          className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${
-            moduleTab === 'asignar' ? 'bg-[#1A1A2E] text-white' : 'text-gray-500 hover:bg-gray-100'
-          }`}
+      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+
+        {/* PARTE FIJA — tabs (no scrollea) */}
+        <div style={{ flexShrink: 0 }} className="bg-white border-b border-gray-200 px-6 pt-3 flex gap-2">
+          <button
+            onClick={() => setModuleTab('asignar')}
+            className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${
+              moduleTab === 'asignar' ? 'bg-[#1A1A2E] text-white' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            Asignar visitas
+          </button>
+          <button
+            onClick={() => setModuleTab('desempeno')}
+            className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${
+              moduleTab === 'desempeno' ? 'bg-[#1A1A2E] text-white' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            Desempeño de distribuidores
+          </button>
+        </div>
+
+        {/* ── Tab 1: Asignar visitas ── */}
+        <div
+          style={moduleTab === 'asignar' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } : { display: 'none' }}
         >
-          Asignar visitas
-        </button>
-        <button
-          onClick={() => setModuleTab('desempeno')}
-          className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${
-            moduleTab === 'desempeno' ? 'bg-[#1A1A2E] text-white' : 'text-gray-500 hover:bg-gray-100'
-          }`}
-        >
-          Desempeño de distribuidores
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-6">
-
-        <div className={moduleTab === 'asignar' ? '' : 'hidden'}>
-
-        {/* ── Upload / Error ── */}
-        {(stage === 'upload' || stage === 'error') && (
-          <div className="max-w-xl mx-auto">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
-                <Upload size={28} className="text-[#003DA5]" />
-              </div>
-              <h2 className="text-xl font-bold text-gray-800">Módulo Chips</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Cargá el Excel con las hojas:{' '}
-                <strong>Activaciones</strong>, <strong>Comisiones</strong> y <strong>Puntos de Venta</strong>
-              </p>
-            </div>
-            <FileUploader
-              onFile={handleFile}
-              accept=".xlsx"
-              label="Arrastrá tu archivo Excel aquí"
-              sublabel="o hacé clic para seleccionarlo"
-            />
-            {stage === 'error' && errorMsg && (
-              <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 whitespace-pre-line flex items-start gap-2">
-                <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Loading ── */}
-        {stage === 'loading' && (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <Loader2 size={36} className="animate-spin text-[#003DA5] mx-auto mb-3" />
-              <p className="text-gray-500">Procesando archivo...</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── Analysis ── */}
-        {stage === 'analysis' && parseResult && (
-          <div className="space-y-6">
-
-            {/* Fecha de referencia */}
-            <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-200 px-5 py-3">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha de referencia:</span>
-              <input
-                type="date"
-                value={pendingDate}
-                onChange={e => setPendingDate(e.target.value)}
-                className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-[#003DA5]"
-              />
-              <button
-                onClick={handleRecalculate}
-                disabled={recalc || pendingDate === refDateStr}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003DA5] hover:bg-blue-800 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                {recalc ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                Recalcular
-              </button>
-              {pendingDate !== refDateStr && (
-                <span className="text-xs text-amber-600 font-medium">Cambios sin aplicar</span>
-              )}
-            </div>
-
-            {/* KPI cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
-              <KpiBox label="Puntos analizados"        value={kpiPuntos}    color="#20c997" />
-              <KpiBox label="Necesitan visita"         value={kpiVisitar}   color="#E3000F" />
-              <KpiBox label="Chips vencidos"           value={kpiVencidos}  color="#E3000F" />
-              <KpiBox label="Vencen en 30 días"        value={kpiPorVencer} color="#fd7e14" />
-              <KpiBox label="Chips sugeridos a llevar" value={kpiChips}     color="#20c997" />
-            </div>
-
-            {/* Filters */}
-            <div className="bg-white rounded-xl border border-gray-200 px-5 py-4">
-              <div className="flex flex-wrap gap-3 items-center">
-                <select value={filtEmpresa} onChange={e => { setFiltEmpresa(e.target.value); setPage(1); }}
-                  className="max-w-[180px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5]">
-                  <option value="">Empresa (todas)</option>
-                  {empresas.map(v => <option key={v}>{v}</option>)}
-                </select>
-                <select value={filtDist} onChange={e => { setFiltDist(e.target.value); setPage(1); }}
-                  className="max-w-[210px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5]">
-                  <option value="">Distribuidor (todos)</option>
-                  {dists.map(v => <option key={v}>{v}</option>)}
-                </select>
-                <select value={filtDepto} onChange={e => { setFiltDepto(e.target.value); setPage(1); }}
-                  className="max-w-[180px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5]">
-                  <option value="">Departamento (todos)</option>
-                  {deptos.map(v => <option key={v}>{v}</option>)}
-                </select>
-                <select value={filtEstado} onChange={e => { setFiltEstado(e.target.value); setPage(1); }}
-                  className="max-w-[180px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5]">
-                  <option value="">Estado visita (todos)</option>
-                  {estados.map(v => <option key={v}>{v}</option>)}
-                </select>
-                <input
-                  type="text"
-                  placeholder="🔍 Buscar punto..."
-                  value={filtSearch}
-                  onChange={e => { setFiltSearch(e.target.value); setPage(1); }}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5] min-w-[160px] flex-1"
+          {(stage === 'upload' || stage === 'error') && (
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="max-w-xl mx-auto">
+                <div className="text-center mb-6">
+                  <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
+                    <Upload size={28} className="text-[#003DA5]" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-800">Módulo Chips</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Cargá el Excel con las hojas:{' '}
+                    <strong>Activaciones</strong>, <strong>Comisiones</strong> y <strong>Puntos de Venta</strong>
+                  </p>
+                </div>
+                <FileUploader
+                  onFile={handleFile}
+                  accept=".xlsx"
+                  label="Arrastrá tu archivo Excel aquí"
+                  sublabel="o hacé clic para seleccionarlo"
                 />
-                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={filtSolo}
-                    onChange={e => { setFiltSolo(e.target.checked); setPage(1); }}
-                    className="w-4 h-4 accent-[#003DA5]"
-                  />
-                  Solo puntos a visitar
-                </label>
-                <span className="text-sm text-gray-400 whitespace-nowrap font-medium">{filtered.length} puntos</span>
-                {(filtEmpresa || filtDist || filtDepto || filtEstado || filtSearch || !filtSolo) && (
-                  <button onClick={resetFilters} className="text-xs text-[#003DA5] hover:underline whitespace-nowrap">
-                    Limpiar filtros
-                  </button>
+                {stage === 'error' && errorMsg && (
+                  <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 whitespace-pre-line flex items-start gap-2">
+                    <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+                    <span>{errorMsg}</span>
+                  </div>
                 )}
               </div>
             </div>
+          )}
 
-            {/* Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[1700px]">
-                  <thead>
+          {stage === 'loading' && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 size={36} className="animate-spin text-[#003DA5] mx-auto mb-3" />
+                <p className="text-gray-500">Procesando archivo...</p>
+              </div>
+            </div>
+          )}
+
+          {stage === 'analysis' && parseResult && (
+            <>
+              {/* PARTE FIJA — fecha, KPIs, filtros */}
+              <div style={{ flexShrink: 0 }} className="px-6 pt-4">
+
+                {/* Fecha de referencia */}
+                <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-200 px-5 py-3 mb-3">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha de referencia:</span>
+                  <input
+                    type="date"
+                    value={pendingDate}
+                    onChange={e => setPendingDate(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-[#003DA5]"
+                  />
+                  <button
+                    onClick={handleRecalculate}
+                    disabled={recalc || pendingDate === refDateStr}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003DA5] hover:bg-blue-800 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    {recalc ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    Recalcular
+                  </button>
+                  {pendingDate !== refDateStr && (
+                    <span className="text-xs text-amber-600 font-medium">Cambios sin aplicar</span>
+                  )}
+                </div>
+
+                {/* KPI cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 12 }}>
+                  <KpiBox label="Puntos analizados"        value={kpiPuntos}    color="#20c997" />
+                  <KpiBox label="Necesitan visita"         value={kpiVisitar}   color="#E3000F" />
+                  <KpiBox label="Chips vencidos"           value={kpiVencidos}  color="#E3000F" />
+                  <KpiBox label="Vencen en 30 días"        value={kpiPorVencer} color="#fd7e14" />
+                  <KpiBox label="Chips sugeridos a llevar" value={kpiChips}     color="#20c997" />
+                </div>
+
+                {/* Filters */}
+                <div className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+                  <div className="flex flex-wrap gap-3 items-center">
+                    <select value={filtEmpresa} onChange={e => { setFiltEmpresa(e.target.value); setPage(1); }}
+                      className="max-w-[180px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5]">
+                      <option value="">Empresa (todas)</option>
+                      {empresas.map(v => <option key={v}>{v}</option>)}
+                    </select>
+                    <select value={filtDist} onChange={e => { setFiltDist(e.target.value); setPage(1); }}
+                      className="max-w-[210px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5]">
+                      <option value="">Distribuidor (todos)</option>
+                      {dists.map(v => <option key={v}>{v}</option>)}
+                    </select>
+                    <select value={filtDepto} onChange={e => { setFiltDepto(e.target.value); setPage(1); }}
+                      className="max-w-[180px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5]">
+                      <option value="">Departamento (todos)</option>
+                      {deptos.map(v => <option key={v}>{v}</option>)}
+                    </select>
+                    <select value={filtEstado} onChange={e => { setFiltEstado(e.target.value); setPage(1); }}
+                      className="max-w-[180px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5]">
+                      <option value="">Estado visita (todos)</option>
+                      {estados.map(v => <option key={v}>{v}</option>)}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="🔍 Buscar punto..."
+                      value={filtSearch}
+                      onChange={e => { setFiltSearch(e.target.value); setPage(1); }}
+                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5] min-w-[160px] flex-1"
+                    />
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={filtSolo}
+                        onChange={e => { setFiltSolo(e.target.checked); setPage(1); }}
+                        className="w-4 h-4 accent-[#003DA5]"
+                      />
+                      Solo puntos a visitar
+                    </label>
+                    <span className="text-sm text-gray-400 whitespace-nowrap font-medium">{filtered.length} puntos</span>
+                    {(filtEmpresa || filtDist || filtDepto || filtEstado || filtSearch || !filtSolo) && (
+                      <button onClick={resetFilters} className="text-xs text-[#003DA5] hover:underline whitespace-nowrap">
+                        Limpiar filtros
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* TABLA — scroll propio */}
+              <div style={{
+                flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto',
+                border: '1px solid #E2E8F0', borderRadius: 8, margin: '12px 24px',
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1700 }} className="text-sm">
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#003DA5' }}>
                     <tr>
                       {COLS.map(col => (
                         <th
@@ -495,8 +502,8 @@ export default function ChipsModule() {
                 </table>
               </div>
 
-              {/* Table footer */}
-              <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+              {/* PARTE FIJA — paginación + nota */}
+              <div style={{ flexShrink: 0 }} className="px-6 pb-4 flex items-center justify-between flex-wrap gap-3">
                 <p className="text-[11px] text-gray-400">
                   * Ritmo calculado sobre 8 meses por falta de datos de comisión recientes
                 </p>
@@ -516,15 +523,17 @@ export default function ChipsModule() {
                   </div>
                 )}
               </div>
-            </div>
-
-            <InfoFootnote />
-
-          </div>
-        )}
+              <div style={{ flexShrink: 0 }} className="px-6 pb-4">
+                <InfoFootnote />
+              </div>
+            </>
+          )}
         </div>
 
-        <div className={moduleTab === 'desempeno' ? '' : 'hidden'}>
+        {/* ── Tab 2: Desempeño de distribuidores ── */}
+        <div
+          style={moduleTab === 'desempeno' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } : { display: 'none' }}
+        >
           <DesempenoTab />
         </div>
 
@@ -658,6 +667,7 @@ function DesempenoTab() {
 
   if (!desemp) {
     return (
+      <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-xl mx-auto">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
@@ -702,45 +712,54 @@ function DesempenoTab() {
           </div>
         )}
       </div>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      {/* PARTE FIJA — período, búsqueda */}
+      <div style={{ flexShrink: 0 }} className="px-6 pt-4">
+        <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-200 px-5 py-3 mb-3">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Período — desde:</span>
+          <input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-[#003DA5]" />
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">hasta:</span>
+          <input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-[#003DA5]" />
+          <button onClick={handleCalcular}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003DA5] hover:bg-blue-800 text-white text-sm font-medium rounded-lg transition-colors">
+            <RefreshCw size={14} /> Calcular
+          </button>
+          <button onClick={handleReset2}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+            <RefreshCw size={14} /> Cambiar archivos
+          </button>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-200 px-5 py-3">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Período — desde:</span>
-        <input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)}
-          className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-[#003DA5]" />
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">hasta:</span>
-        <input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)}
-          className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-[#003DA5]" />
-        <button onClick={handleCalcular}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003DA5] hover:bg-blue-800 text-white text-sm font-medium rounded-lg transition-colors">
-          <RefreshCw size={14} /> Calcular
-        </button>
-        <button onClick={handleReset2}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
-          <RefreshCw size={14} /> Cambiar archivos
-        </button>
+        <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex flex-wrap gap-3 items-center">
+          <input
+            type="text" placeholder="🔍 Buscar distribuidor..." value={searchDist}
+            onChange={e => setSearchDist(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5] min-w-[220px]"
+          />
+          <span className="text-sm text-gray-400 whitespace-nowrap font-medium ml-auto">{filteredDist.length} distribuidores</span>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex flex-wrap gap-3 items-center">
-        <input
-          type="text" placeholder="🔍 Buscar distribuidor..." value={searchDist}
-          onChange={e => setSearchDist(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5] min-w-[220px]"
-        />
-        <span className="text-sm text-gray-400 whitespace-nowrap font-medium ml-auto">{filteredDist.length} distribuidores</span>
-      </div>
+      {/* TABLAS — scroll propio */}
+      <div style={{
+        flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto',
+        border: '1px solid #E2E8F0', borderRadius: 8, margin: '12px 24px',
+        padding: '0 16px',
+      }}>
 
       {/* Resumen por empresa */}
-      <div>
+      <div className="pt-4">
         <h3 className="text-sm font-bold text-gray-700 mb-2">Resumen por empresa (período)</h3>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+            <table style={{ width: '100%', borderCollapse: 'collapse' }} className="text-sm">
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#003DA5' }}>
                 <tr>
                   {['Empresa', 'Chips armados', 'Activados', '% no OK', 'Sin distribuidor asignado'].map(h => (
                     <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap">{h}</th>
@@ -762,7 +781,6 @@ function DesempenoTab() {
                 )}
               </tbody>
             </table>
-          </div>
         </div>
       </div>
 
@@ -772,10 +790,9 @@ function DesempenoTab() {
         {!desemp.hasVisitas && (
           <p className="text-xs text-amber-600 mb-2">Falta el archivo de visitas — no se puede calcular esta tabla.</p>
         )}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+            <table style={{ width: '100%', borderCollapse: 'collapse' }} className="text-sm">
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#003DA5' }}>
                 <tr>
                   <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap">Distribuidor</th>
                   <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap">Empresa</th>
@@ -801,17 +818,15 @@ function DesempenoTab() {
                 )}
               </tbody>
             </table>
-          </div>
         </div>
       </div>
 
       {/* Por distribuidor (detalle) */}
       <div>
         <h3 className="text-sm font-bold text-gray-700 mb-2">Por distribuidor</h3>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1200px]">
-              <thead>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-4">
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1200 }} className="text-sm">
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#003DA5' }}>
                 <tr>
                   {DIST_COLS.map(col => (
                     <th
@@ -849,10 +864,10 @@ function DesempenoTab() {
                 )}
               </tbody>
             </table>
-          </div>
         </div>
       </div>
 
-    </div>
+      </div>
+    </>
   );
 }

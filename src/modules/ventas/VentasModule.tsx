@@ -547,7 +547,6 @@ function EquivalenteKpis({ stats }: { stats: VentasStats }) {
   const items = [
     { key: 'Activo',      label: 'Activos (Control Antel)',         icon: CheckCircle  },
     { key: 'Pendiente',   label: 'Pendientes (Activar/Distribuir)', icon: Layers       },
-    { key: 'Back Office', label: 'Back Office (Vendido)',           icon: ArrowUpRight },
     { key: 'Rechazado',   label: 'Rechazados',                     icon: XCircle      },
   ] as const;
   return (

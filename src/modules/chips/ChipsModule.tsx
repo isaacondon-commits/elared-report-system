@@ -73,10 +73,12 @@ function toInputDate(d: Date): string {
 
 function KpiBox({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4" style={{ borderTop: `4px solid ${color}` }}>
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{label}</div>
-      <div className="text-[26px] font-bold leading-none mt-1.5" style={{ color }}>
+    <div className="bg-white" style={{ padding: '14px 16px', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+      <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1, color }}>
         {value.toLocaleString('es-UY')}
+      </div>
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#6c757d', marginTop: 2 }}>
+        {label}
       </div>
     </div>
   );
@@ -371,7 +373,7 @@ export default function ChipsModule() {
             </div>
 
             {/* KPI cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
               <KpiBox label="Puntos analizados"        value={kpiPuntos}    color="#20c997" />
               <KpiBox label="Necesitan visita"         value={kpiVisitar}   color="#E3000F" />
               <KpiBox label="Chips vencidos"           value={kpiVencidos}  color="#E3000F" />

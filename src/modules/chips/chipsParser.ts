@@ -41,10 +41,17 @@ export type ParseResult = {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function fixMojibake(s: string): string {
-  if (/[ÃÂ]/.test(s)) {
-    try { return decodeURIComponent(escape(s)); } catch { /* fall through */ }
+  if (typeof s !== 'string') return String(s ?? '');
+  if (!/[ÃÂ]/.test(s)) return s;
+  try {
+    return decodeURIComponent(escape(s));
+  } catch {
+    return s
+      .replace(/Ã³/g, 'ó').replace(/Ã©/g, 'é')
+      .replace(/Ã¡/g, 'á').replace(/Ã­/g, 'í')
+      .replace(/Ãº/g, 'ú').replace(/Ã±/g, 'ñ')
+      .replace(/Ã/g, 'Á');
   }
-  return s;
 }
 
 function normalize(s: string): string {
@@ -81,12 +88,11 @@ function excelDateToJs(v: unknown): Date | null {
 }
 
 function toDateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return d.toISOString().slice(0, 10);
 }
 
 function addMonths(d: Date, n: number): Date {
   const r = new Date(d);
-  r.setDate(1);
   r.setMonth(r.getMonth() + n);
   return r;
 }
@@ -129,7 +135,7 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
     const mid = cleanMid(row[0]);
     if (!mid) continue;
 
-    if (row.length >= 6) midsConComision.add(mid);
+    if (mid.length >= 6) midsConComision.add(mid);
 
     const fecha = excelDateToJs(row[1]);
     if (fecha) {
@@ -229,9 +235,9 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
     const agg = pdvAgg.get(idPdv)!;
 
     if (emp)     agg.empresa        = emp;
-    if (nomDist) agg.distribuidor   = nomDist;
+    if (nomDist) agg.distribuidor   = fixMojibake(nomDist);
     if (idDist)  agg.idDistribuidor = idDist;
-    if (nomPdv)  agg.pdvNombre      = nomPdv;
+    if (nomPdv)  agg.pdvNombre      = fixMojibake(nomPdv);
 
     const fechaKey = toDateKey(fecha);
     agg.visitDates.add(fechaKey);
@@ -279,9 +285,9 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
       if (!id) continue;
 
       pdvInfo.set(id, {
-        nombre:       String(pNombre    >= 0 ? (row[pNombre]  ?? '') : '').trim(),
-        departamento: String(pDepto     >= 0 ? (row[pDepto]   ?? '') : '').trim(),
-        estadoVisita: String(pEstVis    >= 0 ? (row[pEstVis]  ?? '') : '').trim(),
+        nombre:       fixMojibake(String(pNombre    >= 0 ? (row[pNombre]  ?? '') : '').trim()),
+        departamento: fixMojibake(String(pDepto     >= 0 ? (row[pDepto]   ?? '') : '').trim()),
+        estadoVisita: fixMojibake(String(pEstVis    >= 0 ? (row[pEstVis]  ?? '') : '').trim()),
         fechaCambio:  excelDateToJs(pFechaCambio >= 0 ? row[pFechaCambio] : null),
         vencimiento:  excelDateToJs(pVenc        >= 0 ? row[pVenc]        : null),
       });
@@ -323,12 +329,14 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
     let alerta:   'baja' | 'suba' | null = null;
     let alertaPct: number | null         = null;
     if ((agg.recent3m + agg.prev3m) >= UMBRAL) {
-      const raw = agg.prev3m === 0
-        ? (agg.recent3m > 0 ? 9.99 : 0)
-        : (agg.recent3m - agg.prev3m) / agg.prev3m;
-      alertaPct = raw;
-      if (raw <= -0.45) alerta = 'baja';
-      else if (raw >= 0.45) alerta = 'suba';
+      if (agg.prev3m > 0) {
+        alertaPct = (agg.recent3m - agg.prev3m) / agg.prev3m;
+        if (alertaPct <= -0.45) alerta = 'baja';
+        else if (alertaPct >= 0.45) alerta = 'suba';
+      } else if (agg.recent3m >= UMBRAL) {
+        alerta = 'suba';
+        alertaPct = null;
+      }
     }
 
     // Última delivery
@@ -416,4 +424,228 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
     windowStart: eightMonthsAgo,
     windowEnd:   today,
   };
+}
+
+// ── Tab 2: Desempeño de distribuidores ─────────────────────────────────────────
+
+function findColExact(headers: string[], exact: string): number {
+  return headers.findIndex(h => normalize(h) === exact);
+}
+
+function parseFlexibleDate(v: unknown): Date | null {
+  if (v === null || v === undefined || v === '') return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  if (typeof v === 'number') return excelDateToJs(v);
+  const s = String(v).trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return new Date(parseInt(m[3], 10), parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+export async function readAoaFromFile(file: File): Promise<unknown[][]> {
+  const isCsv = /\.csv$/i.test(file.name);
+  if (isCsv) {
+    let text = await file.text();
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const lines = text.split(/\r\n|\n|\r/).filter(l => l.length > 0);
+    if (lines.length === 0) return [];
+    const delim = (lines[0].split(';').length >= lines[0].split(',').length) ? ';' : ',';
+    return lines.map(l => l.split(delim));
+  }
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json<unknown[]>(sh, { header: 1, raw: true });
+}
+
+export type DesempenoFileKind = 'chips' | 'pdv' | 'visitas' | null;
+
+export function classifyDesempenoFile(aoa: unknown[][]): DesempenoFileKind {
+  if (!aoa || aoa.length < 2) return null;
+  const headers = (aoa[0] as unknown[]).map(h => normalize(String(h ?? '')));
+  if (headers.includes('mid')) return 'chips';
+  if (headers.some(h => h.includes('departamento'))) return 'pdv';
+  if (headers.some(h => h.includes('observaciones')) ||
+      headers.some(h => h.includes('fecha') && h.includes('visita') && !h.includes('cambio'))) return 'visitas';
+  return null;
+}
+
+export function defaultDesempenoPeriod(chipsAoa: unknown[][]): { start: Date; end: Date } {
+  const headers = (chipsAoa[0] as unknown[]).map(h => String(h ?? ''));
+  const cFechaAsigDist = findCol(headers, ['fecha', 'asign', 'distribuidor']);
+  let maxD: Date | null = null;
+  for (let r = 1; r < chipsAoa.length; r++) {
+    const row = chipsAoa[r] as unknown[];
+    if (!row) continue;
+    const f = parseFlexibleDate(cFechaAsigDist >= 0 ? row[cFechaAsigDist] : null);
+    if (f && (!maxD || f > maxD)) maxD = f;
+  }
+  if (!maxD) maxD = new Date();
+  const start = new Date(maxD);
+  start.setDate(start.getDate() - 30);
+  return { start, end: maxD };
+}
+
+export type EmpresaRow = {
+  empresa: string; armados: number; activados: number; noOkPct: number; sinDistribuidor: number;
+};
+
+export type DistribuidorRow = {
+  id: string; nombre: string; empresa: string;
+  asignados: number; conPdv: number; sinPdv: number;
+  chipsAPdv: number; diasConEntrega: number;
+  promedioDia: number; diasStock: number | null;
+  pendientes: number; porVencer: number; creados: number;
+  diasCount: number[];
+};
+
+export type DesempenoResult = {
+  empresaRows: EmpresaRow[];
+  distRows: DistribuidorRow[];
+  hasVisitas: boolean;
+};
+
+export function parseDesempeno(
+  chipsAoa: unknown[][],
+  pdvAoa: unknown[][],
+  visitasAoa: unknown[][] | null,
+  periodStart: Date,
+  periodEnd: Date,
+): DesempenoResult {
+  const getCell = (row: unknown[], idx: number): unknown => (idx >= 0 ? row[idx] : null);
+
+  const chipsHeaders     = (chipsAoa[0] as unknown[]).map(h => String(h ?? ''));
+  const cEmpresaCol      = findColExact(chipsHeaders, 'empresa');
+  const cFechaActivCol   = findCol(chipsHeaders, ['fecha', 'activacion']);
+  const cEstadoActivCol  = findCol(chipsHeaders, ['estado', 'activacion']);
+  const cIdDistCol       = findCol(chipsHeaders, ['id', 'distribuidor']);
+  const cNomDistCol      = findCol(chipsHeaders, ['nombre', 'distribuidor']);
+  const cFechaAsigDistCol= findCol(chipsHeaders, ['fecha', 'asign', 'distribuidor']);
+  const cIdPdvCol        = findCol(chipsHeaders, ['id', 'punto', 'venta']);
+  const cFechaAsigPdvCol = findCol(chipsHeaders, ['fecha', 'asign', 'punto']);
+
+  const pdvHeaders       = (pdvAoa[0] as unknown[]).map(h => String(h ?? ''));
+  const pDistribuidorCol = findColExact(pdvHeaders, 'distribuidor');
+  const pEstadoVisitaCol = findCol(pdvHeaders, ['estado', 'visita']);
+  const pVencimientoCol  = findCol(pdvHeaders, ['fecha', 'vencimiento']);
+  const pCreadoCol       = findColExact(pdvHeaders, 'creado');
+
+  // ── Resumen por empresa ──
+  type EmpresaAgg = { armados: number; activados: number; sinDistribuidor: number };
+  const empresaAgg = new Map<string, EmpresaAgg>();
+  for (let r = 1; r < chipsAoa.length; r++) {
+    const row = chipsAoa[r] as unknown[];
+    if (!row || row.length === 0) continue;
+    const fAct = parseFlexibleDate(getCell(row, cFechaActivCol));
+    if (!fAct || fAct < periodStart || fAct > periodEnd) continue;
+    const emp = fixMojibake(String(getCell(row, cEmpresaCol) ?? '').trim()) || '(sin empresa)';
+    if (!empresaAgg.has(emp)) empresaAgg.set(emp, { armados: 0, activados: 0, sinDistribuidor: 0 });
+    const e = empresaAgg.get(emp)!;
+    e.armados++;
+    if (normalize(String(getCell(row, cEstadoActivCol) ?? '')) === 'ok') e.activados++;
+    const idd = getCell(row, cIdDistCol);
+    if (idd === null || idd === undefined || idd === '') e.sinDistribuidor++;
+  }
+  const empresaRows: EmpresaRow[] = Array.from(empresaAgg.entries()).map(([empresa, e]) => ({
+    empresa, armados: e.armados, activados: e.activados,
+    noOkPct: e.armados ? (e.armados - e.activados) / e.armados : 0,
+    sinDistribuidor: e.sinDistribuidor,
+  })).sort((a, b) => b.armados - a.armados);
+
+  // ── Por distribuidor ──
+  type DistAgg = {
+    nombre: string; empresas: Set<string>; asignados: number; conPdv: number; sinPdv: number;
+    chipsAPdv: number; diasSet: Set<string>; pendientes: number; porVencer: number; creados: number;
+    diasCount: number[];
+  };
+  const dist = new Map<string, DistAgg>();
+  for (let r = 1; r < chipsAoa.length; r++) {
+    const row = chipsAoa[r] as unknown[];
+    if (!row || row.length === 0) continue;
+    if (normalize(String(getCell(row, cEstadoActivCol) ?? '')) !== 'ok') continue;
+    const id = String(getCell(row, cIdDistCol) ?? '').trim();
+    if (!id) continue;
+    if (!dist.has(id)) {
+      dist.set(id, {
+        nombre: String(getCell(row, cNomDistCol) ?? ''), empresas: new Set(),
+        asignados: 0, conPdv: 0, sinPdv: 0, chipsAPdv: 0, diasSet: new Set(),
+        pendientes: 0, porVencer: 0, creados: 0, diasCount: [0, 0, 0, 0, 0, 0],
+      });
+    }
+    const d = dist.get(id)!;
+    const empVal = getCell(row, cEmpresaCol);
+    if (empVal) d.empresas.add(fixMojibake(String(empVal).trim()));
+
+    const fAsigDist = parseFlexibleDate(getCell(row, cFechaAsigDistCol));
+    if (fAsigDist && fAsigDist >= periodStart && fAsigDist <= periodEnd) {
+      d.asignados++;
+      const pdvId = getCell(row, cIdPdvCol);
+      if (pdvId !== null && pdvId !== undefined && pdvId !== '') d.conPdv++; else d.sinPdv++;
+    }
+    const fAsigPdv = parseFlexibleDate(getCell(row, cFechaAsigPdvCol));
+    if (fAsigPdv && fAsigPdv >= periodStart && fAsigPdv <= periodEnd) {
+      d.chipsAPdv++;
+      d.diasSet.add(toDateKey(fAsigPdv));
+    }
+  }
+
+  const nameToId = new Map<string, string>();
+  for (const [id, d] of dist.entries()) nameToId.set(normalize(d.nombre), id);
+
+  const today = new Date();
+  for (let r = 1; r < pdvAoa.length; r++) {
+    const row = pdvAoa[r] as unknown[];
+    if (!row || row.length === 0) continue;
+    const distNombre = getCell(row, pDistribuidorCol);
+    if (!distNombre) continue;
+    const id = nameToId.get(normalize(String(distNombre)));
+    if (id === undefined) continue;
+    const d = dist.get(id)!;
+    if (normalize(String(getCell(row, pEstadoVisitaCol) ?? '')) === 'pendiente') d.pendientes++;
+    const venc = parseFlexibleDate(getCell(row, pVencimientoCol));
+    if (venc) {
+      const days = Math.round((venc.getTime() - today.getTime()) / 86400000);
+      if (days <= 30) d.porVencer++;
+    }
+    const creado = parseFlexibleDate(getCell(row, pCreadoCol));
+    if (creado && creado >= periodStart && creado <= periodEnd) d.creados++;
+  }
+
+  let hasVisitas = false;
+  if (visitasAoa && visitasAoa.length >= 2) {
+    hasVisitas = true;
+    const vHeaders         = (visitasAoa[0] as unknown[]).map(h => String(h ?? ''));
+    const vDistribuidorCol = findColExact(vHeaders, 'distribuidor');
+    const vFechaVisitaCol  = findCol(vHeaders, ['fecha', 'visita']);
+    const dEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    for (let r = 1; r < visitasAoa.length; r++) {
+      const row = visitasAoa[r] as unknown[];
+      if (!row || row.length === 0) continue;
+      const distNombre = getCell(row, vDistribuidorCol);
+      if (!distNombre) continue;
+      const id = nameToId.get(normalize(String(distNombre)));
+      if (id === undefined) continue;
+      const fVisita = parseFlexibleDate(getCell(row, vFechaVisitaCol));
+      if (!fVisita) continue;
+      const dVisita = new Date(fVisita.getFullYear(), fVisita.getMonth(), fVisita.getDate());
+      const daysAgo = Math.round((dEnd.getTime() - dVisita.getTime()) / 86400000);
+      if (daysAgo >= 0 && daysAgo <= 5) dist.get(id)!.diasCount[daysAgo]++;
+    }
+  }
+
+  const distRows: DistribuidorRow[] = Array.from(dist.entries()).map(([id, d]) => {
+    const promedioDia = d.diasSet.size ? d.chipsAPdv / d.diasSet.size : 0;
+    const diasStock = promedioDia > 0 ? d.sinPdv / promedioDia : null;
+    return {
+      id, nombre: fixMojibake(d.nombre), empresa: Array.from(d.empresas).join(' / '),
+      asignados: d.asignados, conPdv: d.conPdv, sinPdv: d.sinPdv,
+      chipsAPdv: d.chipsAPdv, diasConEntrega: d.diasSet.size,
+      promedioDia, diasStock,
+      pendientes: d.pendientes, porVencer: d.porVencer, creados: d.creados,
+      diasCount: d.diasCount,
+    };
+  }).sort((a, b) => b.asignados - a.asignados);
+
+  return { empresaRows, distRows, hasVisitas };
 }

@@ -62,7 +62,7 @@ function AppLayout() {
       <div className="flex min-h-screen bg-[#F5F7FA]">
         <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} />
         {/* margin-left sincronizado con el ancho del sidebar */}
-        <main className={`flex-1 flex flex-col min-h-screen transition-all duration-200 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
+        <main className={`flex-1 min-w-0 flex flex-col min-h-screen transition-all duration-200 ${sidebarCollapsed ? 'ml-16' : 'ml-60'}`}>
           <Routes>
             <Route path="/" element={
               <ProtectedRoute modulo="inicio"><HomePage /></ProtectedRoute>

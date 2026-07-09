@@ -285,10 +285,10 @@ export default function ChipsModule() {
   ) : undefined;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0">
       <Header title="Chips" subtitle={subtitle} actions={headerActions} />
 
-      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', overflow: 'hidden', minWidth: 0 }}>
 
         {/* PARTE FIJA — tabs (no scrollea) */}
         <div style={{ flexShrink: 0 }} className="bg-white border-b border-gray-200 px-6 pt-3 flex gap-2">
@@ -312,7 +312,7 @@ export default function ChipsModule() {
 
         {/* ── Tab 1: Asignar visitas ── */}
         <div
-          style={moduleTab === 'asignar' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } : { display: 'none' }}
+          style={moduleTab === 'asignar' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' } : { display: 'none' }}
         >
           {(stage === 'upload' || stage === 'error') && (
             <div className="flex-1 overflow-y-auto p-6">
@@ -439,7 +439,7 @@ export default function ChipsModule() {
 
               {/* TABLA — scroll propio */}
               <div style={{
-                flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto',
+                flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'auto',
                 border: '1px solid #E2E8F0', borderRadius: 8, margin: '12px 24px',
               }}>
                 <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }} className="text-sm">
@@ -546,7 +546,7 @@ export default function ChipsModule() {
 
         {/* ── Tab 2: Desempeño de distribuidores ── */}
         <div
-          style={moduleTab === 'desempeno' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } : { display: 'none' }}
+          style={moduleTab === 'desempeno' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' } : { display: 'none' }}
         >
           <DesempenoTab />
         </div>
@@ -763,7 +763,7 @@ function DesempenoTab() {
 
       {/* TABLAS — scroll propio */}
       <div style={{
-        flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto',
+        flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'auto',
         border: '1px solid #E2E8F0', borderRadius: 8, margin: '12px 24px',
         padding: '0 16px',
       }}>

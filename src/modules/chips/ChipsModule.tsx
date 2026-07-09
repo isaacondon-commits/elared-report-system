@@ -112,31 +112,34 @@ function InfoFootnote() {
 
 // ── Table column definitions ──────────────────────────────────────────────────
 
-type ColDef = { key: keyof ChipResult; label: string };
+type ColDef = { key: keyof ChipResult; label: string; minWidth: number };
 
 const COLS: ColDef[] = [
-  { key: 'empresa',           label: 'Empresa' },
-  { key: 'distribuidor',      label: 'Distribuidor' },
-  { key: 'idDistribuidor',    label: 'ID Distribuidor' },
-  { key: 'pdvNombre',         label: 'Punto de venta' },
-  { key: 'pdvId',             label: 'ID punto' },
-  { key: 'departamento',      label: 'Depto.' },
-  { key: 'visitas8m',         label: 'Visitas 8m' },
-  { key: 'asignados8m',       label: 'Asignados 8m' },
-  { key: 'activaciones8m',    label: 'Activados 8m' },
-  { key: 'pct8m',             label: '% activ. 8m' },
-  { key: 'ritmoReciente',     label: 'Ritmo reciente (chips/mes)' },
-  { key: 'alerta',            label: 'Alerta' },
-  { key: 'ultimaAsignacion',  label: 'Última entrega' },
-  { key: 'ultimaQty',         label: 'Chips últ. entrega' },
-  { key: 'ultimaActivos',     label: 'Activ. últ. entrega' },
-  { key: 'ultimaPct',         label: '% últ. entrega' },
-  { key: 'estadoVisita',      label: 'Estado visita' },
-  { key: 'fechaCambioEstado', label: 'Último cambio de estado' },
-  { key: 'vencimiento',       label: 'Vencimiento' },
-  { key: 'situacion',         label: 'Situación' },
-  { key: 'sugerido',          label: 'Sugerido' },
+  { key: 'empresa',           label: 'Empresa',                     minWidth: 80 },
+  { key: 'distribuidor',      label: 'Distribuidor',                minWidth: 120 },
+  { key: 'idDistribuidor',    label: 'ID Distribuidor',             minWidth: 100 },
+  { key: 'pdvNombre',         label: 'Punto de venta',              minWidth: 180 },
+  { key: 'pdvId',             label: 'ID punto',                    minWidth: 90 },
+  { key: 'departamento',      label: 'Depto.',                      minWidth: 100 },
+  { key: 'visitas8m',         label: 'Visitas 8m',                  minWidth: 80 },
+  { key: 'asignados8m',       label: 'Asignados 8m',                minWidth: 90 },
+  { key: 'activaciones8m',    label: 'Activados 8m',                minWidth: 90 },
+  { key: 'pct8m',             label: '% activ. 8m',                 minWidth: 80 },
+  { key: 'ritmoReciente',     label: 'Ritmo reciente (chips/mes)',  minWidth: 120 },
+  { key: 'alerta',            label: 'Alerta',                      minWidth: 100 },
+  { key: 'ultimaAsignacion',  label: 'Última entrega',              minWidth: 100 },
+  { key: 'ultimaQty',         label: 'Chips últ. entrega',          minWidth: 80 },
+  { key: 'ultimaActivos',     label: 'Activ. últ. entrega',         minWidth: 80 },
+  { key: 'ultimaPct',         label: '% últ. entrega',              minWidth: 80 },
+  { key: 'estadoVisita',      label: 'Estado visita',               minWidth: 110 },
+  { key: 'fechaCambioEstado', label: 'Último cambio de estado',     minWidth: 110 },
+  { key: 'vencimiento',       label: 'Vencimiento',                 minWidth: 100 },
+  { key: 'situacion',         label: 'Situación',                   minWidth: 130 },
+  { key: 'sugerido',          label: 'Sugerido',                    minWidth: 80 },
 ];
+
+const STICKY_LEFT: Partial<Record<keyof ChipResult, number>> = { empresa: 0, distribuidor: 80 };
+const STICKY_SHADOW = '2px 0 4px rgba(0,0,0,0.08)';
 
 function sortResults(rows: ChipResult[], key: keyof ChipResult, dir: 'asc' | 'desc'): ChipResult[] {
   return [...rows].sort((a, b) => {
@@ -377,7 +380,7 @@ export default function ChipsModule() {
                 </div>
 
                 {/* KPI cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, marginBottom: 12 }}>
                   <KpiBox label="Puntos analizados"        value={kpiPuntos}    color="#20c997" />
                   <KpiBox label="Necesitan visita"         value={kpiVisitar}   color="#E3000F" />
                   <KpiBox label="Chips vencidos"           value={kpiVencidos}  color="#E3000F" />
@@ -439,58 +442,69 @@ export default function ChipsModule() {
                 flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto',
                 border: '1px solid #E2E8F0', borderRadius: 8, margin: '12px 24px',
               }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1700 }} className="text-sm">
-                  <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#003DA5' }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }} className="text-sm">
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 3, backgroundColor: '#003DA5' }}>
                     <tr>
-                      {COLS.map(col => (
-                        <th
-                          key={col.key}
-                          onClick={() => handleSort(col.key)}
-                          className="px-3 py-2.5 text-left text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap cursor-pointer hover:bg-[#002d7a] select-none"
-                        >
-                          <span className="flex items-center gap-0.5">
-                            {col.label}
-                            {sortKey === col.key
-                              ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)
-                              : <span className="w-3 inline-block" />}
-                          </span>
-                        </th>
-                      ))}
+                      {COLS.map(col => {
+                        const left = STICKY_LEFT[col.key];
+                        const isSticky = left !== undefined;
+                        return (
+                          <th
+                            key={col.key}
+                            onClick={() => handleSort(col.key)}
+                            style={{
+                              minWidth: col.minWidth,
+                              ...(isSticky ? { position: 'sticky', left, zIndex: 4, backgroundColor: '#003DA5', boxShadow: STICKY_SHADOW } : {}),
+                            }}
+                            className="px-3 py-2.5 text-left text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap cursor-pointer hover:bg-[#002d7a] select-none"
+                          >
+                            <span className="flex items-center gap-0.5">
+                              {col.label}
+                              {sortKey === col.key
+                                ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)
+                                : <span className="w-3 inline-block" />}
+                            </span>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
-                    {paged.map((r, i) => (
+                    {paged.map((r, i) => {
+                      const rowBg = i % 2 === 0 ? '#ffffff' : '#F9FAFB';
+                      return (
                       <tr key={r.pdvId + '-' + i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs">{r.empresa      || '—'}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs">{r.distribuidor || '—'}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-400">{r.idDistribuidor || '—'}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs font-medium max-w-[220px] truncate">{r.pdvNombre || r.pdvId}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-400">{r.pdvId}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs">{r.departamento || '—'}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.visitas8m}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.asignados8m}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.activaciones8m}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{pctStr(r.pct8m)}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs" style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: rowBg, minWidth: COLS[0].minWidth, boxShadow: STICKY_SHADOW }}>{r.empresa || '—'}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs" style={{ position: 'sticky', left: 80, zIndex: 2, backgroundColor: rowBg, minWidth: COLS[1].minWidth, boxShadow: STICKY_SHADOW }}>{r.distribuidor || '—'}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-400" style={{ minWidth: COLS[2].minWidth }}>{r.idDistribuidor || '—'}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs font-medium max-w-[220px] truncate" style={{ minWidth: COLS[3].minWidth }}>{r.pdvNombre || r.pdvId}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-400" style={{ minWidth: COLS[4].minWidth }}>{r.pdvId}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs" style={{ minWidth: COLS[5].minWidth }}>{r.departamento || '—'}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums" style={{ minWidth: COLS[6].minWidth }}>{r.visitas8m}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums" style={{ minWidth: COLS[7].minWidth }}>{r.asignados8m}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums" style={{ minWidth: COLS[8].minWidth }}>{r.activaciones8m}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums" style={{ minWidth: COLS[9].minWidth }}>{pctStr(r.pct8m)}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums" style={{ minWidth: COLS[10].minWidth }}>
                           {r.ritmoReciente.toFixed(2)}
                           {!r.tieneDatosRecientes && <span className="text-gray-300 ml-0.5 text-[10px]">*</span>}
                         </td>
-                        <td className="px-3 py-2 border-b border-gray-100"><TendBadge r={r} /></td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-500">{fmt(r.ultimaAsignacion)}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.ultimaQty}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.ultimaActivos}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{pctStr(r.ultimaPct)}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs">{r.estadoVisita || '—'}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-500">{fmt(r.fechaCambioEstado)}</td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-500">{fmt(r.vencimiento)}</td>
-                        <td className="px-3 py-2 border-b border-gray-100"><SituBadge r={r} /></td>
-                        <td className="px-3 py-2 border-b border-gray-100 text-right tabular-nums font-bold text-sm">
+                        <td className="px-3 py-2 border-b border-gray-100" style={{ minWidth: COLS[11].minWidth }}><TendBadge r={r} /></td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-500" style={{ minWidth: COLS[12].minWidth }}>{fmt(r.ultimaAsignacion)}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums" style={{ minWidth: COLS[13].minWidth }}>{r.ultimaQty}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums" style={{ minWidth: COLS[14].minWidth }}>{r.ultimaActivos}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums" style={{ minWidth: COLS[15].minWidth }}>{pctStr(r.ultimaPct)}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs" style={{ minWidth: COLS[16].minWidth }}>{r.estadoVisita || '—'}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-500" style={{ minWidth: COLS[17].minWidth }}>{fmt(r.fechaCambioEstado)}</td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-xs text-gray-500" style={{ minWidth: COLS[18].minWidth }}>{fmt(r.vencimiento)}</td>
+                        <td className="px-3 py-2 border-b border-gray-100" style={{ minWidth: COLS[19].minWidth }}><SituBadge r={r} /></td>
+                        <td className="px-3 py-2 border-b border-gray-100 text-right tabular-nums font-bold text-sm" style={{ minWidth: COLS[20].minWidth }}>
                           {r.sugerido > 0
                             ? <span style={{ color: '#d97706' }}>{r.sugerido}</span>
                             : <span className="text-gray-300 font-normal">—</span>}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                     {paged.length === 0 && (
                       <tr>
                         <td colSpan={COLS.length} className="px-4 py-10 text-center text-sm text-gray-400">

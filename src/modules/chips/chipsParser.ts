@@ -518,6 +518,13 @@ export async function readAoaFromFile(file: File): Promise<unknown[][]> {
   return XLSX.utils.sheet_to_json<unknown[]>(sh, { header: 1, raw: true });
 }
 
+const ESTADOS_NO_VISITA = [
+  'cancelado',
+  'pendiente',
+  'visita de autor suprimida',
+  'visita permanente',
+];
+
 export type DesempenoFileKind = 'chips' | 'pdv' | 'visitas' | null;
 
 export function classifyDesempenoFile(aoa: unknown[][]): DesempenoFileKind {
@@ -676,6 +683,7 @@ export function parseDesempeno(
     hasVisitas = true;
     const vHeaders         = (visitasAoa[0] as unknown[]).map(h => String(h ?? ''));
     const vDistribuidorCol = findColExact(vHeaders, 'distribuidor');
+    const vEstadoCol       = findColExact(vHeaders, 'estado');
     const vFechaVisitaCol  = findCol(vHeaders, ['fecha', 'visita']);
     const dEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     for (let r = 1; r < visitasAoa.length; r++) {
@@ -685,6 +693,8 @@ export function parseDesempeno(
       if (!distNombre) continue;
       const id = nameToId.get(normalize(String(distNombre)));
       if (id === undefined) continue;
+      const estado = normalize(String(getCell(row, vEstadoCol) ?? ''));
+      if (ESTADOS_NO_VISITA.includes(estado)) continue;
       const fVisita = parseFlexibleDate(getCell(row, vFechaVisitaCol));
       if (!fVisita) continue;
       const dVisita = new Date(fVisita.getFullYear(), fVisita.getMonth(), fVisita.getDate());

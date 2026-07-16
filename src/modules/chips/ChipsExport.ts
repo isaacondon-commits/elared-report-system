@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { ChipResult } from './chipsParser';
+import type { ChipResult, ChipEliminado } from './chipsParser';
 
 function fmt(d: Date | null): string {
   if (!d) return '—';
@@ -19,7 +19,7 @@ export function exportChipsExcel(results: ChipResult[], filenameBase = 'Chips'):
     'Empresa', 'Distribuidor', 'ID Dist.', 'Punto de Venta', 'ID PDV',
     'Depto', 'Visitas 8M', 'Chips 8M', 'Activos 8M', '% Activ',
     'Ritmo/Mes', 'Tendencia', 'Última Asig.', 'Últ. Cant.', 'Últ. Activos',
-    'Últ. %', 'Vence', 'Situación', 'Sugerido',
+    'Últ. %', 'Vence', 'Situación', 'Sugerido', 'Observacion',
   ];
 
   const rows = results.map(r => [
@@ -44,6 +44,7 @@ export function exportChipsExcel(results: ChipResult[], filenameBase = 'Chips'):
     r.vencimiento ? fmt(r.vencimiento) : '—',
     r.situacionLabel,
     r.sugerido > 0 ? r.sugerido : '—',
+    'ACT ' + r.comMesActual + '  ' + r.sugerido,
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -52,12 +53,51 @@ export function exportChipsExcel(results: ChipResult[], filenameBase = 'Chips'):
     { wch: 12 }, { wch: 22 }, { wch: 10 }, { wch: 30 }, { wch: 10 },
     { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 9 },
     { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
-    { wch: 9 },  { wch: 12 }, { wch: 26 }, { wch: 10 },
+    { wch: 9 },  { wch: 12 }, { wch: 26 }, { wch: 10 }, { wch: 16 },
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Chips');
   XLSX.writeFile(wb, `${filenameBase}_${fecha}.xlsx`);
+}
+
+export function exportEliminadosExcel(eliminados: ChipEliminado[]): void {
+  const fecha = new Date().toLocaleDateString('es-UY').replace(/\//g, '-');
+
+  const headers = [
+    'Nombre', 'ID', 'Distribuidor', 'Empresa',
+    'Fecha eliminado', 'Asignados 8m', 'Activados 8m',
+  ];
+
+  const rows = eliminados.map(e => [
+    e.nombre || '—',
+    e.id,
+    e.distribuidor || '—',
+    e.empresa || '—',
+    fmt(e.fechaEliminado),
+    e.asignados8m,
+    e.activados8m,
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+  headers.forEach((_, ci) => {
+    const ref = XLSX.utils.encode_cell({ r: 0, c: ci });
+    if (ws[ref]) ws[ref].s = {
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+      fill: { fgColor: { rgb: '003DA5' } },
+      alignment: { horizontal: 'center' },
+    };
+  });
+
+  ws['!cols'] = [
+    { wch: 30 }, { wch: 10 }, { wch: 22 }, { wch: 14 },
+    { wch: 16 }, { wch: 14 }, { wch: 14 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Puntos eliminados');
+  XLSX.writeFile(wb, `puntos_eliminados_${fecha}.xlsx`);
 }
 
 export function exportChipsPDF(results: ChipResult[]): void {

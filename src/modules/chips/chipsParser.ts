@@ -29,6 +29,17 @@ export type ChipResult = {
   situacionLabel: string;
   sugerido: number;
   yaPendiente: boolean;
+  comMesActual: number;
+};
+
+export type ChipEliminado = {
+  nombre: string;
+  id: string;
+  distribuidor: string;
+  empresa: string;
+  fechaEliminado: Date;
+  asignados8m: number;
+  activados8m: number;
 };
 
 export type ParseResult = {
@@ -36,6 +47,7 @@ export type ParseResult = {
   detectedDate: Date;
   windowStart: Date;
   windowEnd: Date;
+  eliminados: ChipEliminado[];
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -198,6 +210,7 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
     deliveryMap: Record<string, DeliveryEntry>;
     recent3m: number;
     prev3m: number;
+    comMesActual: number;
   };
 
   const pdvAgg = new Map<string, PdvAgg>();
@@ -228,7 +241,7 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
       pdvAgg.set(idPdv, {
         empresa: '', distribuidor: '', idDistribuidor: '', pdvNombre: '',
         visitDates: new Set(), asignados: 0, activaciones: 0,
-        deliveryMap: {}, recent3m: 0, prev3m: 0,
+        deliveryMap: {}, recent3m: 0, prev3m: 0, comMesActual: 0,
       });
     }
 
@@ -254,6 +267,12 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
       if (comDate) {
         if (comDate >= d90Ago)               agg.recent3m++;
         else if (comDate >= d180Ago)         agg.prev3m++;
+        if (
+          comDate.getMonth() === today.getMonth() &&
+          comDate.getFullYear() === today.getFullYear()
+        ) {
+          agg.comMesActual++;
+        }
       }
     }
   }
@@ -266,6 +285,7 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
   type PdvInfo = {
     nombre: string; departamento: string;
     estadoVisita: string; fechaCambio: Date | null; vencimiento: Date | null;
+    eliminado: Date | null; distribuidorNombre: string;
   };
   const pdvInfo = new Map<string, PdvInfo>();
 
@@ -277,6 +297,8 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
     const pEstVis     = findCol(pdvHeaders, ['estado', 'visita']);
     const pFechaCambio= findCol(pdvHeaders, ['fecha', 'cambio']);
     const pVenc       = findCol(pdvHeaders, ['fecha', 'vencimiento']);
+    const pEliminado  = findCol(pdvHeaders, ['eliminado']);
+    const pDistribuidorNombre = findColExact(pdvHeaders, 'distribuidor');
 
     for (let i = 1; i < pdvRaw.length; i++) {
       const row = pdvRaw[i] as unknown[];
@@ -290,6 +312,8 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
         estadoVisita: fixMojibake(String(pEstVis    >= 0 ? (row[pEstVis]  ?? '') : '').trim()),
         fechaCambio:  excelDateToJs(pFechaCambio >= 0 ? row[pFechaCambio] : null),
         vencimiento:  excelDateToJs(pVenc        >= 0 ? row[pVenc]        : null),
+        eliminado:    excelDateToJs(pEliminado   >= 0 ? row[pEliminado]   : null),
+        distribuidorNombre: fixMojibake(String(pDistribuidorNombre >= 0 ? (row[pDistribuidorNombre] ?? '') : '').trim()),
       });
     }
   }
@@ -413,16 +437,51 @@ export async function parseChips(file: File, overrideDate?: Date): Promise<Parse
       estadoVisita: info.estadoVisita, fechaCambioEstado: info.fechaCambio,
       vencimiento: info.vencimiento, daysToExpiry,
       situacion, situacionLabel, sugerido, yaPendiente,
+      comMesActual: agg.comMesActual,
     });
   }
 
   results.sort((a, b) => b.sugerido - a.sugerido || b.activaciones8m - a.activaciones8m);
+
+  // Mapa nombre distribuidor → empresa
+  const nombreDistribuidorToEmpresa: Record<string, string> = {};
+  for (let i = 1; i < activRaw.length; i++) {
+    const row = activRaw[i] as unknown[];
+    if (!row || !row.length) continue;
+    const nomDist = String(cNomDist >= 0 ? (row[cNomDist] ?? '') : '').trim();
+    const emp     = String(cEmpresa >= 0 ? (row[cEmpresa] ?? '') : '').trim();
+    if (nomDist && emp) {
+      nombreDistribuidorToEmpresa[normalize(fixMojibake(nomDist))] = emp;
+    }
+  }
+
+  // Puntos eliminados dentro de la ventana de 8 meses
+  const eliminados: ChipEliminado[] = [];
+  for (const [id, info] of pdvInfo.entries()) {
+    if (
+      info.eliminado &&
+      info.eliminado >= eightMonthsAgo &&
+      info.eliminado <= today
+    ) {
+      const agg = pdvAgg.get(id);
+      eliminados.push({
+        nombre: info.nombre,
+        id,
+        distribuidor: info.distribuidorNombre,
+        empresa: nombreDistribuidorToEmpresa[normalize(info.distribuidorNombre)] || '',
+        fechaEliminado: info.eliminado,
+        asignados8m: agg ? agg.asignados : 0,
+        activados8m: agg ? agg.activaciones : 0,
+      });
+    }
+  }
 
   return {
     results,
     detectedDate,
     windowStart: eightMonthsAgo,
     windowEnd:   today,
+    eliminados,
   };
 }
 

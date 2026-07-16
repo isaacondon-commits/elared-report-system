@@ -10,7 +10,7 @@ import {
   readAoaFromFile, classifyDesempenoFile, defaultDesempenoPeriod, parseDesempeno,
   type DesempenoResult, type DistribuidorRow,
 } from './chipsParser';
-import { exportChipsExcel, exportChipsPDF } from './ChipsExport';
+import { exportChipsExcel, exportChipsPDF, exportEliminadosExcel } from './ChipsExport';
 
 type Stage = 'upload' | 'loading' | 'analysis' | 'error';
 type ModuleTab = 'asignar' | 'desempeno';
@@ -181,6 +181,9 @@ export default function ChipsModule() {
   const [sortDir, setSortDir]           = useState<'asc' | 'desc'>('desc');
   const [page, setPage]                 = useState(1);
 
+  const [toast, setToast]               = useState<string | null>(null);
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3000); }
+
   const results = parseResult?.results ?? [];
 
   const empresas = useMemo(() => [...new Set(results.map(r => r.empresa).filter(Boolean))].sort(), [results]);
@@ -259,6 +262,14 @@ export default function ChipsModule() {
     resetFilters(); setSortKey('sugerido'); setSortDir('desc');
   }
 
+  function handleExportEliminados() {
+    if (!parseResult || parseResult.eliminados.length === 0) {
+      showToast('No hay puntos eliminados en la ventana de 8 meses');
+      return;
+    }
+    exportEliminadosExcel(parseResult.eliminados);
+  }
+
   // Dynamic subtitle
   const subtitle = useMemo(() => {
     if (!parseResult) return undefined;
@@ -276,6 +287,10 @@ export default function ChipsModule() {
       <button onClick={() => exportChipsPDF(filtered)}
         className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
         <Download size={15} /> PDF
+      </button>
+      <button onClick={handleExportEliminados}
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors">
+        <FileSpreadsheet size={15} /> Puntos eliminados (Excel)
       </button>
       <button onClick={handleReset}
         className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
@@ -552,6 +567,13 @@ export default function ChipsModule() {
         </div>
 
       </div>
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-medium px-5 py-2.5 rounded-xl shadow-lg flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

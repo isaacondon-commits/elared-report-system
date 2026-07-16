@@ -333,7 +333,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
               <SortTh col="nombre"       label="Vendedor"       />
               <SortTh col="total"        label="Total"    right />
               <SortTh col="renovaciones" label="Renov."   right />
-              <SortTh col="altas"        label="Altas"    right />
+              <SortTh col="altas"        label="Nuevo Serv." right />
               <SortTh col="cambios"      label="Cambios"  right />
               <SortTh col="pctRechazo"   label="% Rechazo" right />
               {stats.hasEstado && <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 600, background: '#003DA5', color: '#fff', textAlign: 'left' }}>Estado Principal</th>}
@@ -388,7 +388,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
                     {/* Renov */}
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: '#374151' }}>{f.renovaciones}</td>
 
-                    {/* Altas */}
+                    {/* Nuevo Servicio */}
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: '#374151' }}>{f.altas}</td>
 
                     {/* Cambios */}

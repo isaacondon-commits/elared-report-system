@@ -175,16 +175,17 @@ function applyPeriodFilter(
 
 // ── Lógica de negocio ─────────────────────────────────────────────────────────
 
-const MOTIVO_RENOVACION = ['renovacion', 'renovación', 'renov', 'renewal'];
-const MOTIVO_ALTA       = ['nuevo servicio', 'alta nueva', 'nuevo cliente', 'new service'];
-const MOTIVO_CAMBIO     = ['cambio de plan', 'cambio plan', 'plan change'];
+function classifyMotivo(raw: string): 'renovacion' | 'nuevo_servicio' | 'cambio' {
+  const m = raw.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-function classifyMotivo(raw: string): 'renovacion' | 'alta' | 'cambio' | 'otro' {
-  const n = raw.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  if (MOTIVO_RENOVACION.some(k => n.includes(k))) return 'renovacion';
-  if (MOTIVO_ALTA.some(k => n.includes(k)))       return 'alta';
-  if (MOTIVO_CAMBIO.some(k => n.includes(k)))     return 'cambio';
-  return 'otro';
+  // "Nuevo Servicio" agrupa altas nuevas y pasajes de tecnología
+  if (m === 'nuevo servicio')       return 'nuevo_servicio';
+  if (m === 'pasaje de tecnologia') return 'nuevo_servicio';
+
+  if (m === 'renovacion')     return 'renovacion';
+  if (m === 'cambio de plan') return 'cambio';
+
+  return 'nuevo_servicio';
 }
 
 export function getEmpresas(
@@ -301,10 +302,10 @@ export function processVentas(
     funcMap.set(nombre, {
       nombre,
       total:        prev.total + 1,
-      renovaciones: prev.renovaciones + (tipo === 'renovacion' ? 1 : 0),
-      altas:        prev.altas        + (tipo === 'alta'       ? 1 : 0),
-      cambios:      prev.cambios      + (tipo === 'cambio'     ? 1 : 0),
-      otros:        prev.otros        + (tipo === 'otro'       ? 1 : 0),
+      renovaciones: prev.renovaciones + (tipo === 'renovacion'     ? 1 : 0),
+      altas:        prev.altas        + (tipo === 'nuevo_servicio' ? 1 : 0),
+      cambios:      prev.cambios      + (tipo === 'cambio'         ? 1 : 0),
+      otros:        prev.otros, // clasificarMotivo ya no produce 'otro' (ver classifyMotivo)
       estados:      newEstadosNorm,
       estadosRaw:   newEstadosRaw,
       rechazos:     prev.rechazos + (esRechazo ? 1 : 0),
@@ -891,7 +892,7 @@ export default function VentasModule() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <KPICard label="Total Ventas"    value={stats.total.toLocaleString()}       icon={BarChart2}    color="blue"  />
               <KPICard label="Renovaciones"    value={stats.renovaciones.toLocaleString()} icon={Repeat}       color="green" />
-              <KPICard label="Altas"           value={stats.altas.toLocaleString()}        icon={ArrowUpRight} color="blue"  />
+              <KPICard label="Nuevo Servicio"  value={stats.altas.toLocaleString()}        icon={ArrowUpRight} color="blue"  />
               <KPICard label="Cambios de Plan" value={stats.cambios.toLocaleString()}      icon={Layers}       color="amber" />
             </div>
 

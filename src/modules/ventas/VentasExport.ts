@@ -180,7 +180,7 @@ export function exportVentasPptx(
     const cards = [
       { label: 'TOTAL GESTIONES', value: stats.total.toLocaleString(),       sub: `Período: ${periodo}`,              accent: AZUL_OSCURO, valColor: AZUL_OSCURO },
       { label: 'RENOVACIONES',    value: stats.renovaciones.toLocaleString(), sub: `${pct(stats.renovaciones, stats.total)} del total`, accent: AZUL_MEDIO,  valColor: GRIS_OSCURO },
-      { label: 'ALTAS NUEVAS',    value: stats.altas.toLocaleString(),        sub: `${pct(stats.altas, stats.total)} del total`,        accent: VERDE,       valColor: GRIS_OSCURO },
+      { label: 'NUEVO SERVICIO',  value: stats.altas.toLocaleString(),        sub: `${pct(stats.altas, stats.total)} del total`,        accent: VERDE,       valColor: GRIS_OSCURO },
       { label: 'CAMBIOS DE PLAN', value: stats.cambios.toLocaleString(),      sub: `${pct(stats.cambios, stats.total)} del total`,      accent: ROJO,        valColor: GRIS_OSCURO },
     ];
 
@@ -290,11 +290,11 @@ export function exportVentasPptx(
       { label: 'Vendedor', x: 0.84,  w: 3.65, align: 'left'   },
       { label: 'Total',    x: 4.52,  w: 1.35, align: 'right'  },
       { label: 'Renov.',   x: 5.90,  w: 1.10, align: 'right'  },
-      { label: 'Altas',    x: 7.03,  w: 1.05, align: 'right'  },
+      { label: 'N. Serv.', x: 7.03,  w: 1.05, align: 'right'  },
       { label: 'Cambios',  x: 8.11,  w: 1.10, align: 'right'  },
       { label: 'Otros',    x: 9.24,  w: 0.90, align: 'right'  },
       { label: '% Reno.',  x: 10.17, w: 0.95, align: 'right'  },
-      { label: '% Altas',  x: 11.15, w: 0.95, align: 'right'  },
+      { label: '% N.Serv.',x: 11.15, w: 0.95, align: 'right'  },
       { label: '% Camb.',  x: 12.13, w: 0.90, align: 'right'  },
     ];
 
@@ -531,7 +531,7 @@ export function exportVentasPptx(
 
     const segments = [
       { key: 'renovaciones' as const, label: 'Renovación',  color: AZUL_OSCURO },
-      { key: 'altas'        as const, label: 'Alta Nueva',  color: VERDE       },
+      { key: 'altas'        as const, label: 'Nuevo Servicio', color: VERDE    },
       { key: 'cambios'      as const, label: 'Cambio Plan', color: ROJO        },
       { key: 'otros'        as const, label: 'Otros',       color: GRIS_MEDIO  },
     ];
@@ -614,11 +614,11 @@ export function exportVentasPptx(
       { label: 'Vendedor', x: 0.72,  w: 3.75,  align: 'left'   },
       { label: 'Total',    x: 4.50,  w: 1.05,  align: 'right'  },
       { label: 'Reno.',    x: 5.58,  w: 1.00,  align: 'right'  },
-      { label: 'Altas',    x: 6.61,  w: 0.95,  align: 'right'  },
+      { label: 'N. Serv.', x: 6.61,  w: 0.95,  align: 'right'  },
       { label: 'Cambios',  x: 7.59,  w: 1.05,  align: 'right'  },
       { label: 'Otros',    x: 8.67,  w: 0.88,  align: 'right'  },
       { label: '% Reno.',  x: 9.58,  w: 0.95,  align: 'right'  },
-      { label: '% Altas',  x: 10.56, w: 0.92,  align: 'right'  },
+      { label: '% N.Serv.',x: 10.56, w: 0.92,  align: 'right'  },
       { label: '% Camb.',  x: 11.51, w: 0.92,  align: 'right'  },
       { label: 'Prom./d.', x: 12.46, w: 0.57,  align: 'right'  },
     ];
@@ -746,7 +746,7 @@ export function exportVentasExcel(stats: VentasStats, empresaActiva = 'Todas'): 
     ['Indicador', 'Valor'],
     ['Total Gestiones', stats.total],
     ['Renovaciones', stats.renovaciones],
-    ['Altas Nuevas', stats.altas],
+    ['Nuevo Servicio', stats.altas],
     ['Cambios de Plan', stats.cambios],
     ['Vendedores activos', stats.totalVendedores],
     ['Días con datos', stats.diasConDatos],
@@ -762,7 +762,7 @@ export function exportVentasExcel(stats: VentasStats, empresaActiva = 'Todas'): 
   XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
 
   // Sheet 2: Ranking vendedores
-  const rankHeaders = ['#', 'Vendedor', 'Total', 'Renovaciones', 'Altas', 'Cambios', 'Otros', '% Renov.', '% Altas', '% Cambios', 'Prom./día'];
+  const rankHeaders = ['#', 'Vendedor', 'Total', 'Renovaciones', 'Nuevo Servicio', 'Cambios', 'Otros', '% Renov.', '% Nuevo Servicio', '% Cambios', 'Prom./día'];
   const rankRows: (string | number)[][] = stats.byFuncionario.map((f, i) => [
     i + 1, f.nombre, f.total, f.renovaciones, f.altas, f.cambios, f.otros,
     f.total > 0 ? `${Math.round((f.renovaciones / f.total) * 100)}%` : '0%',
@@ -840,7 +840,7 @@ export function exportVentasPDF(stats: VentasStats, config: AppConfig, empresaAc
     body: [
       ['Total gestiones', stats.total.toLocaleString()],
       ['Renovaciones', `${stats.renovaciones.toLocaleString()} (${stats.total > 0 ? Math.round((stats.renovaciones / stats.total) * 100) : 0}%)`],
-      ['Altas nuevas', `${stats.altas.toLocaleString()} (${stats.total > 0 ? Math.round((stats.altas / stats.total) * 100) : 0}%)`],
+      ['Nuevo servicio', `${stats.altas.toLocaleString()} (${stats.total > 0 ? Math.round((stats.altas / stats.total) * 100) : 0}%)`],
       ['Cambios de plan', `${stats.cambios.toLocaleString()} (${stats.total > 0 ? Math.round((stats.cambios / stats.total) * 100) : 0}%)`],
       ['Vendedores activos', stats.totalVendedores],
       ['Mejor vendedor', stats.mejor],
@@ -856,7 +856,7 @@ export function exportVentasPDF(stats: VentasStats, config: AppConfig, empresaAc
   hdr('Ranking de Vendedores');
   autoTable(doc, {
     startY: 20,
-    head: [['#', 'Vendedor', 'Total', 'Renov.', 'Altas', 'Cambios', '% Renov.', '% Altas']],
+    head: [['#', 'Vendedor', 'Total', 'Renov.', 'Nuevo Serv.', 'Cambios', '% Renov.', '% N.Serv.']],
     body: stats.byFuncionario.slice(0, 25).map((f, i) => [
       i + 1, f.nombre, f.total, f.renovaciones, f.altas, f.cambios,
       f.total > 0 ? `${Math.round((f.renovaciones / f.total) * 100)}%` : '0%',

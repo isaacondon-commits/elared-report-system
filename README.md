@@ -15,6 +15,36 @@ npm run dev      # http://localhost:5173
 npm run build    # build de producción
 ```
 
+## Firestore — reglas de seguridad
+
+El botón "Eliminar" en Administración de Usuarios (`src/pages/admin/UsuariosPage.tsx`)
+llama a `deleteDoc(doc(db, 'usuarios', uid))`. Si las reglas de Firestore no
+incluyen permiso de `delete` en la colección `usuarios`, la llamada falla en
+el navegador con `permission-denied` (el modal de confirmación va a mostrar
+ese error). Verificar en la consola de Firebase → Firestore → Reglas que
+exista algo equivalente a:
+
+```
+match /usuarios/{uid} {
+  allow delete: if request.auth != null &&
+    get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
+}
+```
+
+Si las reglas solo tienen `allow get, list, create, update` (sin `delete`,
+y sin un `allow write` que lo cubra), hay que agregar la línea de arriba y
+publicar las reglas desde la consola de Firebase — no hay forma de aplicarlas
+desde este repo, no están versionadas acá.
+
+## Changelog — 2026-07-17
+
+### Usuarios — eliminar
+- Modal de confirmación ahora muestra "¿Eliminar a [nombre]?" como título
+  (antes decía "¿Eliminar usuario?" genérico).
+- Si `deleteDoc` falla con `permission-denied`, el modal ahora explica que es
+  un problema de reglas de Firestore en vez de mostrar el mensaje crudo de
+  Firebase (ver sección de arriba).
+
 ## Changelog — 2026-06-09
 
 ### Sidebar colapsable (UX)

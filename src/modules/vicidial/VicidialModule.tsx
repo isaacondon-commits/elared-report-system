@@ -10,10 +10,13 @@ import {
   AlmuerzoBarChart, BanoBarChart, VentaBarChart,
   ManualBarChart, AguaBarChart, CheqBarChart, LoginBarChart,
   GenericPausaBarChart, getHandledKeys,
+  INFO_ALMUERZO, INFO_BANO, INFO_VENTA, INFO_MANUAL, INFO_AGUA, INFO_CHEQ, INFO_LOGIN,
+  INFO_TABLA_VENTA, INFO_TABLA_ALMUERZO, INFO_TABLA_BANO,
 } from './VicidialCharts';
 import { VicidialAlertas } from './VicidialAlertas';
 import { exportarExcel, exportarPPTX, exportarPDF } from './VicidialExport';
 import Header from '../../components/Header';
+import { InfoPopover } from '../../components/InfoPopover';
 import { recordActivity } from '../../utils/activityTracker';
 import { useAnalisisStore, formatFechaCarga } from '../../store/analisisStore';
 
@@ -102,13 +105,13 @@ function TablaAgentes({ data }: { data: VicidialData }) {
     [data.agentes, sortKey, sortAsc, vtKey, almKey, baoKey],
   );
 
-  const th = (label: string, k?: SortKey, extra?: string) => (
+  const th = (label: string, k?: SortKey, extra?: string, info?: string) => (
     <th
       className={`px-3 py-2.5 text-left text-xs font-semibold text-slate-600 whitespace-nowrap
         ${k ? 'cursor-pointer select-none hover:text-slate-900' : ''} ${extra ?? ''}`}
       onClick={k ? () => toggleSort(k) : undefined}
     >
-      {label}{k && <SortIcon k={k} />}
+      {label}{k && <SortIcon k={k} />}{info && <InfoPopover texto={info} />}
     </th>
   );
 
@@ -123,15 +126,9 @@ function TablaAgentes({ data }: { data: VicidialData }) {
           <tr>
             {th('Agente',      'usuario')}
             {th('Llamadas',    'llamadas',   'text-right')}
-            <th
-              className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 whitespace-nowrap cursor-pointer select-none hover:text-slate-900"
-              onClick={() => toggleSort('venta')}
-              title="Tiempo en gestión de ventas — considerado productivo"
-            >
-              Venta <SortIcon k="venta" />
-            </th>
-            {th('Almuerzo',    'almuerzo',   'text-right')}
-            {th('Baño',        'bano',       'text-right')}
+            {th('Venta',       'venta',      'text-right', INFO_TABLA_VENTA)}
+            {th('Almuerzo',    'almuerzo',   'text-right', INFO_TABLA_ALMUERZO)}
+            {th('Baño',        'bano',       'text-right', INFO_TABLA_BANO)}
             {th('Pausa total', 'pausaTotal', 'text-right')}
             <th className="px-3 py-2.5 text-xs font-semibold text-slate-600 text-right">Pausas</th>
           </tr>
@@ -257,11 +254,12 @@ function DesglosePausas({ data }: { data: VicidialData }) {
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
-function Section({ title, badge, children }: { title: string; badge?: { text: string; color: string }; children: React.ReactNode }) {
+function Section({ title, badge, info, children }: { title: string; badge?: { text: string; color: string }; info?: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
       <div className="flex items-center gap-2 mb-4">
         <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+        {info && <InfoPopover texto={info} />}
         {badge && (
           <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: `${badge.color}20`, color: badge.color }}>
             {badge.text}
@@ -334,35 +332,35 @@ function ChartsSection({ data }: { data: VicidialData }) {
     t => !handledKeys.has(t) && agentes.some(a => (a.pausas[t] ?? 0) > 0)
   );
 
-  const charts: { title: string; badge?: { text: string; color: string }; node: React.ReactNode }[] = [];
+  const charts: { title: string; badge?: { text: string; color: string }; info?: string; node: React.ReactNode }[] = [];
 
   // 1. Almuerzo
   const almNode = <AlmuerzoBarChart agentes={agentes} tiposPausa={tiposPausa} />;
-  if (almNode) charts.push({ title: 'Almuerzo por agente — Límite 30 min', node: almNode });
+  if (almNode) charts.push({ title: 'Almuerzo por agente — Límite 30 min', info: INFO_ALMUERZO, node: almNode });
 
   // 2. Baño
   const baoNode = <BanoBarChart agentes={agentes} tiposPausa={tiposPausa} />;
-  if (baoNode) charts.push({ title: 'Baño por agente — Límite 10 min', node: baoNode });
+  if (baoNode) charts.push({ title: 'Baño por agente — Límite 10 min', info: INFO_BANO, node: baoNode });
 
   // 3. Venta/VTAMOV
   const vtNode = <VentaBarChart agentes={agentes} tiposPausa={tiposPausa} />;
-  if (vtNode) charts.push({ title: 'Tiempo en Ventas por agente — Promedio del equipo', badge: { text: '✓ Tiempo productivo', color: '#28a745' }, node: vtNode });
+  if (vtNode) charts.push({ title: 'Tiempo en Ventas por agente — Promedio del equipo', badge: { text: '✓ Tiempo productivo', color: '#28a745' }, info: INFO_VENTA, node: vtNode });
 
   // 4. Manual
   const manNode = <ManualBarChart agentes={agentes} tiposPausa={tiposPausa} />;
-  if (manNode) charts.push({ title: 'Pausas manuales por agente — Promedio del equipo', badge: { text: '⚠ Sin categoría', color: '#E3000F' }, node: manNode });
+  if (manNode) charts.push({ title: 'Pausas manuales por agente — Promedio del equipo', badge: { text: '⚠ Sin categoría', color: '#E3000F' }, info: INFO_MANUAL, node: manNode });
 
   // 5. Agua
   const aguaNode = <AguaBarChart agentes={agentes} tiposPausa={tiposPausa} />;
-  if (aguaNode) charts.push({ title: 'Hidratación por agente — Promedio del equipo', node: aguaNode });
+  if (aguaNode) charts.push({ title: 'Hidratación por agente — Promedio del equipo', info: INFO_AGUA, node: aguaNode });
 
   // 6. Chequeos
   const cheqNode = <CheqBarChart agentes={agentes} tiposPausa={tiposPausa} />;
-  if (cheqNode) charts.push({ title: 'Chequeos y consultas por agente', node: cheqNode });
+  if (cheqNode) charts.push({ title: 'Chequeos y consultas por agente', info: INFO_CHEQ, node: cheqNode });
 
   // 7. Login
   const loginNode = <LoginBarChart agentes={agentes} tiposPausa={tiposPausa} />;
-  if (loginNode) charts.push({ title: 'Tiempo de login por agente', node: loginNode });
+  if (loginNode) charts.push({ title: 'Tiempo de login por agente', info: INFO_LOGIN, node: loginNode });
 
   // 8. Others
   for (const key of otherKeys) {
@@ -375,7 +373,7 @@ function ChartsSection({ data }: { data: VicidialData }) {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       {charts.map(c => (
-        <Section key={c.title} title={c.title} badge={c.badge}>
+        <Section key={c.title} title={c.title} badge={c.badge} info={c.info}>
           {c.node}
         </Section>
       ))}

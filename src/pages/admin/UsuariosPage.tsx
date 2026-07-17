@@ -397,23 +397,29 @@ function ModalEliminar({ usuario, onClose, onDeleted }: {
       onDeleted(usuario.nombre);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al eliminar.');
+      const code = (err as { code?: string })?.code;
+      if (code === 'permission-denied') {
+        setError('Firestore rechazó la eliminación (permission-denied). Las reglas de seguridad no le dan permiso de delete al administrador — ver sección "Firestore — reglas de seguridad" en el README.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Error al eliminar.');
+      }
       setDeleting(false);
     }
   }
 
   return (
-    <Modal title="¿Eliminar usuario?" onClose={onClose}>
+    <Modal title={`¿Eliminar a ${usuario.nombre}?`} onClose={onClose}>
       <div className="flex flex-col items-center text-center space-y-4">
         <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
           <Trash2 size={28} style={{ color: '#E3000F' }} />
         </div>
         <div>
           <p className="text-gray-800 text-sm leading-relaxed">
-            Estás por eliminar a <span className="font-semibold">{usuario.nombre}</span>{' '}
-            (<span className="text-gray-500">{usuario.email}</span>).
+            <span className="text-gray-500">{usuario.email}</span>
           </p>
-          <p className="text-gray-500 text-sm mt-1">Esta acción no se puede deshacer.</p>
+          <p className="text-gray-500 text-sm mt-1">
+            Esta acción eliminará el acceso del usuario. No se puede deshacer.
+          </p>
         </div>
 
         {error && (

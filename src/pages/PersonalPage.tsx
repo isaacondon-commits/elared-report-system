@@ -1,14 +1,31 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { RefreshCw, Download, Search, ChevronDown, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import {
+  RefreshCw, Download, Search, ChevronDown, CheckCircle2, AlertCircle, X,
+  Plus, UserX, UserCheck, Pencil,
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Header from '../components/Header';
 import {
-  usePersonalStore, type RegistroPersonal,
+  usePersonalStore, type RegistroPersonal, type NuevaPersona,
   getFaltas, getTardanzas, getHorasExtras, getComisiones,
+  getDiasTrabajados, formatAntiguedad, getAntiguedadBadge,
 } from '../store/personalStore';
 import { useAnalisisStore } from '../store/analisisStore';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
+
+const DEPARTAMENTOS = ['Call Fibra', 'Call Móvil', 'RRHH', 'Atención al Cliente', 'Back Office', 'Administración'];
+
+function fmtFecha(iso: string | null): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function fmtPesos(n: number): string {
   return '$' + n.toLocaleString('es-UY');
@@ -43,6 +60,164 @@ function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error';
       {msg}
       <button onClick={onClose} className="ml-1 opacity-70 hover:opacity-100"><X size={14} /></button>
     </div>
+  );
+}
+
+// ─── Modal base ──────────────────────────────────────────────────────────────
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 py-6 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg my-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900 text-base">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-6 py-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const MODAL_INPUT = 'w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5] transition-colors';
+const MODAL_LABEL = 'block text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-widest';
+
+// ─── Modal Alta/Editar persona ──────────────────────────────────────────────────
+
+function ModalPersona({ existing, onClose, onSave }: {
+  existing?: RegistroPersonal;
+  onClose: () => void;
+  onSave: (datos: NuevaPersona) => void;
+}) {
+  const [nombre, setNombre]           = useState(existing?.nombre ?? '');
+  const [cargo, setCargo]             = useState(existing?.cargo ?? '');
+  const [departamento, setDepartamento] = useState(existing?.departamento ?? '');
+  const [fechaIngreso, setFechaIngreso] = useState(existing?.fechaIngreso ?? todayIso());
+  const [estado, setEstado]           = useState<'activo' | 'baja'>(existing?.estado ?? 'activo');
+  const [fechaBaja, setFechaBaja]     = useState(existing?.fechaBaja ?? todayIso());
+  const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '');
+  const [error, setError]             = useState('');
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nombre.trim()) { setError('El nombre es obligatorio.'); return; }
+    if (!fechaIngreso) { setError('La fecha de ingreso es obligatoria.'); return; }
+    onSave({
+      nombre: nombre.trim(), cargo: cargo.trim(), departamento: departamento.trim(),
+      fechaIngreso, estado, fechaBaja: estado === 'baja' ? fechaBaja : null,
+      observaciones: observaciones.trim(),
+    });
+    onClose();
+  }
+
+  return (
+    <Modal title={existing ? 'Editar persona' : 'Agregar persona'} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className={MODAL_LABEL}>Nombre completo *</label>
+          <input required value={nombre} onChange={e => setNombre(e.target.value)} className={MODAL_INPUT} placeholder="Ej: María García" />
+        </div>
+        <div>
+          <label className={MODAL_LABEL}>Cargo / Puesto</label>
+          <input value={cargo} onChange={e => setCargo(e.target.value)} className={MODAL_INPUT} placeholder="Ej: Teleoperador/a" />
+        </div>
+        <div>
+          <label className={MODAL_LABEL}>Departamento</label>
+          <input value={departamento} onChange={e => setDepartamento(e.target.value)} className={MODAL_INPUT} list="departamentos-list" placeholder="Ej: Call Fibra" />
+          <datalist id="departamentos-list">
+            {DEPARTAMENTOS.map(d => <option key={d} value={d} />)}
+          </datalist>
+        </div>
+        <div>
+          <label className={MODAL_LABEL}>Fecha de ingreso *</label>
+          <input required type="date" value={fechaIngreso} onChange={e => setFechaIngreso(e.target.value)} className={MODAL_INPUT} />
+        </div>
+        <div>
+          <label className={MODAL_LABEL}>Estado</label>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setEstado('activo')}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                estado === 'activo' ? 'bg-green-600 text-white border-green-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}>
+              Activo ✓
+            </button>
+            <button type="button" onClick={() => setEstado('baja')}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                estado === 'baja' ? 'bg-red-600 text-white border-red-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}>
+              Baja ✗
+            </button>
+          </div>
+        </div>
+        {estado === 'baja' && (
+          <div>
+            <label className={MODAL_LABEL}>Fecha de baja</label>
+            <input type="date" value={fechaBaja} onChange={e => setFechaBaja(e.target.value)} className={MODAL_INPUT} />
+          </div>
+        )}
+        <div>
+          <label className={MODAL_LABEL}>Observaciones</label>
+          <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} className={`${MODAL_INPUT} resize-none`} rows={2} />
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3.5 py-2.5 text-sm">{error}</div>
+        )}
+
+        <div className="flex gap-3 pt-1">
+          <button type="button" onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-2.5 text-sm hover:bg-gray-50 transition-colors">
+            Cancelar
+          </button>
+          <button type="submit"
+            className="flex-1 bg-[#003DA5] hover:bg-[#0052CC] text-white font-semibold rounded-lg py-2.5 text-sm transition-colors">
+            {existing ? 'Guardar cambios' : 'Agregar'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ─── Modal Dar de baja ──────────────────────────────────────────────────────────
+
+function ModalBaja({ persona, onClose, onConfirm }: {
+  persona: RegistroPersonal;
+  onClose: () => void;
+  onConfirm: (fechaBaja: string, motivo: string) => void;
+}) {
+  const [fechaBaja, setFechaBaja] = useState(todayIso());
+  const [motivo, setMotivo]       = useState('');
+
+  return (
+    <Modal title={`¿Dar de baja a ${persona.nombre}?`} onClose={onClose}>
+      <div className="space-y-4">
+        <div>
+          <label className={MODAL_LABEL}>Fecha de baja</label>
+          <input type="date" value={fechaBaja} onChange={e => setFechaBaja(e.target.value)} className={MODAL_INPUT} />
+        </div>
+        <div>
+          <label className={MODAL_LABEL}>Motivo (opcional)</label>
+          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} className={`${MODAL_INPUT} resize-none`} rows={3} />
+        </div>
+        <div className="flex gap-3 pt-1">
+          <button type="button" onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 rounded-lg py-2.5 text-sm hover:bg-gray-50 transition-colors">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => { onConfirm(fechaBaja, motivo.trim()); onClose(); }}
+            className="flex-1 text-white font-semibold rounded-lg py-2.5 text-sm transition-colors"
+            style={{ background: '#E3000F' }}
+          >
+            Confirmar baja
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -160,6 +335,7 @@ function EditableText({
 // ─── Filter bar ────────────────────────────────────────────────────────────────
 
 type SortKey = 'nombre' | 'faltas' | 'tardanzas' | 'extras' | 'comisiones';
+type EstadoFiltro = 'todos' | 'activo' | 'baja';
 
 interface FiltersProps {
   search: string; onSearch: (v: string) => void;
@@ -167,11 +343,35 @@ interface FiltersProps {
   conFaltas: boolean; onConFaltas: (v: boolean) => void;
   sortBy: SortKey; onSortBy: (v: SortKey) => void;
   turnos: string[];
+  estadoFiltro: EstadoFiltro; onEstadoFiltro: (v: EstadoFiltro) => void;
 }
 
-function FilterBar({ search, onSearch, turno, onTurno, conFaltas, onConFaltas, sortBy, onSortBy, turnos }: FiltersProps) {
+function EstadoFilterTabs({ value, onChange }: { value: EstadoFiltro; onChange: (v: EstadoFiltro) => void }) {
+  const opts: { key: EstadoFiltro; label: string }[] = [
+    { key: 'todos', label: 'Todos' }, { key: 'activo', label: 'Activos' }, { key: 'baja', label: 'Bajas' },
+  ];
+  return (
+    <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-0.5 bg-white">
+      {opts.map(o => (
+        <button
+          key={o.key}
+          onClick={() => onChange(o.key)}
+          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+            value === o.key ? 'bg-[#003DA5] text-white' : 'text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FilterBar({ search, onSearch, turno, onTurno, conFaltas, onConFaltas, sortBy, onSortBy, turnos, estadoFiltro, onEstadoFiltro }: FiltersProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <EstadoFilterTabs value={estadoFiltro} onChange={onEstadoFiltro} />
+
       <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-1.5 bg-white min-w-[180px]">
         <Search size={13} className="text-gray-400 flex-shrink-0" />
         <input
@@ -301,14 +501,19 @@ function exportarExcel(registros: RegistroPersonal[]) {
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PersonalPage() {
-  const { registros, updateRegistro, sincronizarReloj, sincronizarComisiones } = usePersonalStore();
+  const { registros, updateRegistro, agregarPersona, sincronizarReloj, sincronizarComisiones } = usePersonalStore();
   const { reloj, comisionesMovil, comisionesFibra } = useAnalisisStore();
 
   const [search, setSearch]         = useState('');
   const [turnoFiltro, setTurnoFiltro] = useState('');
   const [conFaltas, setConFaltas]   = useState(false);
   const [sortBy, setSortBy]         = useState<SortKey>('nombre');
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('activo');
   const [toast, setToast]           = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const [modalAgregar, setModalAgregar] = useState(false);
+  const [modalEditar, setModalEditar]   = useState<RegistroPersonal | null>(null);
+  const [modalBaja, setModalBaja]       = useState<RegistroPersonal | null>(null);
 
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -322,6 +527,7 @@ export default function PersonalPage() {
 
   const filtered = useMemo(() => {
     let result = [...registros];
+    if (estadoFiltro !== 'todos') result = result.filter(r => r.estado === estadoFiltro);
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       result = result.filter(r => r.nombre.toLowerCase().includes(q));
@@ -336,7 +542,7 @@ export default function PersonalPage() {
       default: result.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     }
     return result;
-  }, [registros, search, turnoFiltro, conFaltas, sortBy]);
+  }, [registros, search, turnoFiltro, conFaltas, sortBy, estadoFiltro]);
 
   const totales = useMemo(() => ({
     faltas:     filtered.reduce((s, r) => s + getFaltas(r), 0),
@@ -403,6 +609,12 @@ export default function PersonalPage() {
         actions={
           <div className="flex gap-2 flex-wrap">
             <button
+              onClick={() => setModalAgregar(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+            >
+              <Plus size={13} /> Agregar persona
+            </button>
+            <button
               onClick={handleSincReloj}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors"
             >
@@ -434,6 +646,7 @@ export default function PersonalPage() {
             conFaltas={conFaltas} onConFaltas={setConFaltas}
             sortBy={sortBy} onSortBy={setSortBy}
             turnos={turnos}
+            estadoFiltro={estadoFiltro} onEstadoFiltro={setEstadoFiltro}
           />
 
           {/* Table */}
@@ -443,8 +656,9 @@ export default function PersonalPage() {
                 <thead>
                   <tr className="bg-[#003DA5] text-white">
                     {[
-                      'Nombre', 'Turno', 'Faltas', 'Tardanzas', 'Hrs Extras',
-                      'Comisiones', 'Incentivos', 'Metas', 'Observaciones', 'Sinc.',
+                      'Nombre', 'Cargo', 'Departamento', 'Turno', 'Estado', 'Fecha ingreso', 'Antigüedad',
+                      'Faltas', 'Tardanzas', 'Hrs Extras',
+                      'Comisiones', 'Incentivos', 'Metas', 'Observaciones', 'Sinc.', 'Acciones',
                     ].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap">
                         {h}
@@ -455,7 +669,7 @@ export default function PersonalPage() {
                 <tbody>
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
+                      <td colSpan={16} className="px-4 py-8 text-center text-gray-400 text-sm">
                         Ninguna persona coincide con los filtros.
                       </td>
                     </tr>
@@ -466,18 +680,26 @@ export default function PersonalPage() {
                     const extras = getHorasExtras(r);
                     const comis = getComisiones(r);
                     const sincDate = r.ultimaSincReloj ?? r.ultimaSincComisiones;
+                    const dias = getDiasTrabajados(r);
+                    const antBadge = dias !== null ? getAntiguedadBadge(dias) : null;
 
                     return (
                       <tr
                         key={r.id}
                         className={`border-b border-gray-100 transition-colors ${
                           i % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFF]'
-                        } ${faltas > 0 ? 'bg-red-50' : ''} ${extras > 0 ? '!bg-green-50' : ''}`}
+                        } ${r.estado === 'baja' ? '!bg-red-50/60' : ''} ${faltas > 0 && r.estado === 'activo' ? 'bg-red-50' : ''} ${extras > 0 && r.estado === 'activo' ? '!bg-green-50' : ''}`}
                       >
                         {/* Nombre */}
                         <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">
                           {r.nombre}
                         </td>
+
+                        {/* Cargo */}
+                        <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{r.cargo || '—'}</td>
+
+                        {/* Departamento */}
+                        <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{r.departamento || '—'}</td>
 
                         {/* Turno */}
                         <td className="px-3 py-2">
@@ -485,6 +707,32 @@ export default function PersonalPage() {
                           {r.trabajaSabados && (
                             <span className="ml-1 text-[9px] bg-blue-100 text-blue-600 px-1 rounded">Sáb</span>
                           )}
+                        </td>
+
+                        {/* Estado */}
+                        <td className="px-3 py-2">
+                          {r.estado === 'activo' ? (
+                            <span className="inline-block text-white text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: '#28a745' }}>Activo</span>
+                          ) : (
+                            <span className="inline-block text-white text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: '#E3000F' }}>
+                              Baja {r.fechaBaja ? fmtFecha(r.fechaBaja) : ''}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Fecha ingreso */}
+                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{fmtFecha(r.fechaIngreso)}</td>
+
+                        {/* Antigüedad */}
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {dias !== null && antBadge ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                              {formatAntiguedad(dias)}
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: antBadge.bg, color: antBadge.color }}>
+                                {antBadge.label}
+                              </span>
+                            </span>
+                          ) : <span className="text-xs text-gray-300">—</span>}
                         </td>
 
                         {/* Faltas */}
@@ -572,6 +820,33 @@ export default function PersonalPage() {
                             </span>
                           )}
                         </td>
+
+                        {/* Acciones */}
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap">
+                            <button
+                              onClick={() => setModalEditar(r)}
+                              className="flex items-center gap-1 text-xs text-[#003DA5] hover:bg-blue-50 px-2 py-1 rounded-lg border border-[#003DA5]/20 transition-colors font-medium"
+                            >
+                              <Pencil size={12} /> Editar
+                            </button>
+                            {r.estado === 'activo' ? (
+                              <button
+                                onClick={() => setModalBaja(r)}
+                                className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                <UserX size={12} /> Dar de baja
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => updateRegistro(r.id, { estado: 'activo', fechaBaja: null, motivoBaja: '' })}
+                                className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 transition-colors"
+                              >
+                                <UserCheck size={12} /> Reactivar
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -584,6 +859,11 @@ export default function PersonalPage() {
                       <td className="px-3 py-2.5 font-bold text-sm">
                         TOTAL ({filtered.length})
                       </td>
+                      <td className="px-3 py-2.5">—</td>
+                      <td className="px-3 py-2.5">—</td>
+                      <td className="px-3 py-2.5">—</td>
+                      <td className="px-3 py-2.5">—</td>
+                      <td className="px-3 py-2.5">—</td>
                       <td className="px-3 py-2.5">—</td>
                       <td className="px-3 py-2.5 text-center font-bold">{totales.faltas}</td>
                       <td className="px-3 py-2.5 text-center font-bold">{totales.tardanzas}</td>
@@ -599,6 +879,7 @@ export default function PersonalPage() {
                       <td className="px-3 py-2.5">—</td>
                       <td className="px-3 py-2.5">—</td>
                       <td className="px-3 py-2.5">—</td>
+                      <td className="px-3 py-2.5">—</td>
                     </tr>
                   </tfoot>
                 )}
@@ -608,6 +889,37 @@ export default function PersonalPage() {
 
         </div>
       </div>
+
+      {modalAgregar && (
+        <ModalPersona
+          onClose={() => setModalAgregar(false)}
+          onSave={datos => { agregarPersona(datos); showToast(`"${datos.nombre}" agregado correctamente`); }}
+        />
+      )}
+      {modalEditar && (
+        <ModalPersona
+          existing={modalEditar}
+          onClose={() => setModalEditar(null)}
+          onSave={datos => {
+            updateRegistro(modalEditar.id, {
+              nombre: datos.nombre, cargo: datos.cargo, departamento: datos.departamento,
+              fechaIngreso: datos.fechaIngreso, estado: datos.estado, fechaBaja: datos.fechaBaja,
+              observaciones: datos.observaciones,
+            });
+            showToast(`"${datos.nombre}" actualizado`);
+          }}
+        />
+      )}
+      {modalBaja && (
+        <ModalBaja
+          persona={modalBaja}
+          onClose={() => setModalBaja(null)}
+          onConfirm={(fechaBaja, motivo) => {
+            updateRegistro(modalBaja.id, { estado: 'baja', fechaBaja, motivoBaja: motivo });
+            showToast(`"${modalBaja.nombre}" dado de baja`);
+          }}
+        />
+      )}
 
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>

@@ -8,6 +8,49 @@ import {
   findAlmuerzoKey, findBaoKey, findVtamovKey, findManualKey,
 } from './vicidialParser';
 
+// ─── Textos explicativos (InfoPopover) ────────────────────────────────────────
+
+export const INFO_ALMUERZO =
+  'Fuente: columna ALMUER del CSV de Vicidial. Muestra el tiempo total que ' +
+  'cada agente estuvo en pausa de almuerzo. La línea roja indica el límite ' +
+  'de 30 minutos establecido por la empresa. Barras en rojo = superaron el límite.';
+
+export const INFO_BANO =
+  'Fuente: columna BAO o BAÑO del CSV de Vicidial. Muestra el tiempo en pausa ' +
+  'de baño por agente. La línea roja indica el límite de 10 minutos. ' +
+  'Barras en rojo = superaron el límite.';
+
+export const INFO_VENTA =
+  'Fuente: columnas VTAMOV o VENTA del CSV de Vicidial. Tiempo que el agente ' +
+  'estuvo gestionando ventas. Este tiempo es PRODUCTIVO — no es pausa ociosa. ' +
+  'La línea indica el promedio del equipo.';
+
+export const INFO_MANUAL =
+  'Fuente: columna MANUAL del CSV de Vicidial. Pausas sin categoría asignada ' +
+  'por el agente. Son pausas a vigilar ya que no tienen justificación clara. ' +
+  'La línea indica el promedio del equipo.';
+
+export const INFO_AGUA =
+  'Fuente: columna AGUA del CSV de Vicidial. Tiempo en pausa de hidratación. ' +
+  'La línea indica el promedio del equipo.';
+
+export const INFO_CHEQ =
+  'Fuente: columnas CHEQ o CONSUL del CSV de Vicidial. Tiempo en chequeos del ' +
+  'sistema o consultas. La línea indica el promedio del equipo.';
+
+export const INFO_LOGIN =
+  'Fuente: columna LOGIN del CSV de Vicidial. Tiempo que tomó el inicio de ' +
+  'sesión del agente. La línea indica el promedio del equipo.';
+
+export const INFO_TABLA_VENTA =
+  'Tiempo en gestión de ventas (VTAMOV/VENTA) — considerado tiempo productivo';
+
+export const INFO_TABLA_ALMUERZO =
+  'Tiempo total de almuerzo. Límite: 30 min. Rojo = excedido';
+
+export const INFO_TABLA_BANO =
+  'Tiempo total en pausa de baño. Límite: 10 min. Rojo = excedido';
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function normKey(s: string): string {

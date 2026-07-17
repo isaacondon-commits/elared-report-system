@@ -563,6 +563,7 @@ export type DistribuidorRow = {
   chipsAPdv: number; diasConEntrega: number;
   promedioDia: number; diasStock: number | null;
   pendientes: number; porVencer: number; creados: number;
+  totalPuntos: number; departamentosPrincipales: string;
   diasCount: number[];
 };
 
@@ -596,6 +597,8 @@ export function parseDesempeno(
   const pEstadoVisitaCol = findCol(pdvHeaders, ['estado', 'visita']);
   const pVencimientoCol  = findCol(pdvHeaders, ['fecha', 'vencimiento']);
   const pCreadoCol       = findColExact(pdvHeaders, 'creado');
+  const pDeptoCol        = findCol(pdvHeaders, ['departamento']);
+  const pEliminadoCol    = findCol(pdvHeaders, ['eliminado']);
 
   // ── Resumen por empresa ──
   type EmpresaAgg = { armados: number; activados: number; sinDistribuidor: number };
@@ -623,6 +626,7 @@ export function parseDesempeno(
   type DistAgg = {
     nombre: string; empresas: Set<string>; asignados: number; conPdv: number; sinPdv: number;
     chipsAPdv: number; diasSet: Set<string>; pendientes: number; porVencer: number; creados: number;
+    totalPuntos: number; departamentos: Record<string, number>;
     diasCount: number[];
   };
   const dist = new Map<string, DistAgg>();
@@ -636,7 +640,8 @@ export function parseDesempeno(
       dist.set(id, {
         nombre: String(getCell(row, cNomDistCol) ?? ''), empresas: new Set(),
         asignados: 0, conPdv: 0, sinPdv: 0, chipsAPdv: 0, diasSet: new Set(),
-        pendientes: 0, porVencer: 0, creados: 0, diasCount: [0, 0, 0, 0, 0, 0],
+        pendientes: 0, porVencer: 0, creados: 0, totalPuntos: 0, departamentos: {},
+        diasCount: [0, 0, 0, 0, 0, 0],
       });
     }
     const d = dist.get(id)!;
@@ -676,6 +681,13 @@ export function parseDesempeno(
     }
     const creado = parseFlexibleDate(getCell(row, pCreadoCol));
     if (creado && creado >= periodStart && creado <= periodEnd) d.creados++;
+
+    const eliminado = parseFlexibleDate(getCell(row, pEliminadoCol));
+    if (!eliminado) {
+      d.totalPuntos++;
+      const depto = fixMojibake(String(getCell(row, pDeptoCol) ?? '').trim());
+      if (depto) d.departamentos[depto] = (d.departamentos[depto] ?? 0) + 1;
+    }
   }
 
   let hasVisitas = false;
@@ -712,6 +724,12 @@ export function parseDesempeno(
       chipsAPdv: d.chipsAPdv, diasConEntrega: d.diasSet.size,
       promedioDia, diasStock,
       pendientes: d.pendientes, porVencer: d.porVencer, creados: d.creados,
+      totalPuntos: d.totalPuntos,
+      departamentosPrincipales: Object.entries(d.departamentos)
+        .filter(([, count]) => d.totalPuntos > 0 && count / d.totalPuntos >= 0.05)
+        .sort((a, b) => b[1] - a[1])
+        .map(([dep, count]) => `${dep} (${count})`)
+        .join(', '),
       diasCount: d.diasCount,
     };
   }).sort((a, b) => b.asignados - a.asignados);

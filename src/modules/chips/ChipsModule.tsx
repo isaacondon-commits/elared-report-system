@@ -580,6 +580,34 @@ export default function ChipsModule() {
 
 // ── Tab 2: Desempeño de distribuidores ─────────────────────────────────────────
 
+function DesempenoFootnote() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-3 text-left"
+      >
+        <span className="text-sm font-semibold text-gray-700">ℹ️ Cómo se calcula</span>
+        {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+      </button>
+      {open && (
+        <div className="px-5 pb-4 text-xs text-gray-500 leading-relaxed space-y-2 border-t border-gray-100 pt-3">
+          <p><b>Chips asignados:</b> cuenta filas cuya Fecha asignación distribuidor cae dentro del período elegido.</p>
+          <p><b>Con/sin punto de venta:</b> mira si esas filas tienen Id de Punto de venta cargado.</p>
+          <p><b>Prom. chips/día a PDV:</b> toma las filas cuya Fecha asignación punto venta cae en el período, y divide el total entre la cantidad de días distintos en que hubo al menos una entrega.</p>
+          <p><b>Puntos pendientes y con chip por vencer:</b> no se filtran por período — son el estado actual.</p>
+          <p><b>Puntos creados:</b> usa la columna Creado de la planilla de puntos de venta, dentro del período.</p>
+          <p><b>Total puntos activos:</b> puntos del distribuidor sin fecha en Eliminado.</p>
+          <p><b>Departamentos principales:</b> departamentos que representan 5% o más del total de puntos activos.</p>
+          <p><b>Visitas por distribuidor:</b> sale del archivo de visitas, contando las filas con Fecha visita en cada día. Se excluyen filas con Estado Cancelado, Pendiente, Visita de autor suprimida o Visita permanente. Estas 6 columnas miran los últimos 6 días desde hoy.</p>
+          <p><b>Stock le alcanza para:</b> chips sin punto de venta dividido el promedio diario de entrega. Rojo = 7 días o menos, ámbar = 15 días o menos.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StockBadge({ r }: { r: DistribuidorRow }) {
   if (r.diasStock !== null) {
     const d = Math.round(r.diasStock);
@@ -604,6 +632,8 @@ const DIST_COLS: { key: keyof DistribuidorRow; label: string }[] = [
   { key: 'pendientes',  label: 'Puntos pendientes' },
   { key: 'porVencer',   label: 'Vence en próximos 30d' },
   { key: 'creados',     label: 'Puntos creados (período)' },
+  { key: 'totalPuntos', label: 'Total puntos activos' },
+  { key: 'departamentosPrincipales', label: 'Departamentos principales' },
   { key: 'diasStock',   label: 'Stock le alcanza para' },
 ];
 
@@ -652,7 +682,7 @@ function DesempenoTab() {
       setPeriodStart(s); setPeriodEnd(e);
       setStatus2(
         `Cargado: ${localChips.length - 1} chips, ${localPdv.length - 1} puntos de venta` +
-        (localVisitas ? `, ${localVisitas.length - 1} visitas.` : '. Falta el archivo de visitas — sin él no se puede calcular "Visitas por distribuidor".')
+        (localVisitas ? `, ${localVisitas.length - 1} visitas.` : '. Falta el archivo de visitas (Fecha visita) — sin él no se puede calcular "Visitas por distribuidor".')
       );
       setDesemp(parseDesempeno(localChips, localPdv, localVisitas, new Date(s + 'T00:00:00'), new Date(e + 'T23:59:59')));
     } else {
@@ -844,9 +874,22 @@ function DesempenoTab() {
                   <tr key={r.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                     <td className="px-3 py-2 border-b border-gray-100 text-xs font-medium">{r.nombre}</td>
                     <td className="px-3 py-2 border-b border-gray-100 text-xs">{r.empresa}</td>
-                    {dayCols.map(c => (
-                      <td key={c.daysAgo} className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.diasCount[c.daysAgo]}</td>
-                    ))}
+                    {dayCols.map(c => {
+                      const valor = r.diasCount[c.daysAgo];
+                      const priorActivity = c.daysAgo <= 1 && r.diasCount
+                        .slice(c.daysAgo + 1)
+                        .some(v => v > 0);
+                      const inactivo = valor === 0 && priorActivity;
+                      return (
+                        <td
+                          key={c.daysAgo}
+                          className={`px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums ${inactivo ? 'font-bold' : ''}`}
+                          style={inactivo ? { color: '#E3000F' } : undefined}
+                        >
+                          {valor}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
                 {desemp.distRows.length === 0 && (
@@ -892,6 +935,8 @@ function DesempenoTab() {
                     <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.pendientes}</td>
                     <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.porVencer}</td>
                     <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.creados}</td>
+                    <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{r.totalPuntos}</td>
+                    <td className="px-3 py-2 border-b border-gray-100 text-xs max-w-[220px]">{r.departamentosPrincipales || '—'}</td>
                     <td className="px-3 py-2 border-b border-gray-100"><StockBadge r={r} /></td>
                   </tr>
                 ))}
@@ -902,6 +947,8 @@ function DesempenoTab() {
             </table>
         </div>
       </div>
+
+      <DesempenoFootnote />
 
       </div>
     </>

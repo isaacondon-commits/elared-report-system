@@ -36,6 +36,35 @@ y sin un `allow write` que lo cubra), hay que agregar la línea de arriba y
 publicar las reglas desde la consola de Firebase — no hay forma de aplicarlas
 desde este repo, no están versionadas acá.
 
+## Clonar en otra PC
+
+1. Instalar Node.js (https://nodejs.org)
+2. Instalar Git (https://git-scm.com)
+3. Abrir terminal y ejecutar:
+
+```
+git clone https://github.com/isaacondon-commits/elared-report-system.git
+cd elared-report-system
+npm install
+npm run dev
+```
+
+4. Abrir http://localhost:5173 en el navegador
+
+## Para actualizar desde GitHub (si ya está clonado)
+
+```
+git pull origin master
+npm install  (solo si cambiaron dependencias)
+npm run dev
+```
+
+## Sincronizar cambios (sync.bat)
+
+Ejecutar `sync.bat` desde la raíz del proyecto hace commit y push
+automático de todos los cambios pendientes a `origin/master`. Útil para
+sincronizar rápido entre PCs sin escribir los comandos de git a mano.
+
 ## Changelog — 2026-07-17
 
 ### Usuarios — eliminar

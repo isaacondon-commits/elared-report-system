@@ -8,7 +8,7 @@ import ColumnMapper from '../../components/ColumnMapper';
 import KPICard from '../../components/KPICard';
 import Header from '../../components/Header';
 import { parseExcel, normalizeEstado, normalizeFechaVenta, getEquivalente, getEquivalenteColor, type ParseResult, type EstadoVenta } from '../../utils/smartParser';
-import VentasCharts, { TemporalChart } from './VentasCharts';
+import VentasCharts, { TemporalChart, VendedoresChart } from './VentasCharts';
 import FiltroPeriodo, { type FiltroState } from '../../components/ventas/FiltroPeriodo';
 import VentasPerformanceTable from './VentasPerformanceTable';
 import { exportVentasPptx, exportVentasExcel } from './VentasExport';
@@ -991,6 +991,14 @@ export default function VentasModule() {
             {stats.byFecha.length > 1 && (
               <TemporalChart
                 key={`temporal-${stats.byFecha.length}-${stats.fechaMin}-${stats.fechaMax}`}
+                stats={stats}
+              />
+            )}
+
+            {/* 13. Cantidad de vendedores por día */}
+            {stats.byDia.length > 1 && (
+              <VendedoresChart
+                key={`vendedores-${stats.byDia.length}-${stats.fechaMin}-${stats.fechaMax}`}
                 stats={stats}
               />
             )}

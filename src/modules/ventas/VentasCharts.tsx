@@ -651,6 +651,59 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 13. CANTIDAD DE VENDEDORES POR DÍA — separado (se renderiza en VentasModule)
+// ─────────────────────────────────────────────────────────────────────────────
+export function VendedoresChart({ stats }: { stats: VentasStats }) {
+  if (stats.byDia.length < 2) return null;
+
+  const data = [...stats.byDia].reverse().map(d => ({
+    ...d,
+    label: formatFechaLabel(d.fecha),
+  }));
+  const tickInterval = data.length > 20 ? Math.floor(data.length / 15) : 0;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <h3 className="font-semibold text-gray-900 mb-4">
+        Cantidad de Vendedores
+        {stats.empresaActiva && stats.empresaActiva !== 'Todas' && (
+          <span className="ml-2 text-sm font-normal text-gray-400">· {stats.empresaActiva}</span>
+        )}
+      </h3>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={tickInterval} />
+          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]} />
+          <Tooltip
+            formatter={(v: unknown) => [`${v} vendedores`, '']}
+            labelFormatter={(_: unknown, payload: readonly { payload?: { fecha?: string } }[]) => {
+              const f = payload?.[0]?.payload?.fecha;
+              if (!f) return '';
+              try { return format(parseISO(f), 'dd/MM/yyyy'); } catch { return f; }
+            }}
+          />
+          <Bar dataKey="vendedoresActivos" radius={[4, 4, 0, 0]} fill={P.teal}>
+            <LabelList
+              dataKey="vendedoresActivos"
+              content={(props: unknown) => {
+                const { x, y, width, value, index } = props as { x: number; y: number; width: number; value: number; index: number };
+                if (tickInterval > 0 && index % (tickInterval + 1) !== 0) return null;
+                return (
+                  <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10} fontWeight={600} fill="#334155">
+                    {value}
+                  </text>
+                );
+              }}
+            />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Gráfico auxiliar: Tipo de gestión (plan / motivo)
 // ─────────────────────────────────────────────────────────────────────────────
 function PlanChart({ stats }: Pick<Props, 'stats'>) {

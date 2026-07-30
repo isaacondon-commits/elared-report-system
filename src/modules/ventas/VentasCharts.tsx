@@ -656,10 +656,10 @@ function PlanChart({ stats }: Pick<Props, 'stats'>) {
         )}
       </h3>
       <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 60 }}>
+        <BarChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="nombre" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
-          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]} />
           <Tooltip
             formatter={fmt}
             labelFormatter={(_: unknown, payload: readonly { payload?: { fullNombre?: string } }[]) =>

@@ -7,7 +7,7 @@ import Header from '../components/Header';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type EstadoPostulante = 'pendiente' | 'en_cuenta' | 'contratado' | 'rechazado';
+type EstadoPostulante = 'pendiente' | 'en_cuenta' | 'a_espera_confirmacion' | 'contratado' | 'rechazado';
 
 interface Postulante {
   id: string;
@@ -26,11 +26,13 @@ const SECTORES_ENTREVISTA = [
 ];
 
 const ESTADO_LABEL: Record<EstadoPostulante, string> = {
-  pendiente: 'Pendiente', en_cuenta: 'En cuenta', contratado: 'Contratado', rechazado: 'Rechazado',
+  pendiente: 'Pendiente', en_cuenta: 'En cuenta', a_espera_confirmacion: 'A espera de confirmación',
+  contratado: 'Contratado', rechazado: 'Rechazado',
 };
 const ESTADO_BADGE: Record<EstadoPostulante, string> = {
   pendiente: 'bg-amber-100 text-amber-700',
   en_cuenta: 'bg-indigo-100 text-indigo-700',
+  a_espera_confirmacion: 'bg-cyan-100 text-cyan-700',
   contratado: 'bg-green-100 text-green-700',
   rechazado: 'bg-red-100 text-red-700',
 };
@@ -352,6 +354,7 @@ export default function EntrevistasPage() {
     total: postulantes.length,
     pendientes: postulantes.filter(p => p.estado === 'pendiente').length,
     enCuenta: postulantes.filter(p => p.estado === 'en_cuenta').length,
+    aEsperaConfirmacion: postulantes.filter(p => p.estado === 'a_espera_confirmacion').length,
     contratados: postulantes.filter(p => p.estado === 'contratado').length,
     rechazados: postulantes.filter(p => p.estado === 'rechazado').length,
   }), [postulantes]);
@@ -404,10 +407,11 @@ export default function EntrevistasPage() {
         <div className="space-y-5">
 
           {/* ── KPIs ── */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <KpiCard label="Total postulantes" value={stats.total} sublabel="histórico" borderColor="#94a3b8" />
             <KpiCard label="Pendientes" value={stats.pendientes} sublabel="sin resolución" borderColor="#d97706" valueColor={stats.pendientes > 0 ? '#d97706' : undefined} />
             <KpiCard label="En cuenta" value={stats.enCuenta} sublabel="en seguimiento" borderColor="#4f46e5" valueColor={stats.enCuenta > 0 ? '#4f46e5' : undefined} />
+            <KpiCard label="A espera de confirmación" value={stats.aEsperaConfirmacion} sublabel="pendiente de confirmar" borderColor="#0891b2" valueColor={stats.aEsperaConfirmacion > 0 ? '#0891b2' : undefined} />
             <KpiCard label="Contratados" value={stats.contratados} sublabel="postulantes contratados" borderColor="#16a34a" valueColor={stats.contratados > 0 ? '#16a34a' : undefined} />
             <KpiCard label="Rechazados" value={stats.rechazados} sublabel="postulantes rechazados" borderColor="#dc2626" />
           </div>
@@ -422,7 +426,7 @@ export default function EntrevistasPage() {
             </div>
 
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
-              {([['todos', 'Todos'], ['pendiente', 'Pendientes'], ['en_cuenta', 'En cuenta'], ['contratado', 'Contratados'], ['rechazado', 'Rechazados']] as [FiltroEstado, string][]).map(([v, label]) => (
+              {([['todos', 'Todos'], ['pendiente', 'Pendientes'], ['en_cuenta', 'En cuenta'], ['a_espera_confirmacion', 'A espera de confirmación'], ['contratado', 'Contratados'], ['rechazado', 'Rechazados']] as [FiltroEstado, string][]).map(([v, label]) => (
                 <button key={v} onClick={() => setFiltroEstado(v)}
                   className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${filtroEstado === v ? 'bg-white text-[#003DA5] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                   {label}

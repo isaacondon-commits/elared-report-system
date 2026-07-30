@@ -1,8 +1,39 @@
 import { useState } from 'react';
-import { Settings, Save, CheckCircle } from 'lucide-react';
+import { Settings, Save, CheckCircle, Download } from 'lucide-react';
 import Header from '../components/Header';
 import { useConfig } from '../hooks/useConfig';
 import type { AppConfig } from '../types';
+
+const RRHH_EXPORT_KEYS = [
+  'elared_personal',
+  'elared_personal_extra',
+  'elared_legajo',
+  'elared_certificaciones',
+  'elared_licencias',
+  'elared_entrevistas',
+  'elared_egresos',
+  'elared_reloj_comentarios',
+] as const;
+
+function exportarTodoRRHH() {
+  const data: Record<string, unknown> = {};
+  for (const key of RRHH_EXPORT_KEYS) {
+    try {
+      const raw = localStorage.getItem(key);
+      data[key] = raw ? JSON.parse(raw) : null;
+    } catch {
+      data[key] = null;
+    }
+  }
+  const payload = { exportadoEn: new Date().toISOString(), data };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `RRHH_datos_${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function ConfigPage() {
   const { config, saveConfig } = useConfig();
@@ -72,6 +103,24 @@ export default function ConfigPage() {
               {field('maxAlmuerzoMinutos', 'Duración máxima de almuerzo (minutos)', 'number',
                 'Si el intervalo entre salida y reingreso supera este valor, se marca como jornada extendida.')}
             </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <Download size={18} className="text-[#003DA5]" />
+              <h2 className="font-semibold text-gray-900">Herramientas</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Descarga un único archivo JSON con todo lo cargado en Personal, Legajo, Certificaciones,
+              Licencias, Entrevistas, Egresos y los comentarios de Reloj — útil como respaldo o para
+              generar reportes fuera de la app.
+            </p>
+            <button
+              onClick={exportarTodoRRHH}
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+            >
+              <Download size={15} /> Exportar todo RRHH (JSON)
+            </button>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">

@@ -330,13 +330,10 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
               <SortTh col="rank"         label="#"              />
               <SortTh col="nombre"       label="Vendedor"       />
               <SortTh col="total"        label="Total"    right />
-              <SortTh col="renovaciones" label="Renov."   right />
               <SortTh col="pctRenovacion" label="% Renov." right />
-              <SortTh col="altas"        label="Nuevo Serv." right />
               <SortTh col="pctAltas"     label="% Altas"  right />
-              <SortTh col="cambios"      label="Cambios"  right />
               <SortTh col="pctRechazo"   label="% Rechazo" right />
-              <SortTh col="diasActivos"  label="Días Act." right />
+              <SortTh col="diasActivos"  label="Días vendidos" right />
               <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 600, background: '#003DA5', color: '#fff', textAlign: 'center' }}>Acción</th>
               {onHideVendedor && <th style={{ background: '#003DA5', width: 30 }} />}
             </tr>
@@ -381,24 +378,15 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
                       {f.total.toLocaleString()}
                     </td>
 
-                    {/* Renov */}
-                    <td style={{ padding: '8px 12px', textAlign: 'right', color: '#374151' }}>{f.renovaciones}</td>
-
                     {/* % Renov */}
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: '#0052CC', fontWeight: 600 }}>
                       {f.pctRenovacion.toFixed(1)}%
                     </td>
 
-                    {/* Nuevo Servicio */}
-                    <td style={{ padding: '8px 12px', textAlign: 'right', color: '#374151' }}>{f.altas}</td>
-
                     {/* % Altas */}
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: '#003DA5', fontWeight: 600 }}>
                       {f.pctAltas.toFixed(1)}%
                     </td>
-
-                    {/* Cambios */}
-                    <td style={{ padding: '8px 12px', textAlign: 'right', color: '#374151' }}>{f.cambios}</td>
 
                     {/* % Rechazo */}
                     <td style={{ padding: '8px 12px', textAlign: 'right' }}>
@@ -409,7 +397,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
                       ) : <span style={{ color: '#d1d5db' }}>—</span>}
                     </td>
 
-                    {/* Días Activos */}
+                    {/* Días vendidos */}
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
                       {f.diasActivos > 0 ? f.diasActivos : <span style={{ color: '#d1d5db' }}>—</span>}
                     </td>
@@ -449,7 +437,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
                   {expanded && (
                     <tr key={`${f.nombre}-detail`}>
                       <td
-                        colSpan={onHideVendedor ? 12 : 11}
+                        colSpan={onHideVendedor ? 9 : 8}
                         style={{ padding: 0, borderTop: '1px solid #e2e8f0' }}
                       >
                         <DetailTabs f={f} onClose={() => setExpanded(null)} />
@@ -461,7 +449,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
             })}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={onHideVendedor ? 12 : 11}
+                <td colSpan={onHideVendedor ? 9 : 8}
                   style={{ padding: '32px 16px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
                   No hay vendedores para mostrar.
                 </td>

@@ -17,6 +17,7 @@ interface Postulante {
   sector: string;
   fecha: string;
   estado: EstadoPostulante;
+  observaciones: string;
 }
 
 const EMPRESAS_ENTREVISTA = ['Elared', 'Phonehouse', 'Relpont'];
@@ -50,9 +51,12 @@ function fmtDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function buildPostulante(nombre: string, celular: string, empresa: string, sector: string, fecha: string, estado: EstadoPostulante = 'pendiente'): Postulante {
+function buildPostulante(
+  nombre: string, celular: string, empresa: string, sector: string, fecha: string,
+  estado: EstadoPostulante = 'pendiente', observaciones: string = ''
+): Postulante {
   const id = `${nombre}__${celular}__${fecha}__${Math.random().toString(36).slice(2, 7)}`;
-  return { id, nombre, celular, empresa, sector, fecha, estado };
+  return { id, nombre, celular, empresa, sector, fecha, estado, observaciones };
 }
 
 const STORAGE_KEY = 'elared_entrevistas';
@@ -98,10 +102,10 @@ function parsearTexto(texto: string): { postulantes: Postulante[]; ignoradas: nu
 
 function exportExcel(postulantes: Postulante[]) {
   const wb = XLSX.utils.book_new();
-  const headers = ['Nombre', 'Celular', 'Empresa', 'Sector', 'Fecha', 'Estado'];
-  const rows = postulantes.map(p => [p.nombre, p.celular, p.empresa, p.sector, fmtDate(p.fecha), ESTADO_LABEL[p.estado]]);
+  const headers = ['Nombre', 'Celular', 'Empresa', 'Sector', 'Fecha', 'Estado', 'Observaciones'];
+  const rows = postulantes.map(p => [p.nombre, p.celular, p.empresa, p.sector, fmtDate(p.fecha), ESTADO_LABEL[p.estado], p.observaciones]);
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  ws['!cols'] = [{ wch: 32 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 14 }];
+  ws['!cols'] = [{ wch: 32 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Entrevistas');
   XLSX.writeFile(wb, `Entrevistas_${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}.xlsx`);
 }
@@ -129,12 +133,13 @@ function AddPanel({ onSave }: { onSave: (p: Postulante) => void }) {
   const [sector, setSector] = useState(SECTORES_ENTREVISTA[0]);
   const [fecha, setFecha] = useState(todayISO());
   const [estado, setEstado] = useState<EstadoPostulante>('pendiente');
+  const [observaciones, setObservaciones] = useState('');
   const [error, setError] = useState('');
 
   function handleGuardar() {
     if (!nombre.trim()) { setError('El nombre es requerido.'); return; }
-    onSave(buildPostulante(nombre.trim().toUpperCase(), celular.trim(), empresa, sector, fecha, estado));
-    setNombre(''); setCelular(''); setError('');
+    onSave(buildPostulante(nombre.trim().toUpperCase(), celular.trim(), empresa, sector, fecha, estado, observaciones.trim()));
+    setNombre(''); setCelular(''); setObservaciones(''); setError('');
   }
 
   return (
@@ -180,6 +185,12 @@ function AddPanel({ onSave }: { onSave: (p: Postulante) => void }) {
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]">
             {(Object.keys(ESTADO_LABEL) as EstadoPostulante[]).map(k => <option key={k} value={k}>{ESTADO_LABEL[k]}</option>)}
           </select>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Observaciones</label>
+          <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={3}
+            placeholder="Notas sobre la entrevista..."
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5] resize-none" />
         </div>
 
         {error && <div className="text-red-600 text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
@@ -467,14 +478,14 @@ export default function EntrevistasPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-[#003DA5] text-white">
-                    {['Nombre', 'Celular', 'Empresa', 'Sector', 'Fecha', 'Estado', ''].map(h => (
+                    {['Nombre', 'Celular', 'Empresa', 'Sector', 'Fecha', 'Estado', 'Observaciones', ''].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">Ningún postulante coincide con los filtros.</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">Ningún postulante coincide con los filtros.</td></tr>
                   )}
                   {filtered.map((p, i) => (
                     <tr key={p.id} className={`border-b border-gray-100 group transition-colors hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
@@ -489,6 +500,7 @@ export default function EntrevistasPage() {
                           {(Object.keys(ESTADO_LABEL) as EstadoPostulante[]).map(k => <option key={k} value={k}>{ESTADO_LABEL[k]}</option>)}
                         </select>
                       </td>
+                      <td className="px-3 py-2.5 text-gray-600 max-w-xs truncate" title={p.observaciones}>{p.observaciones || <span className="text-gray-300">—</span>}</td>
                       <td className="px-3 py-2.5 w-8">
                         <button onClick={() => setDeleteTarget(p)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all">
                           <Trash2 size={14} />

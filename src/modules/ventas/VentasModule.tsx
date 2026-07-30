@@ -208,6 +208,14 @@ function esMotivoConocido(raw: string): boolean {
   return MOTIVOS_CONOCIDOS.has(m);
 }
 
+// Rechazo: todo estado que NO sea Vendido, Distribuir, Activar o Control Antel cuenta como rechazo.
+// Solo afecta el % de rechazo general y por vendedor — NO afecta la tabla "Distribución por Estado".
+const ESTADOS_NO_RECHAZO = new Set(['vendido', 'distribuir', 'activar', 'control antel']);
+function esRechazoPorEstado(raw: string): boolean {
+  const m = raw.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return !ESTADOS_NO_RECHAZO.has(m);
+}
+
 export function getEmpresas(
   rows: Record<string, unknown>[],
   mapping: Record<string, string>,
@@ -285,7 +293,7 @@ export function processVentas(
     const estadoRawVal = (mapping.estado ? String(r[mapping.estado] ?? '') : '').trim();
     const estadoNorm   = hasEstado ? normalizeEstado(estadoRawVal) : 'Otro';
     const esVendido    = estadoRawVal.trim() === 'VENDIDO';
-    const esRechazo    = hasEstado ? getEquivalente(estadoRawVal) === 'Rechazado' : false;
+    const esRechazo    = hasEstado ? esRechazoPorEstado(estadoRawVal) : false;
 
     // Departamento
     if (hasDepartamento) {
@@ -438,7 +446,7 @@ export function processVentas(
   let estadoKpis: EstadoKpis | null = null;
   if (hasEstado) {
     const vendido = estadoRawMap.get('VENDIDO') ?? 0;
-    const rechazo = estadoNormMap.get('Rechazo') ?? 0;
+    const rechazo = totalRechazos;
     estadoKpis = {
       vendido,  vendidoPct: total > 0 ? Math.round((vendido / total) * 100) : 0,
       control:  estadoNormMap.get('Control Antel') ?? 0,

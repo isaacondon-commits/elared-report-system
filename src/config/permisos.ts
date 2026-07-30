@@ -18,7 +18,6 @@ export const PERMISOS_MODULOS = {
   atencion_cliente: ['admin', 'supervisor_atencion'],
   back_office:      ['admin', 'supervisor_atencion'],
   chips:            ['admin', 'supervisor_movil', 'supervisor_fibra'],
-  plano_call_center: ['admin', 'supervisor_movil', 'supervisor_fibra', 'supervisor_atencion', 'rrhh'],
   configuracion:    ['admin'],
   usuarios:         ['admin'],
 } as const satisfies Record<string, readonly RolSistema[]>;
@@ -53,7 +52,6 @@ export const MODULO_LABELS: Record<ModuloSistema, string> = {
   atencion_cliente: 'Atención al Cliente',
   back_office:      'Back Office',
   chips:            'Chips',
-  plano_call_center: 'Plano Call Center',
   configuracion:    'Configuración',
   usuarios:         'Usuarios',
 };

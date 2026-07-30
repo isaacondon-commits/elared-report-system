@@ -22,7 +22,6 @@ import VicidialModule from './modules/vicidial/VicidialModule';
 import PersonalPage from './pages/PersonalPage';
 import CertificacionesPage from './pages/CertificacionesPage';
 import CalendarioPage from './pages/CalendarioPage';
-import PlanoCallCenterPage from './pages/PlanoCallCenterPage';
 import { UpdateNotification } from './components/UpdateNotification';
 
 // ── Spinner de carga inicial ──────────────────────────────────────────────────
@@ -103,9 +102,6 @@ function AppLayout() {
             } />
             <Route path="/calendario" element={
               <ProtectedRoute modulo="calendario"><CalendarioPage /></ProtectedRoute>
-            } />
-            <Route path="/plano-call-center" element={
-              <ProtectedRoute modulo="plano_call_center"><PlanoCallCenterPage /></ProtectedRoute>
             } />
             <Route path="/config" element={
               <ProtectedRoute modulo="configuracion"><ConfigPage /></ProtectedRoute>

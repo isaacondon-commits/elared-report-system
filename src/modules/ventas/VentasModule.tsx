@@ -190,14 +190,13 @@ function applyPeriodFilter(
 function classifyMotivo(raw: string): 'renovacion' | 'nuevo_servicio' | 'cambio' {
   const m = raw.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-  // "Nuevo Servicio" agrupa altas nuevas y pasajes de tecnología
-  if (m === 'nuevo servicio')       return 'nuevo_servicio';
+  // Nuevo Servicio: SOLO pasaje de tecnología
   if (m === 'pasaje de tecnologia') return 'nuevo_servicio';
 
-  if (m === 'renovacion')     return 'renovacion';
-  if (m === 'cambio de plan') return 'cambio';
+  if (m === 'renovacion') return 'renovacion';
 
-  return 'nuevo_servicio';
+  // Todo lo que no sea renovación o pasaje de tecnología va a Cambio de Plan
+  return 'cambio';
 }
 
 export function getEmpresas(

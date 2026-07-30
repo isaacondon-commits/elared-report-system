@@ -10,7 +10,6 @@ import SetupPage from './pages/SetupPage';
 import HomePage from './pages/HomePage';
 import VentasModule from './modules/ventas/VentasModule';
 import RelojModule from './modules/reloj/RelojModule';
-import SancionesModule from './modules/sanciones/SancionesModule';
 import ConfigPage from './pages/ConfigPage';
 import UsuariosPage from './pages/admin/UsuariosPage';
 import ComisionesMovilModule from './modules/comisiones/ComisionesMovilModule';
@@ -76,9 +75,6 @@ function AppLayout() {
             } />
             <Route path="/reloj" element={
               <ProtectedRoute modulo="reloj"><RelojModule /></ProtectedRoute>
-            } />
-            <Route path="/sanciones" element={
-              <ProtectedRoute modulo="sanciones"><SancionesModule /></ProtectedRoute>
             } />
             <Route path="/comisiones-movil" element={
               <ProtectedRoute modulo="comisiones_movil"><ComisionesMovilModule /></ProtectedRoute>

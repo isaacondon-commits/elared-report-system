@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  BarChart2, Clock, AlertTriangle, Settings, Home, Users, FileCheck,
+  BarChart2, Clock, Settings, Home, Users, FileCheck,
   Smartphone, Wifi, Headphones, Briefcase, Cpu, LogOut, PauseCircle, Menu, Calendar, Umbrella,
   UserPlus, UserMinus, FolderOpen,
 } from 'lucide-react';
@@ -48,7 +48,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'RRHH',
     items: [
       { to: '/reloj',     icon: Clock,         label: 'Reloj',     modulo: 'reloj'     },
-      { to: '/sanciones', icon: AlertTriangle, label: 'Sanciones', modulo: 'sanciones' },
       { to: '/personal',        icon: Users,      label: 'Personal',        modulo: 'personal'        },
       { to: '/legajo',          icon: FolderOpen, label: 'Legajo',          modulo: 'legajo'          },
       { to: '/certificaciones', icon: FileCheck,  label: 'Certificaciones', modulo: 'certificaciones' },

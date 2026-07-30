@@ -108,7 +108,7 @@ const INPUT = 'w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm fo
 
 const ROL_INFO: { rol: RolSistema; modulos: string }[] = [
   { rol: 'admin',               modulos: 'Acceso total al sistema' },
-  { rol: 'rrhh',                modulos: 'Reloj de asistencia · Sanciones' },
+  { rol: 'rrhh',                modulos: 'Reloj de asistencia' },
   { rol: 'supervisor_movil',    modulos: 'Ventas · Comisiones Móvil · Pausas Vicidial · Chips' },
   { rol: 'supervisor_fibra',    modulos: 'Ventas · Comisiones Fibra · Pausas Vicidial · Chips' },
   { rol: 'supervisor_atencion', modulos: 'Atención al Cliente · Back Office' },

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  BarChart2, Clock, AlertTriangle, ArrowRight, Shield,
+  BarChart2, Clock, ArrowRight, Shield,
   Smartphone, Wifi, Headphones, Briefcase, Cpu, Lock, PauseCircle, CheckCircle2,
 } from 'lucide-react';
 import { useAuthContext } from '../contexts/AuthContext';
@@ -43,11 +43,6 @@ const ACTIVE_MODULES: ModuleCard[] = [
     to: '/reloj', icon: Clock, title: 'Reloj', modulo: 'reloj', storeKey: 'reloj',
     desc: 'Tardanzas, ausencias y salidas anticipadas. Calendario mensual por funcionario.',
     accent: '#16a34a', bg: 'bg-green-50', border: 'border-green-200', export: 'Excel',
-  },
-  {
-    to: '/sanciones', icon: AlertTriangle, title: 'Sanciones', modulo: 'sanciones', storeKey: 'sanciones',
-    desc: 'Historial de advertencias y detección de patrones de reincidencia.',
-    accent: '#E3000F', bg: 'bg-red-50', border: 'border-red-200', export: 'PDF',
   },
   {
     to: '/pausas-vicidial', icon: PauseCircle, title: 'Pausas Vicidial', modulo: 'pausas_vicidial', storeKey: 'vicidial',

@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   BarChart2, Users, Calendar, Download, Loader2,
-  ArrowUpRight, Layers, Repeat, CheckCircle, XCircle, EyeOff, Hash,
+  ArrowUpRight, Layers, Repeat, CheckCircle, XCircle, EyeOff, Hash, Percent,
 } from 'lucide-react';
 import FileUploader from '../../components/FileUploader';
 import ColumnMapper from '../../components/ColumnMapper';
@@ -910,11 +910,13 @@ export default function VentasModule() {
           <div id="ventas-content" key={sessionKey} className="space-y-6">
 
             {/* 1. KPI Cards — fila 1: totales por motivo */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <KPICard label="Total Ventas"    value={stats.total.toLocaleString()}       icon={BarChart2}    color="blue"  />
               <KPICard label="Renovaciones"    value={stats.renovaciones.toLocaleString()} icon={Repeat}       color="green" />
+              <KPICard label="% Renovación"    value={`${(stats.total > 0 ? (stats.renovaciones / stats.total) * 100 : 0).toFixed(1)}%`} icon={Percent} color="green" />
               <KPICard label="Nuevo Servicio"  value={stats.altas.toLocaleString()}        icon={ArrowUpRight} color="blue"  />
               <KPICard label="Cambios de Plan" value={stats.cambios.toLocaleString()}      icon={Layers}       color="amber" />
+              <KPICard label="% Altas"         value={`${(stats.total > 0 ? ((stats.total - stats.renovaciones) / stats.total) * 100 : 0).toFixed(1)}%`} icon={Percent} color="blue" />
             </div>
 
             {/* KPI Cards — fila 2: estado + métricas adicionales */}

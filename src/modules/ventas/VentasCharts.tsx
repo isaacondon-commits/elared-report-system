@@ -631,18 +631,7 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
             dot={{ r: 3, fill: P.azul1, strokeWidth: 0 }}
             activeDot={{ r: 5 }}
           >
-            <LabelList
-              dataKey="ventas"
-              content={(props: unknown) => {
-                const { x, y, value, index } = props as { x: number; y: number; value: number; index: number };
-                if (tickInterval > 0 && index % (tickInterval + 1) !== 0) return null;
-                return (
-                  <text x={x} y={y - 8} textAnchor="middle" fontSize={10} fontWeight={600} fill={P.azul1}>
-                    {value}
-                  </text>
-                );
-              }}
-            />
+            <LabelList dataKey="ventas" position="top" offset={8} style={{ fontSize: 10, fontWeight: 600, fill: P.azul1 }} />
           </Line>
         </LineChart>
       </ResponsiveContainer>

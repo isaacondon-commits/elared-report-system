@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Settings, Save, CheckCircle, Download } from 'lucide-react';
+import { Settings, Save, CheckCircle, Download, Loader2 } from 'lucide-react';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import Header from '../components/Header';
 import { useConfig } from '../hooks/useConfig';
+import { db } from '../firebase';
 import type { AppConfig } from '../types';
 
 const RRHH_EXPORT_KEYS = [
@@ -15,7 +17,13 @@ const RRHH_EXPORT_KEYS = [
   'elared_reloj_comentarios',
 ] as const;
 
-function exportarTodoRRHH() {
+function addDiasISO(fecha: Date, dias: number): string {
+  const d = new Date(fecha);
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+async function exportarTodoRRHH() {
   const data: Record<string, unknown> = {};
   for (const key of RRHH_EXPORT_KEYS) {
     try {
@@ -25,6 +33,27 @@ function exportarTodoRRHH() {
       data[key] = null;
     }
   }
+
+  // Snapshot de sala de capacitación (Firestore): -30 días a +90 días desde hoy
+  let calendarioSala: unknown[] = [];
+  try {
+    const hoy = new Date();
+    const desde = addDiasISO(hoy, -30);
+    const hasta = addDiasISO(hoy, 90);
+    const q = query(
+      collection(db, 'calendario_eventos'),
+      where('fecha', '>=', desde),
+      where('fecha', '<=', hasta),
+    );
+    const snap = await getDocs(q);
+    calendarioSala = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }) as { calendario?: string })
+      .filter(e => e.calendario === 'sala');
+  } catch {
+    calendarioSala = [];
+  }
+  data.calendario_sala_snapshot = calendarioSala;
+
   const payload = { exportadoEn: new Date().toISOString(), data };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -39,11 +68,17 @@ export default function ConfigPage() {
   const { config, saveConfig } = useConfig();
   const [form, setForm] = useState<AppConfig>(config);
   const [saved, setSaved] = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   const handleSave = () => {
     saveConfig(form);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  };
+
+  const handleExportarRRHH = async () => {
+    setExportando(true);
+    try { await exportarTodoRRHH(); } finally { setExportando(false); }
   };
 
   const field = (key: keyof AppConfig, label: string, type = 'text', help?: string) => (
@@ -112,14 +147,16 @@ export default function ConfigPage() {
             </div>
             <p className="text-sm text-gray-500 mb-4">
               Descarga un único archivo JSON con todo lo cargado en Personal, Legajo, Certificaciones,
-              Licencias, Entrevistas, Egresos y los comentarios de Reloj — útil como respaldo o para
-              generar reportes fuera de la app.
+              Licencias, Entrevistas, Egresos, los comentarios de Reloj, y un snapshot de la Sala de
+              Capacitación (±30/90 días) — útil como respaldo o para generar reportes fuera de la app.
             </p>
             <button
-              onClick={exportarTodoRRHH}
-              className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              onClick={handleExportarRRHH}
+              disabled={exportando}
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
             >
-              <Download size={15} /> Exportar todo RRHH (JSON)
+              {exportando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              {exportando ? 'Generando...' : 'Exportar todo RRHH (JSON)'}
             </button>
           </div>
 

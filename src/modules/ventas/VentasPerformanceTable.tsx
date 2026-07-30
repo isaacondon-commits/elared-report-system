@@ -26,12 +26,6 @@ function pctRechazoColor(pct: number): string {
   return '#E3000F';
 }
 
-function getEstadoPrincipal(estadosRaw: Record<string, number>): string | null {
-  const entries = Object.entries(estadosRaw).filter(([, v]) => v > 0);
-  if (!entries.length) return null;
-  return entries.sort(([, a], [, b]) => b - a)[0][0];
-}
-
 // ── Detail tabs inside expanded row ──────────────────────────────────────────
 function DetailTabs({ f, onClose }: { f: FuncionarioStat; onClose: () => void }) {
   const [tab, setTab] = useState<'dia' | 'plan' | 'estado'>('dia');
@@ -339,7 +333,6 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
               <SortTh col="altas"        label="Nuevo Serv." right />
               <SortTh col="cambios"      label="Cambios"  right />
               <SortTh col="pctRechazo"   label="% Rechazo" right />
-              {stats.hasEstado && <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 600, background: '#003DA5', color: '#fff', textAlign: 'left' }}>Estado Principal</th>}
               <SortTh col="diasActivos"  label="Días Act." right />
               <th style={{ padding: '10px 12px', fontSize: 11, fontWeight: 600, background: '#003DA5', color: '#fff', textAlign: 'center' }}>Acción</th>
               {onHideVendedor && <th style={{ background: '#003DA5', width: 30 }} />}
@@ -352,9 +345,6 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
               const isTop3 = globalRank < 3;
               const rowBg  = isTop3 ? `${badge?.bg}15` : idx % 2 === 0 ? '#fff' : '#f8fafc';
               const expanded = expandedNombre === f.nombre;
-              const estadoPrincipal = getEstadoPrincipal(f.estadosRaw);
-              const eq = estadoPrincipal ? getEquivalente(estadoPrincipal) : null;
-              const eqColor = eq ? getEquivalenteColor(eq) : '#adb5bd';
 
               return (
                 <>
@@ -411,24 +401,6 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
                       ) : <span style={{ color: '#d1d5db' }}>—</span>}
                     </td>
 
-                    {/* Estado Principal */}
-                    {stats.hasEstado && (
-                      <td style={{ padding: '8px 12px' }}>
-                        {estadoPrincipal ? (
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 12,
-                            background: eqColor + '20', color: eqColor,
-                            border: `1px solid ${eqColor}50`,
-                            whiteSpace: 'nowrap',
-                          }}
-                            title={eq ? `${estadoPrincipal} (${eq})` : estadoPrincipal}>
-                            {estadoPrincipal.length > 14 ? estadoPrincipal.slice(0, 14) + '…' : estadoPrincipal}
-                            {eq && ` (${eq})`}
-                          </span>
-                        ) : <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>}
-                      </td>
-                    )}
-
                     {/* Días Activos */}
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: '#6b7280', fontSize: 12 }}>
                       {f.diasActivos > 0 ? f.diasActivos : <span style={{ color: '#d1d5db' }}>—</span>}
@@ -469,7 +441,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
                   {expanded && (
                     <tr key={`${f.nombre}-detail`}>
                       <td
-                        colSpan={stats.hasEstado ? (onHideVendedor ? 12 : 11) : (onHideVendedor ? 11 : 10)}
+                        colSpan={onHideVendedor ? 11 : 10}
                         style={{ padding: 0, borderTop: '1px solid #e2e8f0' }}
                       >
                         <DetailTabs f={f} onClose={() => setExpanded(null)} />
@@ -481,7 +453,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
             })}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={stats.hasEstado ? (onHideVendedor ? 12 : 11) : (onHideVendedor ? 11 : 10)}
+                <td colSpan={onHideVendedor ? 11 : 10}
                   style={{ padding: '32px 16px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
                   No hay vendedores para mostrar.
                 </td>

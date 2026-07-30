@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   BarChart2, Users, Calendar, Download, Loader2,
-  ArrowUpRight, Layers, Repeat, CheckCircle, XCircle, EyeOff, Hash, Percent,
+  ArrowUpRight, Layers, Repeat, CheckCircle, XCircle, EyeOff, Hash, Percent, AlertTriangle,
 } from 'lucide-react';
 import FileUploader from '../../components/FileUploader';
 import ColumnMapper from '../../components/ColumnMapper';
@@ -126,6 +126,7 @@ export interface VentasStats {
   tasaRechazoEquipo: number | null;
   promedioEquipoDia: number;
   empresaActiva: string;
+  atencionCambios: number;
 }
 
 // ── Constantes localStorage / sessionStorage ──────────────────────────────────
@@ -199,6 +200,14 @@ function classifyMotivo(raw: string): 'renovacion' | 'nuevo_servicio' | 'cambio'
   return 'cambio';
 }
 
+// Auditoría "Atención - Cambios": motivos que NO son ninguno de los 3 literales conocidos
+// (Pasaje de Tecnología, Cambio de Plan, Renovación). No afecta classifyMotivo.
+const MOTIVOS_CONOCIDOS = new Set(['pasaje de tecnologia', 'cambio de plan', 'renovacion']);
+function esMotivoConocido(raw: string): boolean {
+  const m = raw.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return MOTIVOS_CONOCIDOS.has(m);
+}
+
 export function getEmpresas(
   rows: Record<string, unknown>[],
   mapping: Record<string, string>,
@@ -262,6 +271,7 @@ export function processVentas(
   const diaVendedores = new Map<string, Set<string>>();
   const funcDiaEstados = new Map<string, Map<string, Record<string, number>>>();
   const funcPlan       = new Map<string, Map<string, number>>();
+  let atencionCambios  = 0;
 
   for (const r of rows) {
     const nombre = String(r[mapping.funcionario] ?? '').trim();
@@ -270,6 +280,7 @@ export function processVentas(
     const motivoRaw  = mapping.motivo ? String(r[mapping.motivo] ?? '') : '';
     const tipo       = classifyMotivo(motivoRaw);
     const motivoLabel = motivoRaw.trim() || 'Sin motivo';
+    if (!esMotivoConocido(motivoRaw)) atencionCambios++;
 
     const estadoRawVal = (mapping.estado ? String(r[mapping.estado] ?? '') : '').trim();
     const estadoNorm   = hasEstado ? normalizeEstado(estadoRawVal) : 'Otro';
@@ -447,7 +458,7 @@ export function processVentas(
     totalVendedores: byFuncionario.length,
     hasEstado, hasBackOffice, hasDepartamento, hasModalidad,
     estadoKpis, sinBackOffice, tasaRechazoEquipo, promedioEquipoDia,
-    empresaActiva,
+    empresaActiva, atencionCambios,
   };
 }
 
@@ -920,6 +931,11 @@ export default function VentasModule() {
 
             {/* KPI Cards — fila 2: estado + métricas adicionales */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {stats.atencionCambios > 0 && (
+                <KPICard size="small" color="amber" icon={AlertTriangle}
+                  label="Atención - Cambios"
+                  value={stats.atencionCambios.toLocaleString()} />
+              )}
               {stats.hasEstado && stats.estadoKpis && (
                 <KPICard size="small" color="red" icon={XCircle}
                   label="Rechazos"

@@ -102,7 +102,7 @@ export function exportRelojExcel(data: RelojData): void {
   const resumenHeaders = [
     'Empleado', 'Departamento', 'Presencias', 'Laborables', 'Asistencia %',
     'Tardanzas', 'T. Graves', 'Min. tardanza', 'Desc. extendidos',
-    'Sal. anticipadas', 'Ausencias', 'Hrs extras', 'Jornada prom.', 'Puntualidad %',
+    'Sal. anticipadas', 'Ausencias', 'Jornada prom.', 'Puntualidad %',
   ];
   const resumenRows = data.empleados.map(e => [[
     [e.nombre],
@@ -116,7 +116,6 @@ export function exportRelojExcel(data: RelojData): void {
     [e.descansosExtendidos],
     [e.salidasAnticipadas],
     [e.ausencias],
-    [e.totalHorasExtrasMinutos > 0 ? minsToHHMM(e.totalHorasExtrasMinutos) : '—'],
     [e.jornadaPromedioMinutos > 0 ? minsToHHMM(e.jornadaPromedioMinutos) : '—'],
     [fmtPct(e.puntualidadPct)],
   ]]).flat();
@@ -237,37 +236,6 @@ export function exportRelojExcel(data: RelojData): void {
     }
   }
   XLSX.utils.book_append_sheet(wb, createStyledSheet(detalleHeaders, detalleRows), 'Detalle Completo');
-
-  // ── Hoja 7: Horas Extras ──────────────────────────────────────────────────
-
-  const extrasHeaders = [
-    'Empleado', 'Fecha', 'Día', 'Ingreso', 'Salida', 'Jornada real',
-    'Jornada esperada', 'Extras (min)', 'Extras (hh:mm)',
-  ];
-  const extrasRows: (string | number)[][][] = [];
-  for (const emp of data.empleados) {
-    for (const dia of [...emp.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
-      if (!dia.horasExtrasMinutos || dia.horasExtrasMinutos <= 0) continue;
-      const ingresoEsp = emp.horario.ingresoEsperado;
-      const salidaEsp = emp.horario.salidaEsperada;
-      const jornadaEspMins = (parseInt(salidaEsp.split(':')[0] ?? '0') * 60 + parseInt(salidaEsp.split(':')[1] ?? '0')) -
-        (parseInt(ingresoEsp.split(':')[0] ?? '0') * 60 + parseInt(ingresoEsp.split(':')[1] ?? '0')) - 30;
-      extrasRows.push([
-        [emp.nombre],
-        [fmtFecha(dia.fecha)],
-        [fmtDiaSemana(dia.fecha)],
-        [dia.ingreso ?? '—'],
-        [dia.salidaFinal ?? '—'],
-        [dia.minutosJornada !== null ? minsToHHMM(dia.minutosJornada) : '—'],
-        [jornadaEspMins > 0 ? minsToHHMM(jornadaEspMins) : '—'],
-        [dia.horasExtrasMinutos],
-        [minsToHHMM(dia.horasExtrasMinutos)],
-      ]);
-    }
-  }
-  if (extrasRows.length > 0) {
-    XLSX.utils.book_append_sheet(wb, createStyledSheet(extrasHeaders, extrasRows), 'Horas Extras');
-  }
 
   XLSX.writeFile(wb, `Reloj_${fecha}.xlsx`);
 }

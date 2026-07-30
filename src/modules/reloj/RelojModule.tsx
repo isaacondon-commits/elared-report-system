@@ -38,14 +38,6 @@ function fmtFechaLong(iso: string): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-function fmtExtras(mins: number): string {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h > 0 && m > 0) return `+${h}h ${m}min`;
-  if (h > 0) return `+${h}h`;
-  return `+${m}min`;
-}
-
 const ESTADO_BADGE: Record<EstadoDia, { label: string; bg: string; text: string }> = {
   OK:                 { label: 'OK',           bg: '#dcfce7', text: '#15803d' },
   TARDANZA:           { label: 'Tardanza',      bg: '#fef9c3', text: '#854d0e' },
@@ -284,7 +276,7 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200">
-            {['Fecha', 'Ingreso', 'Sal. Desc.', 'Reg. Desc.', 'Salida', 'Extras', 'Jornada', 'Estado', ''].map(h => (
+            {['Fecha', 'Ingreso', 'Sal. Desc.', 'Reg. Desc.', 'Salida', 'Jornada', 'Estado', ''].map(h => (
               <th key={h} className="px-3 py-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wide text-left whitespace-nowrap">
                 {h}
               </th>
@@ -381,11 +373,6 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
                       </>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-xs font-mono">
-                    {dia.horasExtrasMinutos > 0
-                      ? <span className="text-green-600 font-semibold">+{minsToHHMM(dia.horasExtrasMinutos)}</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
                   <td className="px-3 py-2.5 text-gray-500 text-xs">
                     {dia.minutosJornada !== null && dia.minutosJornada > 0
                       ? minsToHHMM(dia.minutosJornada) : '—'}
@@ -399,7 +386,7 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
                 </tr>
                 {isExpanded && (
                   <tr className="bg-blue-50">
-                    <td colSpan={9} className="px-4 py-3">
+                    <td colSpan={8} className="px-4 py-3">
                       <RelojTimeline dia={dia} />
                     </td>
                   </tr>
@@ -415,7 +402,7 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
 
 // ─── ResumenTable ──────────────────────────────────────────────────────────────
 
-type ResumenSortCol = 'nombre' | 'presencia' | 'tardanzas' | 'ausencias' | 'descExt' | 'salAnt' | 'extras' | 'puntualidad';
+type ResumenSortCol = 'nombre' | 'presencia' | 'tardanzas' | 'ausencias' | 'descExt' | 'salAnt' | 'puntualidad';
 type ResumenFiltro  = 'todos' | 'con' | 'sin';
 
 function ResumenTable({ empleados, onSelectEmployee }: {
@@ -451,7 +438,6 @@ function ResumenTable({ empleados, onSelectEmployee }: {
         case 'ausencias':   diff = a.ausencias - b.ausencias; break;
         case 'descExt':     diff = a.descansosExtendidos - b.descansosExtendidos; break;
         case 'salAnt':      diff = a.salidasAnticipadas - b.salidasAnticipadas; break;
-        case 'extras':      diff = a.totalHorasExtrasMinutos - b.totalHorasExtrasMinutos; break;
         case 'puntualidad': diff = a.puntualidadPct - b.puntualidadPct; break;
       }
       return sortAsc ? diff : -diff;
@@ -516,14 +502,13 @@ function ResumenTable({ empleados, onSelectEmployee }: {
               <SortTh col="ausencias"   label="Ausencias" />
               <SortTh col="descExt"     label="Desc. Ext." />
               <SortTh col="salAnt"      label="Sal. Anticip." />
-              <SortTh col="extras"      label="Hrs Extras" />
               <SortTh col="puntualidad" label="Puntualidad %" />
             </tr>
           </thead>
           <tbody>
             {pageData.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
                   Ningún empleado coincide con los filtros aplicados.
                 </td>
               </tr>
@@ -557,11 +542,6 @@ function ResumenTable({ empleados, onSelectEmployee }: {
                   </td>
                   <td className="px-4 py-2.5 text-center text-gray-600">{emp.descansosExtendidos}</td>
                   <td className="px-4 py-2.5 text-center text-gray-600">{emp.salidasAnticipadas}</td>
-                  <td className="px-4 py-2.5 text-center font-mono text-xs">
-                    {emp.totalHorasExtrasMinutos > 0
-                      ? <span style={{ color: '#28a745' }} className="font-semibold">{minsToHHMM(emp.totalHorasExtrasMinutos)}</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
                   <td className="px-4 py-2.5 text-center">
                     <span className={`font-semibold ${emp.puntualidadPct >= 90 ? 'text-green-700' : emp.puntualidadPct >= 75 ? 'text-amber-700' : 'text-red-700'}`}>
                       {emp.puntualidadPct}%
@@ -587,170 +567,6 @@ function ResumenTable({ empleados, onSelectEmployee }: {
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── ExtrasPanel ───────────────────────────────────────────────────────────────
-
-function ExtrasModal({ emp, onClose }: { emp: EmpleadoData; onClose: () => void }) {
-  const dias = Array.from(emp.dias.values())
-    .filter(d => d.horasExtrasMinutos > 0)
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
-  const expectedMins = parseHHMM(emp.horario.salidaEsperada) - parseHHMM(emp.horario.ingresoEsperado);
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h2 className="font-bold text-gray-900">{emp.nombre}</h2>
-            <p className="text-xs text-gray-400">{dias.length} días con horas extras</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-gray-50">
-              <tr className="border-b border-gray-200">
-                {['Fecha', 'Día', 'Ingreso', 'Salida', 'Jornada real', 'Esperada', 'Extras'].map(h => (
-                  <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {dias.map(dia => (
-                <tr key={dia.fecha} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{fmtFecha(dia.fecha)}</td>
-                  <td className="px-3 py-1.5 text-gray-500">{DIAS_SEMANA_SHORT[new Date(dia.fecha + 'T12:00:00').getDay()]}</td>
-                  <td className="px-3 py-1.5 font-mono text-gray-700">{dia.ingreso ?? '—'}</td>
-                  <td className="px-3 py-1.5 font-mono text-gray-700">{dia.salidaFinal ?? '—'}</td>
-                  <td className="px-3 py-1.5 font-mono text-gray-600">{dia.minutosJornada ? minsToHHMM(dia.minutosJornada) : '—'}</td>
-                  <td className="px-3 py-1.5 font-mono text-gray-500">{minsToHHMM(expectedMins)}</td>
-                  <td className="px-3 py-1.5 font-mono font-bold" style={{ color: '#28a745' }}>{fmtExtras(dia.horasExtrasMinutos)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ExtrasPanel({ empleados, onSelectEmployee }: {
-  empleados: EmpleadoData[];
-  onSelectEmployee?: (nombre: string) => void;
-}) {
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [modalEmp, setModalEmp] = useState<EmpleadoData | null>(null);
-
-  const withExtras = empleados
-    .filter(e => e.totalHorasExtrasMinutos > 0)
-    .sort((a, b) => b.totalHorasExtrasMinutos - a.totalHorasExtrasMinutos);
-
-  if (withExtras.length === 0) return null;
-
-  return (
-    <div>
-      <div className="px-5 py-4 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-800 text-sm">Horas extras acumuladas</h3>
-        <p className="text-[11px] text-gray-400 mt-0.5">
-          {withExtras.length} persona{withExtras.length !== 1 ? 's' : ''} con horas extras · Hacé clic para ver el detalle por día
-        </p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              {['Empleado', 'Días con extras', 'Total acumulado', 'Promedio/día', ''].map(h => (
-                <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {withExtras.map(emp => {
-              const isExp = expanded === emp.nombre;
-              const diasExtra = Array.from(emp.dias.values())
-                .filter(d => d.horasExtrasMinutos > 0)
-                .sort((a, b) => b.fecha.localeCompare(a.fecha));
-              const expectedMins = parseHHMM(emp.horario.salidaEsperada) - parseHHMM(emp.horario.ingresoEsperado);
-              const diasShown  = isExp ? diasExtra.slice(0, 10) : [];
-              const hasMore    = diasExtra.length > 10;
-
-              return (
-                <Fragment key={emp.nombre}>
-                  <tr
-                    className={`border-b border-gray-100 cursor-pointer transition-colors ${isExp ? 'bg-green-50' : 'hover:bg-gray-50'}`}
-                    onClick={() => setExpanded(isExp ? null : emp.nombre)}
-                  >
-                    <td className="px-4 py-2.5 font-semibold text-gray-800">{emp.nombre}</td>
-                    <td className="px-4 py-2.5 text-center text-gray-600">{emp.diasConExtras}</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span style={{ color: '#28a745' }} className="font-bold font-mono text-sm">
-                        {fmtExtras(emp.totalHorasExtrasMinutos)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-center font-mono text-xs text-gray-500">
-                      {emp.diasConExtras > 0 ? fmtExtras(Math.round(emp.totalHorasExtrasMinutos / emp.diasConExtras)) : '—'}
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-400">
-                      {isExp ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </td>
-                  </tr>
-                  {isExp && (
-                    <tr className="bg-green-50">
-                      <td colSpan={5} className="px-4 pb-3 pt-0">
-                        <div className="mt-2 rounded-lg border border-green-200 overflow-hidden">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="bg-green-100">
-                                {['Fecha', 'Día', 'Ingreso', 'Salida', 'Jornada real', 'Esperada', 'Extras'].map(h => (
-                                  <th key={h} className="px-3 py-1.5 text-left text-[10px] font-semibold text-green-800 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {diasShown.map(dia => (
-                                <tr key={dia.fecha} className="border-t border-green-100 bg-white">
-                                  <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{fmtFecha(dia.fecha)}</td>
-                                  <td className="px-3 py-1.5 text-gray-500">{DIAS_SEMANA_SHORT[new Date(dia.fecha + 'T12:00:00').getDay()]}</td>
-                                  <td className="px-3 py-1.5 font-mono text-gray-700">{dia.ingreso ?? '—'}</td>
-                                  <td className="px-3 py-1.5 font-mono text-gray-700">{dia.salidaFinal ?? '—'}</td>
-                                  <td className="px-3 py-1.5 font-mono text-gray-600">{dia.minutosJornada ? minsToHHMM(dia.minutosJornada) : '—'}</td>
-                                  <td className="px-3 py-1.5 font-mono text-gray-500">{minsToHHMM(expectedMins)}</td>
-                                  <td className="px-3 py-1.5 font-mono font-bold" style={{ color: '#28a745' }}>{fmtExtras(dia.horasExtrasMinutos)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {hasMore && (
-                          <button
-                            onClick={e => { e.stopPropagation(); setModalEmp(emp); }}
-                            className="mt-2 text-xs text-[#003DA5] font-medium hover:underline"
-                          >
-                            Ver todos los días ({diasExtra.length}) →
-                          </button>
-                        )}
-                        {onSelectEmployee && (
-                          <button
-                            onClick={e => { e.stopPropagation(); onSelectEmployee(emp.nombre); }}
-                            className="mt-2 ml-4 text-xs text-gray-500 hover:text-[#003DA5] font-medium hover:underline"
-                          >
-                            Ver ficha individual →
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {modalEmp && <ExtrasModal emp={modalEmp} onClose={() => setModalEmp(null)} />}
     </div>
   );
 }
@@ -1266,7 +1082,7 @@ function IndividualView({ emp, onEditHorario }: {
   return (
     <div id={`reloj-persona-${emp.nombre.replace(/\s+/g, '-')}`} className="space-y-5">
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           label="Presencias"
           value={`${emp.diasPresentes} / ${emp.diasLaborables}`}
@@ -1295,19 +1111,6 @@ function IndividualView({ emp, onEditHorario }: {
           icon={Users}
           color="blue"
         />
-        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col" style={{ borderTop: '3px solid #28a745' }}>
-          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Hrs extras</div>
-          {emp.totalHorasExtrasMinutos > 0 ? (
-            <div className="text-2xl font-bold" style={{ color: '#28a745' }}>
-              {minsToHHMM(emp.totalHorasExtrasMinutos).replace(':', 'h ') + 'min'}
-            </div>
-          ) : (
-            <div className="text-2xl font-bold text-gray-300">0 extras</div>
-          )}
-          <div className="text-[11px] text-gray-400 mt-1">
-            en {emp.diasConExtras} día{emp.diasConExtras !== 1 ? 's' : ''}
-          </div>
-        </div>
       </div>
 
       {/* Departamento */}
@@ -1374,19 +1177,9 @@ function ComparativaView({ empleados, fechaMin, fechaMax, onSelectEmployee }: {
       </div>
 
       {empleados.length > 0 && (
-        <>
-          {/* Panel de horas extras */}
-          {empleados.some(e => e.totalHorasExtrasMinutos > 0) && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <ExtrasPanel empleados={empleados} onSelectEmployee={onSelectEmployee} />
-            </div>
-          )}
-
-          {/* Mapa de calor */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <HeatmapChart empleados={empleados} fechaMin={fechaMin} fechaMax={fechaMax} />
-          </div>
-        </>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <HeatmapChart empleados={empleados} fechaMin={fechaMin} fechaMax={fechaMax} />
+        </div>
       )}
     </div>
   );

@@ -43,7 +43,6 @@ export interface DiaData {
   minutosTardanza: number;
   minutosDescansoExtra: number;
   minutosSalidaAnticipada: number;
-  horasExtrasMinutos: number;
   estado: EstadoDia;
 }
 
@@ -79,9 +78,6 @@ export interface EmpleadoData {
   diasIncompletos: number;
   puntualidadPct: number;
   jornadaPromedioMinutos: number;
-  totalHorasExtrasMinutos: number;
-  diasConExtras: number;
-  promedioExtrasMinutos: number;
 }
 
 export interface RelojData {
@@ -331,15 +327,11 @@ export function calcularMetricas(
   | 'diasPresentes'
   | 'puntualidadPct'
   | 'jornadaPromedioMinutos'
-  | 'totalHorasExtrasMinutos'
-  | 'diasConExtras'
-  | 'promedioExtrasMinutos'
 > {
   let tardanzas = 0, tardanzasGraves = 0, minutosTardanzaTotal = 0;
   let descansosExtendidos = 0, salidasAnticipadas = 0, ausencias = 0;
   let diasIncompletos = 0, diasPresentes = 0;
   let totalJornada = 0, diasConJornada = 0;
-  let totalHorasExtrasMinutos = 0, diasConExtras = 0;
 
   for (const dia of dias.values()) {
     const dow = new Date(dia.fecha + 'T12:00:00').getDay();
@@ -363,14 +355,12 @@ export function calcularMetricas(
     if (!esLaborable) {
       dia.estado = 'FIN_SEMANA';
       dia.minutosTardanza = 0; dia.minutosDescansoExtra = 0; dia.minutosSalidaAnticipada = 0;
-      dia.horasExtrasMinutos = 0;
       continue;
     }
 
     if (dia.marcaciones.length === 0) {
       dia.estado = 'AUSENTE';
       dia.minutosTardanza = 0; dia.minutosDescansoExtra = 0; dia.minutosSalidaAnticipada = 0;
-      dia.horasExtrasMinutos = 0;
       ausencias++;
       continue;
     }
@@ -380,7 +370,6 @@ export function calcularMetricas(
     if (dia.minutosIngreso === null) {
       dia.estado = 'DATO_INCOMPLETO';
       dia.minutosTardanza = 0; dia.minutosDescansoExtra = 0; dia.minutosSalidaAnticipada = 0;
-      dia.horasExtrasMinutos = 0;
       diasIncompletos++;
       continue;
     }
@@ -396,23 +385,6 @@ export function calcularMetricas(
     // Umbral: 30 min mínimo para considerar salida anticipada como significativa. Menos de 30 min = margen normal.
     const minutosAntes = dia.minutosSalidaFinal !== null ? salidaEsp - dia.minutosSalidaFinal : 0;
     dia.minutosSalidaAnticipada = minutosAntes >= 30 ? minutosAntes : 0;
-
-    // Horas extras: solo si hay salida final registrada
-    if (dia.minutosIngreso !== null && dia.minutosSalidaFinal !== null) {
-      const descReal = dia.minutosDescanso !== null && dia.minutosDescanso > 0 ? dia.minutosDescanso : 0;
-      const jornadaReal = dia.minutosSalidaFinal - dia.minutosIngreso - descReal;
-      const jornadaEsperada = salidaEsp - ingresoEsp - 30;
-      const extrasRaw = jornadaReal - jornadaEsperada;
-      // Umbral: 30 min mínimo para considerar horas extras como significativas. Menos de 30 min = margen normal.
-      dia.horasExtrasMinutos = extrasRaw >= 30 ? extrasRaw : 0;
-    } else {
-      dia.horasExtrasMinutos = 0;
-    }
-
-    if (dia.horasExtrasMinutos > 0) {
-      totalHorasExtrasMinutos += dia.horasExtrasMinutos;
-      diasConExtras++;
-    }
 
     if (retraso > 60) {
       dia.estado = 'TARDANZA_GRAVE';
@@ -455,9 +427,6 @@ export function calcularMetricas(
       ? Math.max(0, Math.round(((diasPresentes - tardanzas) / diasPresentes) * 100))
       : 100,
     jornadaPromedioMinutos: diasConJornada > 0 ? Math.round(totalJornada / diasConJornada) : 0,
-    totalHorasExtrasMinutos,
-    diasConExtras,
-    promedioExtrasMinutos: diasConExtras > 0 ? Math.round(totalHorasExtrasMinutos / diasConExtras) : 0,
   };
 }
 
@@ -575,7 +544,6 @@ export async function parseReloj(file: File): Promise<RelojData> {
         minutosSalidaFinal:     sFin?.minutos  ?? null,
         minutosJornada, minutosDescanso,
         minutosTardanza: 0, minutosDescansoExtra: 0, minutosSalidaAnticipada: 0,
-        horasExtrasMinutos: 0,
         estado: 'DATO_INCOMPLETO',
       });
     }
@@ -597,7 +565,6 @@ export async function parseReloj(file: File): Promise<RelojData> {
           minutosRegresoDescanso: null, minutosSalidaFinal: null,
           minutosJornada: null, minutosDescanso: null,
           minutosTardanza: 0, minutosDescansoExtra: 0, minutosSalidaAnticipada: 0,
-          horasExtrasMinutos: 0,
           estado: 'AUSENTE',
         });
       }

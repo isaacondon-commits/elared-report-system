@@ -166,7 +166,6 @@ interface PersonalStore {
     nombre: string;
     ausencias: number;
     tardanzas: number;
-    totalHorasExtrasMinutos: number;
   }[]) => SincResult;
   sincronizarComisiones: (
     vendedoresMovil: { nombre: string; comision: number }[],
@@ -227,7 +226,6 @@ export const usePersonalStore = create<PersonalStore>((set) => ({
         if (!reg) { noMatcheados.push(emp.nombre); continue; }
         reg.faltasReloj = emp.ausencias;
         reg.tardanzasReloj = emp.tardanzas;
-        reg.horasExtrasReloj = emp.totalHorasExtrasMinutos;
         reg.ultimaSincReloj = now;
         actualizados++;
       }

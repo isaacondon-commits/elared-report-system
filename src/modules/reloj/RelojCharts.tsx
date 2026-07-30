@@ -39,6 +39,7 @@ const COLORES_ESTADO: Record<EstadoDia, string> = {
   DESCANSO_EXTENDIDO: '#eab308',
   DATO_INCOMPLETO:    '#60a5fa',
   AUSENTE:            '#ef4444',
+  LICENCIA:           '#6366f1',
   FIN_SEMANA:         '#e5e7eb',
 };
 
@@ -50,13 +51,14 @@ const ESTADO_BG: Record<EstadoDia, string> = {
   DESCANSO_EXTENDIDO: '#fef9c3',
   DATO_INCOMPLETO:    '#dbeafe',
   AUSENTE:            '#fee2e2',
+  LICENCIA:           '#e0e7ff',
   FIN_SEMANA:         '#f9fafb',
 };
 
 const ESTADO_LABEL_FULL: Record<EstadoDia, string> = {
   OK: 'A tiempo', TARDANZA: 'Tardanza', TARDANZA_GRAVE: 'Tardanza grave',
   SALIDA_ANTICIPADA: 'Salida anticipada', DESCANSO_EXTENDIDO: 'Desc. extendido',
-  DATO_INCOMPLETO: 'Incompleto', AUSENTE: 'Ausente', FIN_SEMANA: 'Fin de semana',
+  DATO_INCOMPLETO: 'Incompleto', AUSENTE: 'Ausente', LICENCIA: 'Licencia', FIN_SEMANA: 'Fin de semana',
 };
 
 // ─── Ingreso evolution chart (individual) ─────────────────────────────────────

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   BarChart2, Clock, AlertTriangle, Settings, Home, Users, FileCheck,
-  Smartphone, Wifi, Headphones, Briefcase, Cpu, LogOut, PauseCircle, Menu, Calendar,
+  Smartphone, Wifi, Headphones, Briefcase, Cpu, LogOut, PauseCircle, Menu, Calendar, Umbrella,
 } from 'lucide-react';
 import { useAuthContext } from '../contexts/AuthContext';
 import { tieneAcceso, NOMBRES_ROLES, ROL_COLORS, type ModuloSistema } from '../config/permisos';
@@ -50,6 +50,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/sanciones', icon: AlertTriangle, label: 'Sanciones', modulo: 'sanciones' },
       { to: '/personal',        icon: Users,      label: 'Personal',        modulo: 'personal'        },
       { to: '/certificaciones', icon: FileCheck,  label: 'Certificaciones', modulo: 'certificaciones' },
+      { to: '/licencias',       icon: Umbrella,   label: 'Licencias',       modulo: 'licencias'       },
       { to: '/calendario',      icon: Calendar,   label: 'Calendario',      modulo: 'calendario'      },
     ],
   },

@@ -46,6 +46,7 @@ const ESTADO_BADGE: Record<EstadoDia, { label: string; bg: string; text: string 
   SALIDA_ANTICIPADA:  { label: 'Sal. anticip.', bg: '#ffedd5', text: '#9a3412' },
   DATO_INCOMPLETO:    { label: 'Incompleto',    bg: '#dbeafe', text: '#4D94FF' },
   AUSENTE:            { label: 'Ausente',       bg: '#fee2e2', text: '#991b1b' },
+  LICENCIA:           { label: 'Licencia',      bg: '#e0e7ff', text: '#3730a3' },
   FIN_SEMANA:         { label: 'Fin semana',    bg: '#f9fafb', text: '#9ca3af' },
 };
 
@@ -402,7 +403,7 @@ function DiaTable({ emp }: { emp: EmpleadoData }) {
 
 // ─── ResumenTable ──────────────────────────────────────────────────────────────
 
-type ResumenSortCol = 'nombre' | 'presencia' | 'tardanzas' | 'ausencias' | 'descExt' | 'salAnt' | 'puntualidad';
+type ResumenSortCol = 'nombre' | 'presencia' | 'tardanzas' | 'ausencias' | 'licencias' | 'descExt' | 'salAnt' | 'puntualidad';
 type ResumenFiltro  = 'todos' | 'con' | 'sin';
 
 function ResumenTable({ empleados, onSelectEmployee }: {
@@ -436,6 +437,7 @@ function ResumenTable({ empleados, onSelectEmployee }: {
         case 'presencia':   diff = (a.diasPresentes / Math.max(a.diasLaborables, 1)) - (b.diasPresentes / Math.max(b.diasLaborables, 1)); break;
         case 'tardanzas':   diff = a.tardanzas - b.tardanzas; break;
         case 'ausencias':   diff = a.ausencias - b.ausencias; break;
+        case 'licencias':   diff = a.licencias - b.licencias; break;
         case 'descExt':     diff = a.descansosExtendidos - b.descansosExtendidos; break;
         case 'salAnt':      diff = a.salidasAnticipadas - b.salidasAnticipadas; break;
         case 'puntualidad': diff = a.puntualidadPct - b.puntualidadPct; break;
@@ -500,6 +502,7 @@ function ResumenTable({ empleados, onSelectEmployee }: {
               <SortTh col="presencia"   label="Presencia" />
               <SortTh col="tardanzas"   label="Tardanzas" />
               <SortTh col="ausencias"   label="Ausencias" />
+              <SortTh col="licencias"   label="Licencias" />
               <SortTh col="descExt"     label="Desc. Ext." />
               <SortTh col="salAnt"      label="Sal. Anticip." />
               <SortTh col="puntualidad" label="Puntualidad %" />
@@ -508,7 +511,7 @@ function ResumenTable({ empleados, onSelectEmployee }: {
           <tbody>
             {pageData.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
                   Ningún empleado coincide con los filtros aplicados.
                 </td>
               </tr>
@@ -538,6 +541,11 @@ function ResumenTable({ empleados, onSelectEmployee }: {
                   <td className="px-4 py-2.5 text-center">
                     <span className={emp.ausencias > 3 ? 'text-red-700 font-semibold' : emp.ausencias > 0 ? 'text-amber-700 font-semibold' : 'text-green-700'}>
                       {emp.ausencias}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <span className={emp.licencias > 0 ? 'text-indigo-700 font-semibold' : 'text-gray-300'}>
+                      {emp.licencias}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-center text-gray-600">{emp.descansosExtendidos}</td>
@@ -787,7 +795,7 @@ type SortBy = 'nombre' | 'tardanzas' | 'ausencias' | 'puntualidad' | 'presencias
 
 const ALL_ESTADOS_FILTER: EstadoDia[] = [
   'OK', 'TARDANZA', 'TARDANZA_GRAVE', 'DESCANSO_EXTENDIDO',
-  'SALIDA_ANTICIPADA', 'DATO_INCOMPLETO', 'AUSENTE',
+  'SALIDA_ANTICIPADA', 'DATO_INCOMPLETO', 'AUSENTE', 'LICENCIA',
 ];
 
 const ESTADO_FILTER_LABEL: Record<string, string> = {
@@ -798,6 +806,7 @@ const ESTADO_FILTER_LABEL: Record<string, string> = {
   SALIDA_ANTICIPADA: 'Salida Anticipada',
   DATO_INCOMPLETO: 'Incompleto',
   AUSENTE: 'Ausente',
+  LICENCIA: 'Licencia',
 };
 
 const SORT_LABELS: Record<string, string> = {
@@ -1313,7 +1322,7 @@ export default function RelojModule() {
         const newDias = new Map(Array.from(e.dias.entries()).map(([k, v]) => [
           k, { ...v, marcaciones: v.marcaciones.map(m => ({ ...m })) },
         ]));
-        const metricas = calcularMetricas(newDias, newHorario);
+        const metricas = calcularMetricas(newDias, newHorario, e.nombre);
         return { ...e, dias: newDias, horario: newHorario, ...metricas };
       });
       if (data) saveToStore({ data, empleados: updated, nombreArchivo: storeEntry?.nombreArchivo ?? '' });

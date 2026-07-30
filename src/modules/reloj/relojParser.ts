@@ -19,6 +19,7 @@ export type EstadoDia =
   | 'SALIDA_ANTICIPADA'
   | 'DATO_INCOMPLETO'
   | 'AUSENTE'
+  | 'LICENCIA'
   | 'FIN_SEMANA';
 
 export interface Marcacion {
@@ -75,6 +76,7 @@ export interface EmpleadoData {
   descansosExtendidos: number;
   salidasAnticipadas: number;
   ausencias: number;
+  licencias: number;
   diasIncompletos: number;
   puntualidadPct: number;
   jornadaPromedioMinutos: number;
@@ -312,9 +314,87 @@ function detectarHorarioEsperado(dias: Map<string, DiaData>, nombre: string): Ho
   };
 }
 
+// ─── Licencias / Certificaciones (ausencias justificadas) ──────────────────────
+// Un día sin marcaciones se marca AUSENTE salvo que caiga dentro de un período
+// cargado en el módulo Licencias (localStorage `elared_licencias`) o Certificaciones
+// (`elared_certificaciones`) para esa persona — en ese caso se marca LICENCIA.
+
+interface PeriodoAusenciaJustificada {
+  nombre: string;
+  fechaInicio: string;
+  fechaFin: string;
+}
+
+function normNombreLicencia(n: string): string {
+  return n
+    .trim()
+    .toLowerCase()
+    .replace(/,/g, ' ')
+    .replace(/[áàä]/g, 'a')
+    .replace(/[éèë]/g, 'e')
+    .replace(/[íìï]/g, 'i')
+    .replace(/[óòö]/g, 'o')
+    .replace(/[úùü]/g, 'u')
+    .replace(/ñ/g, 'n')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function nombresCoinciden(a: string, b: string): boolean {
+  const na = normNombreLicencia(a);
+  const nb = normNombreLicencia(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const ta = na.split(' ').filter(t => t.length > 1);
+  const tb = nb.split(' ').filter(t => t.length > 1);
+  if (ta.length === 0 || tb.length === 0) return false;
+  const common = ta.filter(t => tb.includes(t)).length;
+  const score = common / Math.max(ta.length, tb.length);
+  return score >= 0.5;
+}
+
+function leerPeriodosAusenciaJustificada(): PeriodoAusenciaJustificada[] {
+  const periodos: PeriodoAusenciaJustificada[] = [];
+  for (const key of ['elared_licencias', 'elared_certificaciones']) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const arr = JSON.parse(raw) as Array<{ nombre?: string; nombreCompleto?: string; fechaInicio?: string; fechaFin?: string }>;
+      for (const item of arr) {
+        const nombre = item.nombre ?? item.nombreCompleto;
+        if (nombre && item.fechaInicio && item.fechaFin) {
+          periodos.push({ nombre, fechaInicio: item.fechaInicio, fechaFin: item.fechaFin });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return periodos;
+}
+
+function fechasEnRango(fechaInicio: string, fechaFin: string): string[] {
+  const fechas: string[] = [];
+  const d = new Date(fechaInicio + 'T12:00:00');
+  const end = new Date(fechaFin + 'T12:00:00');
+  while (d <= end) {
+    fechas.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    d.setDate(d.getDate() + 1);
+  }
+  return fechas;
+}
+
+function buscarFechasLicencia(nombre: string): Set<string> {
+  const fechas = new Set<string>();
+  for (const periodo of leerPeriodosAusenciaJustificada()) {
+    if (!nombresCoinciden(nombre, periodo.nombre)) continue;
+    for (const f of fechasEnRango(periodo.fechaInicio, periodo.fechaFin)) fechas.add(f);
+  }
+  return fechas;
+}
+
 export function calcularMetricas(
   dias: Map<string, DiaData>,
   horario: HorarioEsperado,
+  nombre: string,
 ): Pick<
   EmpleadoData,
   | 'tardanzas'
@@ -323,15 +403,17 @@ export function calcularMetricas(
   | 'descansosExtendidos'
   | 'salidasAnticipadas'
   | 'ausencias'
+  | 'licencias'
   | 'diasIncompletos'
   | 'diasPresentes'
   | 'puntualidadPct'
   | 'jornadaPromedioMinutos'
 > {
   let tardanzas = 0, tardanzasGraves = 0, minutosTardanzaTotal = 0;
-  let descansosExtendidos = 0, salidasAnticipadas = 0, ausencias = 0;
+  let descansosExtendidos = 0, salidasAnticipadas = 0, ausencias = 0, licencias = 0;
   let diasIncompletos = 0, diasPresentes = 0;
   let totalJornada = 0, diasConJornada = 0;
+  const fechasLicencia = buscarFechasLicencia(nombre);
 
   for (const dia of dias.values()) {
     const dow = new Date(dia.fecha + 'T12:00:00').getDay();
@@ -359,9 +441,14 @@ export function calcularMetricas(
     }
 
     if (dia.marcaciones.length === 0) {
-      dia.estado = 'AUSENTE';
       dia.minutosTardanza = 0; dia.minutosDescansoExtra = 0; dia.minutosSalidaAnticipada = 0;
-      ausencias++;
+      if (fechasLicencia.has(dia.fecha)) {
+        dia.estado = 'LICENCIA';
+        licencias++;
+      } else {
+        dia.estado = 'AUSENTE';
+        ausencias++;
+      }
       continue;
     }
 
@@ -421,6 +508,7 @@ export function calcularMetricas(
     descansosExtendidos,
     salidasAnticipadas,
     ausencias,
+    licencias,
     diasIncompletos,
     diasPresentes,
     puntualidadPct: diasPresentes > 0
@@ -570,7 +658,7 @@ export async function parseReloj(file: File): Promise<RelojData> {
       }
     }
 
-    const metricas = calcularMetricas(dias, horario);
+    const metricas = calcularMetricas(dias, horario, nombre);
 
     // Compute most-frequent departamento from Excel rows
     let departamento = '';

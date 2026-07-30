@@ -21,6 +21,7 @@ import ChipsPage from './pages/ChipsPage';
 import VicidialModule from './modules/vicidial/VicidialModule';
 import PersonalPage from './pages/PersonalPage';
 import CertificacionesPage from './pages/CertificacionesPage';
+import LicenciasPage from './pages/LicenciasPage';
 import CalendarioPage from './pages/CalendarioPage';
 import { UpdateNotification } from './components/UpdateNotification';
 
@@ -99,6 +100,9 @@ function AppLayout() {
             } />
             <Route path="/certificaciones" element={
               <ProtectedRoute modulo="certificaciones"><CertificacionesPage /></ProtectedRoute>
+            } />
+            <Route path="/licencias" element={
+              <ProtectedRoute modulo="licencias"><LicenciasPage /></ProtectedRoute>
             } />
             <Route path="/calendario" element={
               <ProtectedRoute modulo="calendario"><CalendarioPage /></ProtectedRoute>

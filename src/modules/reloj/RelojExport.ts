@@ -29,6 +29,7 @@ const ESTADO_LABEL: Record<EstadoDia, string> = {
   SALIDA_ANTICIPADA:  'Salida anticipada',
   DATO_INCOMPLETO:    'Dato incompleto',
   AUSENTE:            'Ausente',
+  LICENCIA:           'Licencia',
   FIN_SEMANA:         'Fin de semana',
 };
 
@@ -102,7 +103,7 @@ export function exportRelojExcel(data: RelojData): void {
   const resumenHeaders = [
     'Empleado', 'Departamento', 'Presencias', 'Laborables', 'Asistencia %',
     'Tardanzas', 'T. Graves', 'Min. tardanza', 'Desc. extendidos',
-    'Sal. anticipadas', 'Ausencias', 'Jornada prom.', 'Puntualidad %',
+    'Sal. anticipadas', 'Ausencias', 'Licencias', 'Jornada prom.', 'Puntualidad %',
   ];
   const resumenRows = data.empleados.map(e => [[
     [e.nombre],
@@ -116,6 +117,7 @@ export function exportRelojExcel(data: RelojData): void {
     [e.descansosExtendidos],
     [e.salidasAnticipadas],
     [e.ausencias],
+    [e.licencias],
     [e.jornadaPromedioMinutos > 0 ? minsToHHMM(e.jornadaPromedioMinutos) : '—'],
     [fmtPct(e.puntualidadPct)],
   ]]).flat();

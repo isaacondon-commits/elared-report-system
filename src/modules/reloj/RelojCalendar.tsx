@@ -21,6 +21,7 @@ const ESTADO_STYLE: Record<EstadoDia, { bg: string; text: string; border: string
   SALIDA_ANTICIPADA:  { bg: '#ffedd5', text: '#9a3412', border: '#fdba74' },
   DATO_INCOMPLETO:    { bg: '#dbeafe', text: '#1e40af', border: '#93c5fd' },
   AUSENTE:            { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
+  LICENCIA:           { bg: '#e0e7ff', text: '#3730a3', border: '#c7d2fe' },
   FIN_SEMANA:         { bg: '#f9fafb', text: '#9ca3af', border: '#e5e7eb' },
 };
 
@@ -32,6 +33,7 @@ const ESTADO_LABEL: Record<EstadoDia, string> = {
   SALIDA_ANTICIPADA:  'Salida anticipada',
   DATO_INCOMPLETO:    'Dato incompleto',
   AUSENTE:            'Ausente',
+  LICENCIA:           'Licencia',
   FIN_SEMANA:         'Fin de semana',
 };
 
@@ -85,6 +87,9 @@ function TooltipCard({ dia, horario }: TooltipContent) {
 
       {dia.estado === 'AUSENTE' && (
         <div className="text-red-600 font-medium">Sin marcaciones registradas</div>
+      )}
+      {dia.estado === 'LICENCIA' && (
+        <div className="text-indigo-600 font-medium">Licencia / certificación</div>
       )}
       {dia.estado === 'FIN_SEMANA' && (
         <div className="text-gray-400">Fin de semana</div>

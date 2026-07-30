@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  ChevronLeft, ChevronRight, School, Users, Info, Download,
+  ChevronLeft, ChevronRight, School, Download,
   CalendarDays, ListTodo,
 } from 'lucide-react';
 import {
@@ -11,58 +11,34 @@ import { es } from 'date-fns/locale';
 import Header from '../components/Header';
 import { useAuthContext } from '../contexts/AuthContext';
 import {
-  useCalendario, eliminarEvento, NOTA_EXCEL, TIPO_LABELS, CALENDARIO_LABELS,
-  type EventoCalendario, type CalendarioId, type TipoEvento,
+  useCalendario, eliminarEvento, TIPO_LABELS, CALENDARIO_LABELS,
+  type EventoCalendario,
 } from '../hooks/useCalendario';
 import CalendarioMensual from '../components/calendario/CalendarioMensual';
 import CalendarioSemanal from '../components/calendario/CalendarioSemanal';
 import EventoModal from '../components/calendario/EventoModal';
 import DetalleDia from '../components/calendario/DetalleDia';
 
-// ── Filtro de tipos ────────────────────────────────────────────────────────────
-
-type FiltroTipo = 'todos' | 'capacitacion' | 'entrevistas' | 'ingresos';
-
-const FILTRO_TIPOS: Record<FiltroTipo, TipoEvento[] | null> = {
-  todos:        null,
-  capacitacion: ['capacitacion_movil', 'capacitacion_fibra'],
-  entrevistas:  ['entrevista', 'entrevista_movil_ph'],
-  ingresos:     ['ingreso_movil', 'ingreso_fibra'],
-};
-
-const FILTRO_LABELS: Record<FiltroTipo, string> = {
-  todos: 'Todos', capacitacion: 'Capacitación', entrevistas: 'Entrevistas', ingresos: 'Ingresos',
-};
-
-function pasaFiltro(ev: EventoCalendario, f: FiltroTipo): boolean {
-  const tipos = FILTRO_TIPOS[f];
-  return !tipos || tipos.includes(ev.tipo);
-}
-
 // ── Modal state ────────────────────────────────────────────────────────────────
 
 type ModalState =
-  | { mode: 'crear'; fecha: string; calendario: CalendarioId }
+  | { mode: 'crear'; fecha: string }
   | { mode: 'editar'; evento: EventoCalendario }
   | null;
 
 // ── Exportar Excel ────────────────────────────────────────────────────────────
 
-function exportarMes(eventosSala: EventoCalendario[], eventosPersonal: EventoCalendario[], monthDate: Date) {
-  function sheet(eventos: EventoCalendario[]) {
-    const rows = eventos.map(e => ({
-      Fecha: e.fecha,
-      Tipo: TIPO_LABELS[e.tipo],
-      Título: e.titulo,
-      Descripción: e.descripcion ?? '',
-      'Creado por': e.creadoPorNombre,
-    }));
-    return XLSX.utils.json_to_sheet(rows);
-  }
+function exportarMes(eventosSala: EventoCalendario[], monthDate: Date) {
+  const rows = eventosSala.map(e => ({
+    Fecha: e.fecha,
+    Tipo: TIPO_LABELS[e.tipo],
+    Título: e.titulo,
+    Descripción: e.descripcion ?? '',
+    'Creado por': e.creadoPorNombre,
+  }));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet(eventosSala), 'Sala de Capacitacion');
-  XLSX.utils.book_append_sheet(wb, sheet(eventosPersonal), 'Entrevistas e Ingresos');
-  XLSX.writeFile(wb, `Calendario_${format(monthDate, 'yyyy-MM')}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Sala de Capacitacion');
+  XLSX.writeFile(wb, `Calendario_Sala_${format(monthDate, 'yyyy-MM')}.xlsx`);
 }
 
 // ── Componente principal ───────────────────────────────────────────────────────
@@ -74,7 +50,6 @@ export default function CalendarioPage() {
   const [vista, setVista]           = useState<'mensual' | 'semanal'>('mensual');
   const [monthDate, setMonthDate]   = useState(() => new Date());
   const [weekDate, setWeekDate]     = useState(() => new Date());
-  const [filtro, setFiltro]         = useState<FiltroTipo>('todos');
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [modal, setModal]           = useState<ModalState>(null);
@@ -96,18 +71,16 @@ export default function CalendarioPage() {
   const rangeEndStr   = format(rango.end, 'yyyy-MM-dd');
   const { eventos, loading } = useCalendario(rangeStartStr, rangeEndStr);
 
-  const eventosFiltrados = useMemo(() => eventos.filter(e => pasaFiltro(e, filtro)), [eventos, filtro]);
-  const eventosSala      = useMemo(() => eventosFiltrados.filter(e => e.calendario === 'sala'), [eventosFiltrados]);
-  const eventosPersonal  = useMemo(() => eventosFiltrados.filter(e => e.calendario === 'personal'), [eventosFiltrados]);
+  const eventosSala = useMemo(() => eventos.filter(e => e.calendario === 'sala'), [eventos]);
 
   const eventosDelDia = useMemo(
-    () => (selectedDay ? eventos.filter(e => e.fecha === selectedDay) : []),
-    [eventos, selectedDay],
+    () => (selectedDay ? eventosSala.filter(e => e.fecha === selectedDay) : []),
+    [eventosSala, selectedDay],
   );
 
-  function handleDayClick(fecha: string, calendario: CalendarioId) {
+  function handleDayClick(fecha: string) {
     if (puedeEditar) {
-      setModal({ mode: 'crear', fecha, calendario });
+      setModal({ mode: 'crear', fecha });
     } else {
       setSelectedDay(fecha);
     }
@@ -142,10 +115,10 @@ export default function CalendarioPage() {
     <div className="flex flex-col h-full">
       <Header
         title="Calendario RRHH"
-        subtitle="Sala de capacitación · Entrevistas · Ingresos"
+        subtitle="Sala de capacitación"
         actions={
           <button
-            onClick={() => exportarMes(eventosSala, eventosPersonal, monthDate)}
+            onClick={() => exportarMes(eventosSala, monthDate)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#003DA5] text-white rounded-lg hover:bg-blue-800 transition-colors"
           >
             <Download size={14} /> Exportar mes
@@ -226,52 +199,23 @@ export default function CalendarioPage() {
             )}
           </div>
 
-          {/* Filtro de tipos */}
-          <div className="flex items-center justify-center gap-2">
-            {(Object.keys(FILTRO_LABELS) as FiltroTipo[]).map(f => (
-              <button
-                key={f}
-                onClick={() => setFiltro(f)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                  filtro === f ? 'bg-[#003DA5] text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                {FILTRO_LABELS[f]}
-              </button>
-            ))}
-          </div>
-
           {loading && (
             <p className="text-center text-sm text-gray-400">Cargando eventos...</p>
           )}
 
-          {/* Vista mensual: 2 columnas */}
+          {/* Vista mensual */}
           {vista === 'mensual' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <School size={16} className="text-[#003DA5]" />
-                  <h3 className="text-sm font-bold text-[#003DA5]">{CALENDARIO_LABELS.sala}</h3>
-                </div>
-                <CalendarioMensual
-                  monthDate={monthDate}
-                  eventos={eventosSala}
-                  onDayClick={iso => handleDayClick(iso, 'sala')}
-                  onVerMas={handleVerMas}
-                />
+            <div className="bg-white rounded-xl border border-gray-200 p-4 max-w-2xl mx-auto w-full">
+              <div className="flex items-center gap-2 mb-3">
+                <School size={16} className="text-[#003DA5]" />
+                <h3 className="text-sm font-bold text-[#003DA5]">{CALENDARIO_LABELS.sala}</h3>
               </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Users size={16} className="text-green-700" />
-                  <h3 className="text-sm font-bold text-green-700">{CALENDARIO_LABELS.personal}</h3>
-                </div>
-                <CalendarioMensual
-                  monthDate={monthDate}
-                  eventos={eventosPersonal}
-                  onDayClick={iso => handleDayClick(iso, 'personal')}
-                  onVerMas={handleVerMas}
-                />
-              </div>
+              <CalendarioMensual
+                monthDate={monthDate}
+                eventos={eventosSala}
+                onDayClick={handleDayClick}
+                onVerMas={handleVerMas}
+              />
             </div>
           )}
 
@@ -281,17 +225,10 @@ export default function CalendarioPage() {
               <CalendarioSemanal
                 weekDate={weekDate}
                 eventosSala={eventosSala}
-                eventosPersonal={eventosPersonal}
                 onDayClick={handleDayClick}
               />
             </div>
           )}
-
-          {/* Nota informativa */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-start gap-2">
-            <Info size={15} className="text-gray-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-gray-500">{NOTA_EXCEL}</p>
-          </div>
 
         </div>
       </div>
@@ -304,16 +241,15 @@ export default function CalendarioPage() {
           onClose={() => setSelectedDay(null)}
           onEditar={handleEditarDesdeDetalle}
           onEliminar={handleEliminarDesdeDetalle}
-          onAgregar={() => { setModal({ mode: 'crear', fecha: selectedDay, calendario: 'sala' }); setSelectedDay(null); }}
+          onAgregar={() => { setModal({ mode: 'crear', fecha: selectedDay }); setSelectedDay(null); }}
         />
       )}
 
       {modal && userDoc && (
         <EventoModal
           fechaInicial={modal.mode === 'crear' ? modal.fecha : modal.evento.fecha}
-          calendarioInicial={modal.mode === 'crear' ? modal.calendario : modal.evento.calendario}
           evento={modal.mode === 'editar' ? modal.evento : undefined}
-          eventosDelRango={eventos}
+          eventosDelRango={eventosSala}
           creadoPorUid={userDoc.uid}
           creadoPorNombre={userDoc.nombre}
           onClose={() => setModal(null)}

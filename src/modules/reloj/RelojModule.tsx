@@ -5,7 +5,7 @@ import { guardarHorarioCustom } from '../../data/horarios_personal';
 import {
   Clock, Download, Loader2, FileText, ChevronDown, ChevronUp,
   Edit2, Info, Check, Users, AlertCircle, XCircle, Calendar,
-  Search, ArrowLeft,
+  Search, ArrowLeft, Trash2, MessageSquare,
 } from 'lucide-react';
 import FileUploader from '../../components/FileUploader';
 import KPICard from '../../components/KPICard';
@@ -18,6 +18,7 @@ import RelojCalendar from './RelojCalendar';
 import RelojTimeline from './RelojTimeline';
 import { IngresosLineChart, JornadaLineChart, HeatmapChart } from './RelojCharts';
 import { exportRelojExcel, exportRelojPPTX } from './RelojExport';
+import { getComentarios, agregarComentario, eliminarComentario, type ComentarioEmpleado } from './relojComentarios';
 import PDFModal from '../../components/PDFModal';
 import { useConfig } from '../../hooks/useConfig';
 import { useAnalisisStore, formatFechaCarga } from '../../store/analisisStore';
@@ -1080,6 +1081,78 @@ function FilterBar({
   );
 }
 
+// ─── Comentarios (historial general por persona) ───────────────────────────────
+
+function ComentariosSection({ nombre }: { nombre: string }) {
+  const [comentarios, setComentarios] = useState<ComentarioEmpleado[]>(() => getComentarios(nombre));
+  const [texto, setTexto] = useState('');
+  const [lastNombre, setLastNombre] = useState(nombre);
+
+  if (nombre !== lastNombre) {
+    setLastNombre(nombre);
+    setComentarios(getComentarios(nombre));
+    setTexto('');
+  }
+
+  function handleAgregar() {
+    if (!texto.trim()) return;
+    agregarComentario(nombre, texto.trim());
+    setComentarios(getComentarios(nombre));
+    setTexto('');
+  }
+
+  function handleEliminar(id: string) {
+    eliminarComentario(id);
+    setComentarios(getComentarios(nombre));
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <MessageSquare size={15} className="text-[#003DA5]" />
+        <h3 className="font-semibold text-gray-800 text-sm">Comentarios</h3>
+      </div>
+      <p className="text-[11px] text-gray-400 mb-4">Notas generales sobre esta persona, no atadas a un día puntual</p>
+
+      <div className="flex gap-2 mb-4 items-end">
+        <textarea
+          value={texto} onChange={e => setTexto(e.target.value)} rows={2}
+          placeholder="Agregar un comentario..."
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5] resize-none"
+        />
+        <button
+          onClick={handleAgregar}
+          disabled={!texto.trim()}
+          className="px-4 py-2 bg-[#003DA5] text-white rounded-lg text-sm font-semibold hover:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+        >
+          Agregar
+        </button>
+      </div>
+
+      {comentarios.length === 0 ? (
+        <p className="text-sm text-gray-400">Sin comentarios cargados para esta persona.</p>
+      ) : (
+        <div className="space-y-2">
+          {comentarios.map(c => (
+            <div key={c.id} className="flex items-start justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100 group">
+              <div>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{c.texto}</p>
+                <p className="text-[11px] text-gray-400 mt-1">{fmtFechaLong(c.fecha.slice(0, 10))}</p>
+              </div>
+              <button
+                onClick={() => handleEliminar(c.id)}
+                className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all flex-shrink-0"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Individual view ───────────────────────────────────────────────────────────
 
 function IndividualView({ emp, onEditHorario }: {
@@ -1135,6 +1208,9 @@ function IndividualView({ emp, onEditHorario }: {
 
       {/* Horario card */}
       <HorarioCard emp={emp} onEdit={onEditHorario} />
+
+      {/* Comentarios */}
+      <ComentariosSection nombre={emp.nombre} />
 
       {/* Calendar */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">

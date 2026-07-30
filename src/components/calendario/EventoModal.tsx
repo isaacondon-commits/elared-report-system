@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { X, Trash2, AlertTriangle, School, Users } from 'lucide-react';
+import { X, Trash2, AlertTriangle } from 'lucide-react';
 import {
-  TIPO_COLORS, TIPO_LABELS, CALENDARIO_LABELS, TIPOS_POR_CALENDARIO,
+  TIPO_COLORS, TIPO_LABELS, TIPOS_POR_CALENDARIO,
   crearEvento, crearEventosRecurrentes, actualizarEvento, eliminarEvento, hayConflicto,
-  type EventoCalendario, type CalendarioId, type TipoEvento, type Recurrencia, type NuevoEvento,
+  type EventoCalendario, type TipoEvento, type Recurrencia, type NuevoEvento,
 } from '../../hooks/useCalendario';
 
 const INPUT = 'w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5] transition-colors';
+const CALENDARIO = 'sala' as const;
 
 function enumerarFechas(desde: string, hasta: string): string[] {
   const fechas: string[] = [];
@@ -21,7 +22,6 @@ function enumerarFechas(desde: string, hasta: string): string[] {
 
 interface Props {
   fechaInicial: string;
-  calendarioInicial: CalendarioId;
   evento?: EventoCalendario;
   eventosDelRango: EventoCalendario[];
   creadoPorUid: string;
@@ -31,11 +31,10 @@ interface Props {
 }
 
 export default function EventoModal({
-  fechaInicial, calendarioInicial, evento, eventosDelRango,
+  fechaInicial, evento, eventosDelRango,
   creadoPorUid, creadoPorNombre, onClose, onSaved,
 }: Props) {
-  const [calendario, setCalendario] = useState<CalendarioId>(evento?.calendario ?? calendarioInicial);
-  const [tipo, setTipo] = useState<TipoEvento>(evento?.tipo ?? TIPOS_POR_CALENDARIO[calendarioInicial][0]);
+  const [tipo, setTipo] = useState<TipoEvento>(evento?.tipo ?? TIPOS_POR_CALENDARIO[CALENDARIO][0]);
   const [fecha, setFecha] = useState(evento?.fecha ?? fechaInicial);
   const [variosDias, setVariosDias] = useState(false);
   const [fechaHasta, setFechaHasta] = useState(fechaInicial);
@@ -45,11 +44,6 @@ export default function EventoModal({
   const [confirmandoConflicto, setConfirmandoConflicto] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  function handleCalendarioChange(c: CalendarioId) {
-    setCalendario(c);
-    if (!TIPOS_POR_CALENDARIO[c].includes(tipo)) setTipo(TIPOS_POR_CALENDARIO[c][0]);
-  }
 
   async function handleGuardar() {
     if (!titulo.trim()) { setError('El título es obligatorio.'); return; }
@@ -65,10 +59,10 @@ export default function EventoModal({
       if (evento) {
         // No se reasigna creadoPor/creadoPorNombre: se preserva la autoría original.
         // La descripción se manda siempre (aunque quede vacía) para poder borrarla.
-        await actualizarEvento(evento.id, { calendario, tipo, fecha, titulo: titulo.trim(), descripcion: descripcion.trim() });
+        await actualizarEvento(evento.id, { calendario: CALENDARIO, tipo, fecha, titulo: titulo.trim(), descripcion: descripcion.trim() });
       } else {
         const base: Omit<NuevoEvento, 'fecha'> = {
-          calendario, tipo, titulo: titulo.trim(),
+          calendario: CALENDARIO, tipo, titulo: titulo.trim(),
           creadoPor: creadoPorUid, creadoPorNombre,
           ...(descripcion.trim() ? { descripcion: descripcion.trim() } : {}),
         };
@@ -111,36 +105,11 @@ export default function EventoModal({
 
         <div className="px-6 py-5 space-y-4">
 
-          {/* Calendario */}
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-widest">Calendario</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleCalendarioChange('sala')}
-                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  calendario === 'sala' ? 'bg-blue-50 border-[#003DA5] text-[#003DA5]' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                <School size={14} /> {CALENDARIO_LABELS.sala}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleCalendarioChange('personal')}
-                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  calendario === 'personal' ? 'bg-green-50 border-green-600 text-green-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                <Users size={14} /> {CALENDARIO_LABELS.personal}
-              </button>
-            </div>
-          </div>
-
           {/* Tipo */}
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-widest">Tipo de evento</label>
             <select value={tipo} onChange={e => setTipo(e.target.value as TipoEvento)} className={INPUT}>
-              {TIPOS_POR_CALENDARIO[calendario].map(t => (
+              {TIPOS_POR_CALENDARIO[CALENDARIO].map(t => (
                 <option key={t} value={t}>{TIPO_LABELS[t]}</option>
               ))}
             </select>

@@ -12,7 +12,7 @@ const RANK_BADGES = [
   { bg: '#CD7F32', text: '#5c3200', emoji: '🥉' },
 ];
 
-type SortCol = 'rank' | 'nombre' | 'total' | 'renovaciones' | 'altas' | 'cambios' | 'pctRechazo' | 'diasActivos';
+type SortCol = 'rank' | 'nombre' | 'total' | 'renovaciones' | 'pctRenovacion' | 'altas' | 'cambios' | 'pctRechazo' | 'diasActivos';
 
 function formatFecha(iso: string): string {
   if (!iso) return '';
@@ -271,6 +271,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
       ...f,
       rank: i,
       pctRechazo: f.total > 0 ? (f.rechazos / f.total) * 100 : 0,
+      pctRenovacion: f.total > 0 ? (f.renovaciones / f.total) * 100 : 0,
     }));
 
     if (sortCol === 'rank') return sortDir === 'asc' ? withRank : [...withRank].reverse();
@@ -280,6 +281,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
       if (sortCol === 'nombre')       { va = a.nombre; vb = b.nombre; }
       else if (sortCol === 'total')       { va = a.total; vb = b.total; }
       else if (sortCol === 'renovaciones') { va = a.renovaciones; vb = b.renovaciones; }
+      else if (sortCol === 'pctRenovacion') { va = a.pctRenovacion; vb = b.pctRenovacion; }
       else if (sortCol === 'altas')        { va = a.altas; vb = b.altas; }
       else if (sortCol === 'cambios')      { va = a.cambios; vb = b.cambios; }
       else if (sortCol === 'pctRechazo')   { va = a.pctRechazo; vb = b.pctRechazo; }
@@ -333,6 +335,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
               <SortTh col="nombre"       label="Vendedor"       />
               <SortTh col="total"        label="Total"    right />
               <SortTh col="renovaciones" label="Renov."   right />
+              <SortTh col="pctRenovacion" label="% Renov." right />
               <SortTh col="altas"        label="Nuevo Serv." right />
               <SortTh col="cambios"      label="Cambios"  right />
               <SortTh col="pctRechazo"   label="% Rechazo" right />
@@ -387,6 +390,11 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
 
                     {/* Renov */}
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: '#374151' }}>{f.renovaciones}</td>
+
+                    {/* % Renov */}
+                    <td style={{ padding: '8px 12px', textAlign: 'right', color: '#0052CC', fontWeight: 600 }}>
+                      {f.pctRenovacion.toFixed(1)}%
+                    </td>
 
                     {/* Nuevo Servicio */}
                     <td style={{ padding: '8px 12px', textAlign: 'right', color: '#374151' }}>{f.altas}</td>
@@ -461,7 +469,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
                   {expanded && (
                     <tr key={`${f.nombre}-detail`}>
                       <td
-                        colSpan={stats.hasEstado ? (onHideVendedor ? 11 : 10) : (onHideVendedor ? 10 : 9)}
+                        colSpan={stats.hasEstado ? (onHideVendedor ? 12 : 11) : (onHideVendedor ? 11 : 10)}
                         style={{ padding: 0, borderTop: '1px solid #e2e8f0' }}
                       >
                         <DetailTabs f={f} onClose={() => setExpanded(null)} />
@@ -473,7 +481,7 @@ export default function VentasPerformanceTable({ stats, onHideVendedor }: Props)
             })}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={stats.hasEstado ? (onHideVendedor ? 11 : 10) : (onHideVendedor ? 10 : 9)}
+                <td colSpan={stats.hasEstado ? (onHideVendedor ? 12 : 11) : (onHideVendedor ? 11 : 10)}
                   style={{ padding: '32px 16px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
                   No hay vendedores para mostrar.
                 </td>

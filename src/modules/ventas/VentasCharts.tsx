@@ -67,7 +67,7 @@ interface Props {
 // ─────────────────────────────────────────────────────────────────────────────
 // Promedio de Ventas por Vendedor — colapsable, con buscador
 // ─────────────────────────────────────────────────────────────────────────────
-function MetricasDiariasEquipo({ stats }: Pick<Props, 'stats'>) {
+function MetricasDiariasEquipo({ stats, mostrarCantidades }: Pick<Props, 'stats' | 'mostrarCantidades'>) {
   if (stats.byDia.length === 0) return null;
 
   const [expanded, setExpanded] = useState(() => {
@@ -115,11 +115,11 @@ function MetricasDiariasEquipo({ stats }: Pick<Props, 'stats'>) {
         <div className="px-5 pb-5 border-t border-gray-100">
           {chartData.length > 1 && (
             <div className="mt-4 mb-5">
-              <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={Math.max(0, Math.floor(chartData.length / 10) - 1)} />
-                  <YAxis tick={{ fontSize: 10 }} allowDecimals />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2)]} />
                   <Tooltip
                     formatter={(v: unknown) => [`${Number(v).toFixed(1)} v/vend`, 'Prom/vend']}
                     labelFormatter={(_: unknown, payload: readonly { payload?: { fecha?: string } }[]) =>
@@ -128,7 +128,16 @@ function MetricasDiariasEquipo({ stats }: Pick<Props, 'stats'>) {
                   <ReferenceLine y={avgProm} stroke={P.naranja} strokeDasharray="4 2"
                     label={{ value: `Avg ${avgProm.toFixed(1)}`, position: 'right', fontSize: 9, fill: P.naranja }} />
                   <Line type="monotone" dataKey="promVendedor" stroke={P.azul1} strokeWidth={2}
-                    dot={{ r: 2, fill: P.azul1 }} activeDot={{ r: 4 }} name="Prom/vend" />
+                    dot={{ r: 2, fill: P.azul1 }} activeDot={{ r: 4 }} name="Prom/vend">
+                    {mostrarCantidades && (
+                      <LabelList
+                        dataKey="promVendedor"
+                        position="top"
+                        formatter={(v: unknown) => Number(v).toFixed(1)}
+                        style={{ fontSize: 9, fontWeight: 600, fill: P.azul1 }}
+                      />
+                    )}
+                  </Line>
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -729,7 +738,7 @@ export default function VentasCharts(props: Props) {
   return (
     <div className="space-y-6">
       {/* Promedio de Ventas por Vendedor */}
-      <MetricasDiariasEquipo key={`actividad-equipo-${stats.byDia.length}-${stats.fechaMin}`} stats={stats} />
+      <MetricasDiariasEquipo key={`actividad-equipo-${stats.byDia.length}-${stats.fechaMin}`} stats={stats} mostrarCantidades={mostrarCantidades} />
 
       {/* Distribución por Estado (solo tabla) */}
       <EstadoChart stats={stats} />

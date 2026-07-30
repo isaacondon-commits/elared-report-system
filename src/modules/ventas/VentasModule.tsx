@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   BarChart2, Users, Calendar, Download, Loader2,
-  ArrowUpRight, Layers, Repeat, CheckCircle, XCircle, EyeOff,
+  ArrowUpRight, Layers, Repeat, CheckCircle, XCircle, EyeOff, Hash,
 } from 'lucide-react';
 import FileUploader from '../../components/FileUploader';
 import ColumnMapper from '../../components/ColumnMapper';
@@ -131,6 +131,7 @@ export interface VentasStats {
 // ── Constantes localStorage / sessionStorage ──────────────────────────────────
 const OCULTOS_KEY       = 'elared_vendedores_ocultos';
 const SESSION_FILTRO_KEY = 'elared_ventas_filtro_periodo';
+const MOSTRAR_CANTIDADES_KEY = 'elared_ventas_mostrar_cantidades';
 
 function loadOcultos(): Set<string> {
   try {
@@ -144,6 +145,17 @@ function saveOcultos(s: Set<string>) {
     if (s.size === 0) localStorage.removeItem(OCULTOS_KEY);
     else localStorage.setItem(OCULTOS_KEY, JSON.stringify([...s]));
   } catch {}
+}
+
+function loadMostrarCantidades(): boolean {
+  try {
+    const raw = localStorage.getItem(MOSTRAR_CANTIDADES_KEY);
+    return raw === null ? true : raw === 'true';
+  } catch { return true; }
+}
+
+function saveMostrarCantidades(v: boolean) {
+  try { localStorage.setItem(MOSTRAR_CANTIDADES_KEY, String(v)); } catch {}
 }
 
 function loadFiltroPeriodo(): FiltroState {
@@ -595,7 +607,16 @@ export default function VentasModule() {
   const [showPDFModal, setShowPDFModal]           = useState(false);
   const [filtroPeriodo, setFiltroPeriodo]         = useState<FiltroState>(loadFiltroPeriodo);
   const [mesSeleccionado, setMesSeleccionado]     = useState<string | null>(null);
+  const [mostrarCantidades, setMostrarCantidades] = useState<boolean>(loadMostrarCantidades);
   const initDoneRef = useRef(false);
+
+  const toggleMostrarCantidades = useCallback(() => {
+    setMostrarCantidades(v => {
+      const next = !v;
+      saveMostrarCantidades(next);
+      return next;
+    });
+  }, []);
 
   // Detección del mes predominante y todos los meses presentes en el archivo
   const { mesPredominante, mesesDisponibles } = useMemo(() => {
@@ -966,6 +987,17 @@ export default function VentasModule() {
                   {vendedoresOcultos.size} vendedor{vendedoresOcultos.size > 1 ? 'es' : ''} oculto{vendedoresOcultos.size > 1 ? 's' : ''} · Mostrar todos
                 </button>
               )}
+              <button
+                onClick={toggleMostrarCantidades}
+                title="Mostrar u ocultar los números sobre las gráficas"
+                className="flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 border"
+                style={mostrarCantidades
+                  ? { color: '#003DA5', borderColor: '#003DA5', background: '#eef4ff' }
+                  : { color: '#6c757d', borderColor: '#d1d5db', background: '#fff' }}
+              >
+                <Hash size={12} />
+                {mostrarCantidades ? 'Ocultar cantidades' : 'Mostrar cantidades'}
+              </button>
               <div className="ml-auto text-xs text-gray-400">
                 {stats.totalVendedores} vendedores · {stats.diasConDatos} días
               </div>
@@ -985,6 +1017,7 @@ export default function VentasModule() {
               vendedoresOcultos={vendedoresOcultos}
               onHideVendedor={handleHideVendedor}
               vendedorActivo={vendedorActivo}
+              mostrarCantidades={mostrarCantidades}
             />
 
             {/* 12. Evolución temporal */}
@@ -992,6 +1025,7 @@ export default function VentasModule() {
               <TemporalChart
                 key={`temporal-${stats.byFecha.length}-${stats.fechaMin}-${stats.fechaMax}`}
                 stats={stats}
+                mostrarCantidades={mostrarCantidades}
               />
             )}
 
@@ -1000,6 +1034,7 @@ export default function VentasModule() {
               <VendedoresChart
                 key={`vendedores-${stats.byDia.length}-${stats.fechaMin}-${stats.fechaMax}`}
                 stats={stats}
+                mostrarCantidades={mostrarCantidades}
               />
             )}
 

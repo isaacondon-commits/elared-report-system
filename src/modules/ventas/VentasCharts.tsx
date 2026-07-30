@@ -61,6 +61,7 @@ interface Props {
   vendedoresOcultos: Set<string>;
   onHideVendedor: (nombre: string) => void;
   vendedorActivo: string | null;
+  mostrarCantidades: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -343,7 +344,7 @@ function ModalidadChart({ stats }: Pick<Props, 'stats'>) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. DISTRIBUCIÓN GEOGRÁFICA (Mejora 9)
 // ─────────────────────────────────────────────────────────────────────────────
-function DepartamentosChart({ stats }: Pick<Props, 'stats'>) {
+function DepartamentosChart({ stats, mostrarCantidades }: Pick<Props, 'stats' | 'mostrarCantidades'>) {
   if (!stats.hasDepartamento || stats.byDepartamento.length === 0) return null;
 
   const data = stats.byDepartamento;
@@ -376,7 +377,7 @@ function DepartamentosChart({ stats }: Pick<Props, 'stats'>) {
               <YAxis dataKey="departamento" type="category" tick={{ fontSize: 10 }} width={110} />
               <Tooltip formatter={fmt} contentStyle={{ fontSize: 12 }} />
               <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                <LabelList dataKey="count" position="right" style={{ fontSize: 10, fill: '#334155', fontWeight: 600 }} />
+                {mostrarCantidades && <LabelList dataKey="count" position="right" style={{ fontSize: 10, fill: '#334155', fontWeight: 600 }} />}
                 {data.map((d, i) => (
                   <Cell key={i} fill={
                     i === 0 ? P.azul1
@@ -425,7 +426,7 @@ function DepartamentosChart({ stats }: Pick<Props, 'stats'>) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 9. RANKING DE BACK OFFICE (Mejora 8)
 // ─────────────────────────────────────────────────────────────────────────────
-function BackOfficeChart({ stats }: Pick<Props, 'stats'>) {
+function BackOfficeChart({ stats, mostrarCantidades }: Pick<Props, 'stats' | 'mostrarCantidades'>) {
   if (!stats.hasBackOffice || stats.byBackOffice.length === 0) return null;
 
   const data = stats.byBackOffice;
@@ -453,7 +454,7 @@ function BackOfficeChart({ stats }: Pick<Props, 'stats'>) {
               <YAxis dataKey="nombre" type="category" tick={{ fontSize: 10 }} width={120} />
               <Tooltip formatter={fmt} contentStyle={{ fontSize: 12 }} />
               <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                <LabelList dataKey="count" position="right" style={{ fontSize: 10, fill: '#334155', fontWeight: 600 }} />
+                {mostrarCantidades && <LabelList dataKey="count" position="right" style={{ fontSize: 10, fill: '#334155', fontWeight: 600 }} />}
                 {data.map((d, i) => (
                   <Cell key={i} fill={d.nombre === 'Sin asignar' ? P.naranja : P.azul1}
                     opacity={d.nombre === 'Sin asignar' ? 1 : 1 - i * 0.03} />
@@ -591,7 +592,7 @@ function RechazosChart({ stats }: Pick<Props, 'stats'>) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 12. EVOLUCIÓN TEMPORAL — separado (se renderiza en VentasModule)
 // ─────────────────────────────────────────────────────────────────────────────
-export function TemporalChart({ stats }: { stats: VentasStats }) {
+export function TemporalChart({ stats, mostrarCantidades }: { stats: VentasStats; mostrarCantidades: boolean }) {
   const data = stats.byFecha.map(f => ({
     ...f,
     label: formatFechaLabel(f.fecha),
@@ -631,7 +632,7 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
             dot={{ r: 3, fill: P.azul1, strokeWidth: 0 }}
             activeDot={{ r: 5 }}
           >
-            <LabelList dataKey="ventas" position="top" offset={8} style={{ fontSize: 10, fontWeight: 600, fill: P.azul1 }} />
+            {mostrarCantidades && <LabelList dataKey="ventas" position="top" offset={8} style={{ fontSize: 10, fontWeight: 600, fill: P.azul1 }} />}
           </Line>
         </LineChart>
       </ResponsiveContainer>
@@ -642,7 +643,7 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 13. CANTIDAD DE VENDEDORES POR DÍA — separado (se renderiza en VentasModule)
 // ─────────────────────────────────────────────────────────────────────────────
-export function VendedoresChart({ stats }: { stats: VentasStats }) {
+export function VendedoresChart({ stats, mostrarCantidades }: { stats: VentasStats; mostrarCantidades: boolean }) {
   if (stats.byDia.length < 2) return null;
 
   const data = [...stats.byDia].reverse().map(d => ({
@@ -673,7 +674,7 @@ export function VendedoresChart({ stats }: { stats: VentasStats }) {
             }}
           />
           <Bar dataKey="vendedoresActivos" radius={[4, 4, 0, 0]} fill={P.teal}>
-            <LabelList dataKey="vendedoresActivos" position="top" style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
+            {mostrarCantidades && <LabelList dataKey="vendedoresActivos" position="top" style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -684,7 +685,7 @@ export function VendedoresChart({ stats }: { stats: VentasStats }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Gráfico auxiliar: Tipo de gestión (plan / motivo)
 // ─────────────────────────────────────────────────────────────────────────────
-function PlanChart({ stats }: Pick<Props, 'stats'>) {
+function PlanChart({ stats, mostrarCantidades }: Pick<Props, 'stats' | 'mostrarCantidades'>) {
   if (!stats.byPlan.length) return null;
   const data = stats.byPlan.slice(0, 12).map(p => ({
     nombre: abreviarPlan(p.nombre),
@@ -711,7 +712,7 @@ function PlanChart({ stats }: Pick<Props, 'stats'>) {
               payload?.[0]?.payload?.fullNombre ?? ''}
           />
           <Bar dataKey="ventas" radius={[4, 4, 0, 0]}>
-            <LabelList dataKey="ventas" position="top" style={{ fontSize: 10, fill: '#334155' }} />
+            {mostrarCantidades && <LabelList dataKey="ventas" position="top" style={{ fontSize: 10, fill: '#334155' }} />}
             {data.map((_, i) => <Cell key={i} fill={PIE_PALETA[i % PIE_PALETA.length]} />)}
           </Bar>
         </BarChart>
@@ -724,7 +725,7 @@ function PlanChart({ stats }: Pick<Props, 'stats'>) {
 // Default export — secciones secundarias (sin ranking, sin stacked, sin temporal)
 // ─────────────────────────────────────────────────────────────────────────────
 export default function VentasCharts(props: Props) {
-  const { stats } = props;
+  const { stats, mostrarCantidades } = props;
   return (
     <div className="space-y-6">
       {/* Promedio de Ventas por Vendedor */}
@@ -734,16 +735,16 @@ export default function VentasCharts(props: Props) {
       <EstadoChart stats={stats} />
 
       {/* Planes Vendidos */}
-      {stats.byPlan.length > 0 && <PlanChart stats={stats} />}
+      {stats.byPlan.length > 0 && <PlanChart stats={stats} mostrarCantidades={mostrarCantidades} />}
 
       {/* Modalidad de Venta */}
       <ModalidadChart stats={stats} />
 
       {/* Distribución Geográfica */}
-      <DepartamentosChart stats={stats} />
+      <DepartamentosChart stats={stats} mostrarCantidades={mostrarCantidades} />
 
       {/* Back Office */}
-      <BackOfficeChart stats={stats} />
+      <BackOfficeChart stats={stats} mostrarCantidades={mostrarCantidades} />
 
       {/* Ranking de Rechazos (por %) */}
       <RechazosChart stats={stats} />

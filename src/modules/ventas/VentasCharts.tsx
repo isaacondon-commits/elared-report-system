@@ -684,18 +684,7 @@ export function VendedoresChart({ stats }: { stats: VentasStats }) {
             }}
           />
           <Bar dataKey="vendedoresActivos" radius={[4, 4, 0, 0]} fill={P.teal}>
-            <LabelList
-              dataKey="vendedoresActivos"
-              content={(props: unknown) => {
-                const { x, y, width, value, index } = props as { x: number; y: number; width: number; value: number; index: number };
-                if (tickInterval > 0 && index % (tickInterval + 1) !== 0) return null;
-                return (
-                  <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10} fontWeight={600} fill="#334155">
-                    {value}
-                  </text>
-                );
-              }}
-            />
+            <LabelList dataKey="vendedoresActivos" position="top" style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>

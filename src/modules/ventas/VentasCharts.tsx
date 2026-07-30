@@ -599,7 +599,12 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Ventas Diarias</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">
+        Ventas Diarias
+        {stats.empresaActiva && stats.empresaActiva !== 'Todas' && (
+          <span className="ml-2 text-sm font-normal text-gray-400">· {stats.empresaActiva}</span>
+        )}
+      </h3>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
@@ -644,7 +649,12 @@ function PlanChart({ stats }: Pick<Props, 'stats'>) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Planes Vendidos</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">
+        Planes Vendidos
+        {stats.empresaActiva && stats.empresaActiva !== 'Todas' && (
+          <span className="ml-2 text-sm font-normal text-gray-400">· {stats.empresaActiva}</span>
+        )}
+      </h3>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />

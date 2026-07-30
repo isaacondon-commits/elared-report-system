@@ -596,6 +596,7 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
     ...f,
     label: formatFechaLabel(f.fecha),
   }));
+  const tickInterval = data.length > 20 ? Math.floor(data.length / 15) : 0;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -605,15 +606,15 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
           <span className="ml-2 text-sm font-normal text-gray-400">· {stats.empresaActiva}</span>
         )}
       </h3>
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+      <ResponsiveContainer width="100%" height={240}>
+        <LineChart data={data} margin={{ top: 24, right: 20, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
             tick={{ fontSize: 10 }}
-            interval={data.length > 20 ? Math.floor(data.length / 15) : 0}
+            interval={tickInterval}
           />
-          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2)]} />
           <Tooltip
             formatter={fmt}
             labelFormatter={(_: unknown, payload: readonly { payload?: { fecha?: string } }[]) => {
@@ -629,7 +630,20 @@ export function TemporalChart({ stats }: { stats: VentasStats }) {
             strokeWidth={2}
             dot={{ r: 3, fill: P.azul1, strokeWidth: 0 }}
             activeDot={{ r: 5 }}
-          />
+          >
+            <LabelList
+              dataKey="ventas"
+              content={(props: unknown) => {
+                const { x, y, value, index } = props as { x: number; y: number; value: number; index: number };
+                if (tickInterval > 0 && index % (tickInterval + 1) !== 0) return null;
+                return (
+                  <text x={x} y={y - 8} textAnchor="middle" fontSize={10} fontWeight={600} fill={P.azul1}>
+                    {value}
+                  </text>
+                );
+              }}
+            />
+          </Line>
         </LineChart>
       </ResponsiveContainer>
     </div>

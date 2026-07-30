@@ -1,24 +1,39 @@
 import { useState, useMemo, useCallback } from 'react';
 import {
-  UserPlus, Plus, Trash2, X, ChevronDown, Search, Download, ClipboardList, RefreshCw,
+  UserPlus, Trash2, X, ChevronDown, Search, Download, ClipboardList, RefreshCw,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Header from '../components/Header';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type EstadoPostulante = 'pendiente' | 'contratado' | 'rechazado';
+type EstadoPostulante = 'pendiente' | 'en_cuenta' | 'contratado' | 'rechazado';
 
 interface Postulante {
   id: string;
   nombre: string;
   celular: string;
+  empresa: string;
   sector: string;
   fecha: string;
   estado: EstadoPostulante;
 }
 
-const SECTORES_SUGERIDOS = ['Call Fibra', 'Call Móvil', 'RRHH', 'Atención', 'Back Office'];
+const EMPRESAS_ENTREVISTA = ['Elared', 'Phonehouse', 'Relpont'];
+const SECTORES_ENTREVISTA = [
+  'Móvil PP', 'Móvil', 'Fibra', 'Distribución', 'Atención al cliente',
+  'Back office', 'RRHH', 'Limpieza', 'Recepción',
+];
+
+const ESTADO_LABEL: Record<EstadoPostulante, string> = {
+  pendiente: 'Pendiente', en_cuenta: 'En cuenta', contratado: 'Contratado', rechazado: 'Rechazado',
+};
+const ESTADO_BADGE: Record<EstadoPostulante, string> = {
+  pendiente: 'bg-amber-100 text-amber-700',
+  en_cuenta: 'bg-indigo-100 text-indigo-700',
+  contratado: 'bg-green-100 text-green-700',
+  rechazado: 'bg-red-100 text-red-700',
+};
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -33,9 +48,9 @@ function fmtDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function buildPostulante(nombre: string, celular: string, sector: string, fecha: string, estado: EstadoPostulante = 'pendiente'): Postulante {
+function buildPostulante(nombre: string, celular: string, empresa: string, sector: string, fecha: string, estado: EstadoPostulante = 'pendiente'): Postulante {
   const id = `${nombre}__${celular}__${fecha}__${Math.random().toString(36).slice(2, 7)}`;
-  return { id, nombre, celular, sector, fecha, estado };
+  return { id, nombre, celular, empresa, sector, fecha, estado };
 }
 
 const STORAGE_KEY = 'elared_entrevistas';
@@ -71,7 +86,7 @@ function parsearTexto(texto: string): { postulantes: Postulante[]; ignoradas: nu
     const [nombre, celular, sector] = partes;
     if (!nombre) { ignoradas++; continue; }
 
-    resultados.push(buildPostulante(nombre.toUpperCase(), celular ?? '', sector ?? '', hoy));
+    resultados.push(buildPostulante(nombre.toUpperCase(), celular ?? '', '', sector ?? '', hoy));
   }
 
   return { postulantes: resultados, ignoradas };
@@ -81,13 +96,10 @@ function parsearTexto(texto: string): { postulantes: Postulante[]; ignoradas: nu
 
 function exportExcel(postulantes: Postulante[]) {
   const wb = XLSX.utils.book_new();
-  const ESTADO_LABEL: Record<EstadoPostulante, string> = {
-    pendiente: 'Pendiente', contratado: 'Contratado', rechazado: 'Rechazado',
-  };
-  const headers = ['Nombre', 'Celular', 'Sector', 'Fecha', 'Estado'];
-  const rows = postulantes.map(p => [p.nombre, p.celular, p.sector, fmtDate(p.fecha), ESTADO_LABEL[p.estado]]);
+  const headers = ['Nombre', 'Celular', 'Empresa', 'Sector', 'Fecha', 'Estado'];
+  const rows = postulantes.map(p => [p.nombre, p.celular, p.empresa, p.sector, fmtDate(p.fecha), ESTADO_LABEL[p.estado]]);
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  ws['!cols'] = [{ wch: 32 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 14 }];
+  ws['!cols'] = [{ wch: 32 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Entrevistas');
   XLSX.writeFile(wb, `Entrevistas_${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}.xlsx`);
 }
@@ -106,74 +118,74 @@ function KpiCard({ label, value, sublabel, borderColor, valueColor }: {
   );
 }
 
-// ─── Add modal ─────────────────────────────────────────────────────────────────
+// ─── Add panel ─────────────────────────────────────────────────────────────────
 
-function AddModal({ onSave, onClose }: { onSave: (p: Postulante) => void; onClose: () => void }) {
+function AddPanel({ onSave }: { onSave: (p: Postulante) => void }) {
   const [nombre, setNombre] = useState('');
   const [celular, setCelular] = useState('');
-  const [sector, setSector] = useState('');
+  const [empresa, setEmpresa] = useState(EMPRESAS_ENTREVISTA[0]);
+  const [sector, setSector] = useState(SECTORES_ENTREVISTA[0]);
   const [fecha, setFecha] = useState(todayISO());
   const [estado, setEstado] = useState<EstadoPostulante>('pendiente');
   const [error, setError] = useState('');
 
-  function handleSave() {
+  function handleGuardar() {
     if (!nombre.trim()) { setError('El nombre es requerido.'); return; }
-    onSave(buildPostulante(nombre.trim().toUpperCase(), celular.trim(), sector.trim(), fecha, estado));
+    onSave(buildPostulante(nombre.trim().toUpperCase(), celular.trim(), empresa, sector, fecha, estado));
+    setNombre(''); setCelular(''); setError('');
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="font-bold text-gray-900 text-lg">Nuevo postulante</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+    <div className="bg-white rounded-xl border border-gray-200 p-5 lg:sticky lg:top-4 h-fit">
+      <h3 className="font-bold text-gray-900 text-sm mb-1">+ Nuevo postulante</h3>
+      <p className="text-xs text-gray-400 mb-4">Cargá y seguí con el próximo, sin ventanas emergentes.</p>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre completo</label>
+          <input type="text" value={nombre} onChange={e => setNombre(e.target.value.toUpperCase())}
+            placeholder="APELLIDO, Nombre"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]" />
         </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre completo</label>
-            <input type="text" value={nombre} onChange={e => setNombre(e.target.value.toUpperCase())}
-              placeholder="APELLIDO, Nombre"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Celular</label>
-              <input type="text" value={celular} onChange={e => setCelular(e.target.value)}
-                placeholder="09X XXX XXX"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Sector</label>
-              <input type="text" value={sector} onChange={e => setSector(e.target.value)}
-                list="sector-options" placeholder="ej: Call Fibra"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]" />
-              <datalist id="sector-options">
-                {SECTORES_SUGERIDOS.map(s => <option key={s} value={s} />)}
-              </datalist>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha</label>
-              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Estado</label>
-              <select value={estado} onChange={e => setEstado(e.target.value as EstadoPostulante)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]">
-                <option value="pendiente">Pendiente</option>
-                <option value="contratado">Contratado</option>
-                <option value="rechazado">Rechazado</option>
-              </select>
-            </div>
-          </div>
-          {error && <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Celular</label>
+          <input type="text" value={celular} onChange={e => setCelular(e.target.value)}
+            placeholder="09X XXX XXX"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]" />
         </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="flex-1 border border-gray-300 rounded-lg py-2 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
-          <button onClick={handleSave} className="flex-1 bg-[#003DA5] text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-800">Guardar</button>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Empresa</label>
+          <select value={empresa} onChange={e => setEmpresa(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]">
+            {EMPRESAS_ENTREVISTA.map(e => <option key={e} value={e}>{e}</option>)}
+          </select>
         </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Sector</label>
+          <select value={sector} onChange={e => setSector(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]">
+            {SECTORES_ENTREVISTA.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha</label>
+          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]" />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Estado</label>
+          <select value={estado} onChange={e => setEstado(e.target.value as EstadoPostulante)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]">
+            {(Object.keys(ESTADO_LABEL) as EstadoPostulante[]).map(k => <option key={k} value={k}>{ESTADO_LABEL[k]}</option>)}
+          </select>
+        </div>
+
+        {error && <div className="text-red-600 text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+
+        <button onClick={handleGuardar}
+          className="w-full bg-[#003DA5] text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-800">
+          Guardar
+        </button>
       </div>
     </div>
   );
@@ -282,8 +294,8 @@ export default function EntrevistasPage() {
   const [search, setSearch] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos');
   const [filtroSector, setFiltroSector] = useState<string | null>(null);
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortKey>('fecha');
-  const [showAdd, setShowAdd] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Postulante | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showLoader, setShowLoader] = useState(false);
@@ -301,7 +313,6 @@ export default function EntrevistasPage() {
 
   function handleAdd(p: Postulante) {
     persist([...postulantes, p]);
-    setShowAdd(false);
     showToast(`Postulante agregado · ${p.nombre}`);
   }
 
@@ -340,6 +351,7 @@ export default function EntrevistasPage() {
   const stats = useMemo(() => ({
     total: postulantes.length,
     pendientes: postulantes.filter(p => p.estado === 'pendiente').length,
+    enCuenta: postulantes.filter(p => p.estado === 'en_cuenta').length,
     contratados: postulantes.filter(p => p.estado === 'contratado').length,
     rechazados: postulantes.filter(p => p.estado === 'rechazado').length,
   }), [postulantes]);
@@ -352,6 +364,7 @@ export default function EntrevistasPage() {
     }
     if (filtroEstado !== 'todos') result = result.filter(p => p.estado === filtroEstado);
     if (filtroSector) result = result.filter(p => p.sector === filtroSector);
+    if (filtroEmpresa) result = result.filter(p => p.empresa === filtroEmpresa);
 
     switch (sortBy) {
       case 'fecha':  result.sort((a, b) => b.fecha.localeCompare(a.fecha)); break;
@@ -359,45 +372,15 @@ export default function EntrevistasPage() {
       case 'sector': result.sort((a, b) => a.sector.localeCompare(b.sector, 'es')); break;
     }
     return result;
-  }, [postulantes, search, filtroEstado, filtroSector, sortBy]);
+  }, [postulantes, search, filtroEstado, filtroSector, filtroEmpresa, sortBy]);
 
-  if (postulantes.length === 0) {
-    return (
-      <div className="flex flex-col h-full">
-        <Header title="Entrevistas" subtitle="Sin datos cargados" actions={null} />
-        <div className="flex-1 overflow-y-auto p-6 flex items-center justify-center">
-          <div className="max-w-2xl mx-auto w-full">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
-              <div className="w-14 h-14 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                <UserPlus size={26} className="text-[#003DA5]" />
-              </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">Cargar Postulantes</h2>
-              <p className="text-sm text-gray-500 mb-6">Agregá postulantes manualmente o pegá una lista desde Excel</p>
-              <div className="flex gap-2 justify-center">
-                <button onClick={() => setShowAdd(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
-                  <Plus size={14} /> Agregar manual
-                </button>
-                <button onClick={() => setShowLoader(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#003DA5] text-white text-sm font-semibold rounded-lg hover:bg-blue-800">
-                  <ClipboardList size={15} /> Pegar lista
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        {showAdd && <AddModal onSave={handleAdd} onClose={() => setShowAdd(false)} />}
-        {showLoader && <TextoLoaderModal onCargar={handleProcesarTexto} onClose={() => setShowLoader(false)} />}
-        {toast && <Toast msg={toast} onClose={() => setToast(null)} />}
-      </div>
-    );
-  }
+  const subtitle = postulantes.length > 0 ? `${stats.total} postulantes` : 'Sin datos cargados';
 
   return (
     <div className="flex flex-col h-full">
       <Header
         title="Entrevistas"
-        subtitle={`${stats.total} postulantes`}
+        subtitle={subtitle}
         actions={
           <div className="flex gap-2">
             <button onClick={() => exportExcel(postulantes)}
@@ -406,27 +389,25 @@ export default function EntrevistasPage() {
             </button>
             <button onClick={() => setShowLoader(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              <Plus size={13} /> Agregar más
+              <ClipboardList size={13} /> Pegar lista
             </button>
             <button onClick={() => setShowLimpiarConfirm(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
               <Trash2 size={13} /> Limpiar todo
-            </button>
-            <button onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#003DA5] text-white rounded-lg hover:bg-blue-800 transition-colors font-semibold">
-              <Plus size={14} /> Nuevo postulante
             </button>
           </div>
         }
       />
 
       <div className="flex-1 overflow-y-auto p-6">
-        <div id="entrevistas-content" className="max-w-[1300px] mx-auto space-y-5">
+        <div id="entrevistas-content" className="max-w-[1500px] mx-auto grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
+        <div className="space-y-5">
 
           {/* ── KPIs ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <KpiCard label="Total postulantes" value={stats.total} sublabel="histórico" borderColor="#94a3b8" />
             <KpiCard label="Pendientes" value={stats.pendientes} sublabel="sin resolución" borderColor="#d97706" valueColor={stats.pendientes > 0 ? '#d97706' : undefined} />
+            <KpiCard label="En cuenta" value={stats.enCuenta} sublabel="en seguimiento" borderColor="#4f46e5" valueColor={stats.enCuenta > 0 ? '#4f46e5' : undefined} />
             <KpiCard label="Contratados" value={stats.contratados} sublabel="postulantes contratados" borderColor="#16a34a" valueColor={stats.contratados > 0 ? '#16a34a' : undefined} />
             <KpiCard label="Rechazados" value={stats.rechazados} sublabel="postulantes rechazados" borderColor="#dc2626" />
           </div>
@@ -440,14 +421,20 @@ export default function EntrevistasPage() {
               {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>}
             </div>
 
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {([['todos', 'Todos'], ['pendiente', 'Pendientes'], ['contratado', 'Contratados'], ['rechazado', 'Rechazados']] as [FiltroEstado, string][]).map(([v, label]) => (
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
+              {([['todos', 'Todos'], ['pendiente', 'Pendientes'], ['en_cuenta', 'En cuenta'], ['contratado', 'Contratados'], ['rechazado', 'Rechazados']] as [FiltroEstado, string][]).map(([v, label]) => (
                 <button key={v} onClick={() => setFiltroEstado(v)}
                   className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${filtroEstado === v ? 'bg-white text-[#003DA5] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                   {label}
                 </button>
               ))}
             </div>
+
+            <select value={filtroEmpresa ?? ''} onChange={e => setFiltroEmpresa(e.target.value || null)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white outline-none">
+              <option value="">Todas las empresas</option>
+              {EMPRESAS_ENTREVISTA.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
 
             {sectoresDisponibles.length > 0 && (
               <select value={filtroSector ?? ''} onChange={e => setFiltroSector(e.target.value || null)}
@@ -476,31 +463,26 @@ export default function EntrevistasPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-[#003DA5] text-white">
-                    {['Nombre', 'Celular', 'Sector', 'Fecha', 'Estado', ''].map(h => (
+                    {['Nombre', 'Celular', 'Empresa', 'Sector', 'Fecha', 'Estado', ''].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">Ningún postulante coincide con los filtros.</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">Ningún postulante coincide con los filtros.</td></tr>
                   )}
                   {filtered.map((p, i) => (
                     <tr key={p.id} className={`border-b border-gray-100 group transition-colors hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
                       <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{p.nombre}</td>
                       <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap font-mono text-xs">{p.celular || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{p.empresa || '—'}</td>
                       <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{p.sector || '—'}</td>
                       <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{fmtDate(p.fecha)}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <select value={p.estado} onChange={e => handleEstadoChange(p.id, e.target.value as EstadoPostulante)}
-                          className={`text-[11px] font-semibold px-2 py-1 rounded-full border-none outline-none cursor-pointer ${
-                            p.estado === 'contratado' ? 'bg-green-100 text-green-700'
-                              : p.estado === 'rechazado' ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-700'
-                          }`}>
-                          <option value="pendiente">Pendiente</option>
-                          <option value="contratado">Contratado</option>
-                          <option value="rechazado">Rechazado</option>
+                          className={`text-[11px] font-semibold px-2 py-1 rounded-full border-none outline-none cursor-pointer ${ESTADO_BADGE[p.estado]}`}>
+                          {(Object.keys(ESTADO_LABEL) as EstadoPostulante[]).map(k => <option key={k} value={k}>{ESTADO_LABEL[k]}</option>)}
                         </select>
                       </td>
                       <td className="px-3 py-2.5 w-8">
@@ -516,9 +498,10 @@ export default function EntrevistasPage() {
           </div>
 
         </div>
+        <AddPanel onSave={handleAdd} />
+        </div>
       </div>
 
-      {showAdd && <AddModal onSave={handleAdd} onClose={() => setShowAdd(false)} />}
       {deleteTarget && <DeleteModal postulante={deleteTarget} onConfirm={handleDelete} onClose={() => setDeleteTarget(null)} />}
       {showLoader && <TextoLoaderModal onCargar={handleProcesarTexto} onClose={() => setShowLoader(false)} />}
       {showLimpiarConfirm && <LimpiarModal onConfirm={handleLimpiarTodo} onClose={() => setShowLimpiarConfirm(false)} />}

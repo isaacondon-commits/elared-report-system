@@ -225,7 +225,7 @@ interface PersonaRoster {
   departamento?: string;
 }
 
-type FiltroLegajo = 'todos' | 'con_legajo';
+type FiltroLegajo = 'todos' | 'con_legajo' | 'con_observaciones' | 'con_reconocimientos' | 'con_suspensiones';
 type SortKey = 'nombre' | 'entradas' | 'ultima';
 
 export default function LegajoPage() {
@@ -291,6 +291,8 @@ export default function LegajoPage() {
         nombre: p.nombre,
         departamento: p.departamento,
         entradas: ent,
+        observaciones: ent.filter(e => e.tipo === 'observacion').length,
+        reconocimientos: ent.filter(e => e.tipo === 'reconocimiento').length,
         suspensiones: ent.filter(e => e.tipo === 'suspension').length,
         ultima: ent[0]?.fecha ?? null,
       };
@@ -301,6 +303,9 @@ export default function LegajoPage() {
       rows = rows.filter(r => r.nombre.toLowerCase().includes(q));
     }
     if (filtro === 'con_legajo') rows = rows.filter(r => r.entradas.length > 0);
+    if (filtro === 'con_observaciones') rows = rows.filter(r => r.observaciones > 0);
+    if (filtro === 'con_reconocimientos') rows = rows.filter(r => r.reconocimientos > 0);
+    if (filtro === 'con_suspensiones') rows = rows.filter(r => r.suspensiones > 0);
 
     switch (sortBy) {
       case 'nombre':   rows.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); break;
@@ -316,6 +321,8 @@ export default function LegajoPage() {
     return {
       personasConLegajo,
       totalEntradas: entradas.length,
+      observaciones: entradas.filter(e => e.tipo === 'observacion').length,
+      reconocimientos: entradas.filter(e => e.tipo === 'reconocimiento').length,
       suspensiones: entradas.filter(e => e.tipo === 'suspension').length,
       esteMes: entradas.filter(e => e.fecha.slice(0, 7) === mesActual).length,
     };
@@ -350,9 +357,10 @@ export default function LegajoPage() {
         <div id="legajo-content" className="max-w-[1300px] mx-auto space-y-5">
 
           {/* ── KPIs ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <KpiCard label="Personas con legajo" value={stats.personasConLegajo} sublabel={`de ${roster.length} en total`} borderColor="#003DA5" />
-            <KpiCard label="Entradas totales" value={stats.totalEntradas} sublabel="histórico" borderColor="#94a3b8" />
+            <KpiCard label="Observaciones" value={stats.observaciones} sublabel="histórico" borderColor="#1d4ed8" />
+            <KpiCard label="Reconocimientos" value={stats.reconocimientos} sublabel="histórico" borderColor="#15803d" valueColor={stats.reconocimientos > 0 ? '#15803d' : undefined} />
             <KpiCard label="Suspensiones" value={stats.suspensiones} sublabel="histórico" borderColor="#dc2626" valueColor={stats.suspensiones > 0 ? '#dc2626' : undefined} />
             <KpiCard label="Este mes" value={stats.esteMes} sublabel="entradas cargadas en el mes" borderColor="#d97706" valueColor={stats.esteMes > 0 ? '#d97706' : undefined} />
           </div>
@@ -366,8 +374,12 @@ export default function LegajoPage() {
               {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>}
             </div>
 
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {([['todos', 'Todas las personas'], ['con_legajo', 'Solo con legajo']] as [FiltroLegajo, string][]).map(([v, label]) => (
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
+              {([
+                ['todos', 'Todas las personas'], ['con_legajo', 'Solo con legajo'],
+                ['con_observaciones', 'Con observaciones'], ['con_reconocimientos', 'Con reconocimientos'],
+                ['con_suspensiones', 'Con suspensiones'],
+              ] as [FiltroLegajo, string][]).map(([v, label]) => (
                 <button key={v} onClick={() => setFiltro(v)}
                   className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${filtro === v ? 'bg-white text-[#003DA5] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                   {label}
@@ -394,14 +406,14 @@ export default function LegajoPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-[#003DA5] text-white">
-                    {['Persona', 'Departamento', 'Entradas', 'Suspensiones', 'Última entrada', ''].map(h => (
+                    {['Persona', 'Departamento', 'Observaciones', 'Reconocimientos', 'Suspensiones', 'Última entrada', ''].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filas.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">Ninguna persona coincide con los filtros.</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">Ninguna persona coincide con los filtros.</td></tr>
                   )}
                   {filas.map((f, i) => {
                     const isExpanded = expandedNombre === f.nombre;
@@ -414,7 +426,10 @@ export default function LegajoPage() {
                           <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{f.nombre}</td>
                           <td className="px-3 py-2.5"><DepartamentoBadge depto={f.departamento} /></td>
                           <td className="px-3 py-2.5 text-center">
-                            <span className={f.entradas.length > 0 ? 'font-semibold text-[#003DA5]' : 'text-gray-300'}>{f.entradas.length}</span>
+                            <span className={f.observaciones > 0 ? 'font-semibold text-blue-700' : 'text-gray-300'}>{f.observaciones}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={f.reconocimientos > 0 ? 'font-semibold text-green-700' : 'text-gray-300'}>{f.reconocimientos}</span>
                           </td>
                           <td className="px-3 py-2.5 text-center">
                             <span className={f.suspensiones > 0 ? 'font-semibold text-red-600' : 'text-gray-300'}>{f.suspensiones}</span>
@@ -426,7 +441,7 @@ export default function LegajoPage() {
                         </tr>
                         {isExpanded && (
                           <tr className="bg-blue-50">
-                            <td colSpan={6} className="px-4 pb-4 pt-1">
+                            <td colSpan={7} className="px-4 pb-4 pt-1">
                               <div className="bg-white rounded-lg border border-blue-200 overflow-hidden">
                                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
                                   <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Historial de legajo</span>

@@ -278,6 +278,8 @@ export default function EgresosPage() {
   const [egresos, setEgresos] = useState<Egreso[]>(loadData);
   const [search, setSearch] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todos');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [sortBy, setSortBy] = useState<SortKey>('fecha');
   const [showAdd, setShowAdd] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Egreso | null>(null);
@@ -341,13 +343,15 @@ export default function EgresosPage() {
       result = result.filter(e => e.nombre.toLowerCase().includes(q) || e.motivo.toLowerCase().includes(q));
     }
     if (filtroTipo !== 'todos') result = result.filter(e => e.tipo === filtroTipo);
+    if (desde) result = result.filter(e => e.fecha >= desde);
+    if (hasta) result = result.filter(e => e.fecha <= hasta);
 
     switch (sortBy) {
       case 'fecha':  result.sort((a, b) => b.fecha.localeCompare(a.fecha)); break;
       case 'nombre': result.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); break;
     }
     return result;
-  }, [egresos, search, filtroTipo, sortBy]);
+  }, [egresos, search, filtroTipo, desde, hasta, sortBy]);
 
   if (egresos.length === 0) {
     return (
@@ -435,6 +439,16 @@ export default function EgresosPage() {
                   {label}
                 </button>
               ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-sm">
+              <span className="text-gray-400 text-xs">Desde</span>
+              <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="outline-none bg-transparent text-sm" />
+              <span className="text-gray-400 text-xs">Hasta</span>
+              <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="outline-none bg-transparent text-sm" />
+              {(desde || hasta) && (
+                <button onClick={() => { setDesde(''); setHasta(''); }} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>
+              )}
             </div>
 
             <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-sm">

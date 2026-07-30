@@ -230,9 +230,9 @@ function KpiCard({
   );
 }
 
-// ─── Add modal ─────────────────────────────────────────────────────────────────
+// ─── Add panel (fijo al costado, sin modal) ────────────────────────────────────
 
-function AddModal({ onSave, onClose }: { onSave: (c: Certificacion) => void; onClose: () => void }) {
+function AddPanel({ onSave }: { onSave: (c: Certificacion) => void }) {
   const [documento, setDocumento] = useState('');
   const [nombre, setNombre] = useState('');
   const [inicio, setInicio] = useState('');
@@ -246,79 +246,67 @@ function AddModal({ onSave, onClose }: { onSave: (c: Certificacion) => void; onC
     return { dias, reintegro };
   }, [inicio, fin]);
 
-  function handleSave() {
+  function handleGuardar() {
     if (!documento.trim()) { setError('El documento es requerido.'); return; }
     if (!nombre.trim()) { setError('El nombre es requerido.'); return; }
     if (!inicio) { setError('La fecha de inicio es requerida.'); return; }
     if (!fin) { setError('La fecha de fin es requerida.'); return; }
     if (fin < inicio) { setError('La fecha de fin debe ser igual o posterior al inicio.'); return; }
     onSave(buildCert(documento.trim(), nombre.trim().toUpperCase(), inicio, fin));
+    setDocumento(''); setNombre(''); setInicio(''); setFin(''); setError('');
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="font-bold text-gray-900 text-lg">Nueva certificación</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+    <div className="bg-white rounded-xl border border-gray-200 p-5 lg:sticky lg:top-4 h-fit">
+      <h3 className="font-bold text-gray-900 text-sm mb-1">+ Nueva certificación</h3>
+      <p className="text-xs text-gray-400 mb-4">Cargá y seguí con la próxima persona, sin ventanas emergentes.</p>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Documento</label>
+          <input
+            type="text" value={documento} onChange={e => setDocumento(e.target.value)}
+            placeholder="Uruguay DO XXXXXXXX"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre completo</label>
+          <input
+            type="text" value={nombre}
+            onChange={e => setNombre(e.target.value.toUpperCase())}
+            placeholder="APELLIDO, Nombre"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha inicio</label>
+          <input
+            type="date" value={inicio} onChange={e => setInicio(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha fin</label>
+          <input
+            type="date" value={fin} onChange={e => setFin(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+          />
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Documento</label>
-            <input
-              type="text" value={documento} onChange={e => setDocumento(e.target.value)}
-              placeholder="Uruguay DO XXXXXXXX"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
-            />
+        {preview && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-800">
+            Duración: <strong>{preview.dias} días</strong> · Reintegro: <strong>{fmtDate(preview.reintegro)}</strong>
           </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre completo</label>
-            <input
-              type="text" value={nombre}
-              onChange={e => setNombre(e.target.value.toUpperCase())}
-              placeholder="APELLIDO, Nombre"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha inicio</label>
-              <input
-                type="date" value={inicio} onChange={e => setInicio(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha fin</label>
-              <input
-                type="date" value={fin} onChange={e => setFin(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
-              />
-            </div>
-          </div>
+        )}
+        {error && (
+          <div className="text-red-600 text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>
+        )}
 
-          {preview && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800">
-              Duración: <strong>{preview.dias} días</strong> · Reintegro: <strong>{fmtDate(preview.reintegro)}</strong>
-            </div>
-          )}
-
-          {error && (
-            <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>
-          )}
-        </div>
-
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose}
-            className="flex-1 border border-gray-300 rounded-lg py-2 text-sm text-gray-700 hover:bg-gray-50">
-            Cancelar
-          </button>
-          <button onClick={handleSave}
-            className="flex-1 bg-[#003DA5] text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-800">
-            Guardar
-          </button>
-        </div>
+        <button onClick={handleGuardar}
+          className="w-full bg-[#003DA5] text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-800">
+          Guardar
+        </button>
       </div>
     </div>
   );
@@ -460,11 +448,10 @@ function TextoLoaderContent({
 }
 
 function TextoLoaderModal({
-  onCargar, onClose, isOverlay,
+  onCargar, onClose,
 }: {
   onCargar: (texto: string) => void;
-  onClose?: () => void;
-  isOverlay: boolean;
+  onClose: () => void;
 }) {
   const [texto, setTexto] = useState('');
 
@@ -472,37 +459,15 @@ function TextoLoaderModal({
     if (texto.trim()) onCargar(texto);
   }
 
-  if (isOverlay) {
-    return (
-      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="font-bold text-gray-900 text-lg">Agregar certificaciones</h2>
-              <p className="text-sm text-gray-500">Pegá el texto del listado de certificaciones</p>
-            </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-          </div>
-          <TextoLoaderContent
-            texto={texto}
-            setTexto={setTexto}
-            onCargarEjemplo={() => setTexto(EJEMPLO_TEXTO)}
-            onProcesar={handleProcesar}
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
-        <div className="text-center mb-6">
-          <div className="w-14 h-14 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3">
-            <ClipboardList size={26} className="text-[#003DA5]" />
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="font-bold text-gray-900 text-lg">Agregar certificaciones</h2>
+            <p className="text-sm text-gray-500">Pegá el texto del listado de certificaciones</p>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Cargar Certificaciones</h2>
-          <p className="text-sm text-gray-500">Pegá el texto exportado del sistema de certificaciones</p>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
         </div>
         <TextoLoaderContent
           texto={texto}
@@ -553,7 +518,6 @@ export default function CertificacionesPage() {
   const [search, setSearch] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todas');
   const [sortBy, setSortBy] = useState<SortKey>('fechaFin');
-  const [showAdd, setShowAdd] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Certificacion | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showHistorial, setShowHistorial] = useState(false);
@@ -569,7 +533,6 @@ export default function CertificacionesPage() {
     const next = [...certs, cert];
     setCerts(next);
     saveData(next);
-    setShowAdd(false);
     showToast(`Certificación agregada · ${cert.nombreCompleto}`);
   }
 
@@ -686,25 +649,7 @@ export default function CertificacionesPage() {
     return <span className="text-blue-600 font-semibold text-sm">{d}d</span>;
   }
 
-  // ── Empty state ────────────────────────────────────────────────────────────
-
-  if (certs.length === 0) {
-    return (
-      <div className="flex flex-col h-full">
-        <Header
-          title="Certificaciones"
-          subtitle="Sin datos cargados"
-          actions={null}
-        />
-        <div className="flex-1 overflow-y-auto p-6 flex items-center justify-center">
-          <TextoLoaderModal isOverlay={false} onCargar={handleProcesarTexto} />
-        </div>
-        {toast && <Toast msg={toast} onClose={() => setToast(null)} />}
-      </div>
-    );
-  }
-
-  const subtitle = `${stats.total} certificaciones · ${stats.personas} personas únicas`;
+  const subtitle = certs.length > 0 ? `${stats.total} certificaciones · ${stats.personas} personas únicas` : 'Sin datos cargados';
 
   return (
     <div className="flex flex-col h-full">
@@ -731,18 +676,13 @@ export default function CertificacionesPage() {
             >
               <Trash2 size={13} /> Limpiar todo
             </button>
-            <button
-              onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#003DA5] text-white rounded-lg hover:bg-blue-800 transition-colors font-semibold"
-            >
-              <Plus size={14} /> Nueva certificación
-            </button>
           </div>
         }
       />
 
       <div className="flex-1 overflow-y-auto p-6">
-        <div id="certificaciones-content" className="max-w-[1300px] mx-auto space-y-5">
+        <div id="certificaciones-content" className="max-w-[1500px] mx-auto grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
+        <div className="space-y-5">
 
           {/* ── Alerta reintegros próximos ── */}
           {alertas.length > 0 && (
@@ -937,15 +877,16 @@ export default function CertificacionesPage() {
           )}
 
         </div>
+
+        <AddPanel onSave={handleAdd} />
+        </div>
       </div>
 
-      {showAdd && <AddModal onSave={handleAdd} onClose={() => setShowAdd(false)} />}
       {deleteTarget && (
         <DeleteModal cert={deleteTarget} onConfirm={handleDelete} onClose={() => setDeleteTarget(null)} />
       )}
       {showLoader && (
         <TextoLoaderModal
-          isOverlay={true}
           onCargar={handleProcesarTexto}
           onClose={() => setShowLoader(false)}
         />

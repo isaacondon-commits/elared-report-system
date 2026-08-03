@@ -736,3 +736,143 @@ export function parseDesempeno(
 
   return { empresaRows, distRows, hasVisitas };
 }
+
+// ── Tab 3: Activaciones por empresa (últimos 6 meses) ───────────────────────────
+
+export type Tab3Cols = {
+  cEmpresa: number; cFechaAsigPdv: number; cMid3: number; cChip3: number;
+  cDist3: number; cEstado3: number; cPdv3: number;
+};
+
+function detectTab3Columns(headers: string[]): Tab3Cols | null {
+  const cEmpresa      = findColExact(headers, 'empresa');
+  const cFechaAsigPdv = findCol(headers, ['fecha', 'asignacion', 'punto']);
+  if (cEmpresa === -1 || cFechaAsigPdv === -1) return null;
+
+  const cMid3    = findCol(headers, ['mid']);
+  const cChip3   = findCol(headers, ['chip']);
+  const cDist3   = findCol(headers, ['nombre', 'distribuidor']);
+  const cEstado3 = findCol(headers, ['estado', 'activacion']);
+  const cPdv3    = findCol(headers, ['punto', 'venta'], ['id', 'fecha']);
+
+  return { cEmpresa, cFechaAsigPdv, cMid3, cChip3, cDist3, cEstado3, cPdv3 };
+}
+
+function defaultTab3RefDate(aoa: unknown[][], cols: Tab3Cols): Date {
+  let maxD: Date | null = null;
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r] as unknown[];
+    if (!row) continue;
+    const f = parseFlexibleDate(row[cols.cFechaAsigPdv]);
+    if (f && (!maxD || f > maxD)) maxD = f;
+  }
+  return maxD ?? new Date();
+}
+
+export type Tab3LoadResult = { aoa: unknown[][]; cols: Tab3Cols; refDate: Date; rowCount: number };
+
+export async function parseTab3(file: File): Promise<Tab3LoadResult> {
+  const aoa = await readAoaFromFile(file);
+  if (!aoa || aoa.length < 2) throw new Error('El archivo no tiene datos.');
+
+  const headers = (aoa[0] as unknown[]).map(h => String(h ?? ''));
+  const cols = detectTab3Columns(headers);
+  if (!cols) {
+    throw new Error(
+      `No encontré las columnas "Empresa" y/o "Fecha asignación punto venta". Encabezados detectados: ${headers.join(', ')}`
+    );
+  }
+
+  const refDate = defaultTab3RefDate(aoa, cols);
+  return { aoa, cols, refDate, rowCount: aoa.length - 1 };
+}
+
+export type Tab3Period = { key: string; label: string };
+export type Tab3EmpresaRow = { empresa: string; values: number[]; total: number };
+export type Tab3Detail = {
+  empresa: string; periodo: string; fecha: Date; mid: string; chip: string;
+  distribuidor: string; puntoVenta: string; estado: string;
+};
+export type Tab3Result = {
+  periods: Tab3Period[];
+  rows: Tab3EmpresaRow[];
+  totalPorPeriodo: number[];
+  detail: Tab3Detail[];
+  cutoffDay: number;
+  sinFecha: number;
+  fueraDeRango: number;
+  fueraDeCorte: number;
+};
+
+const MES_CORTO3 = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function monthKey3(y: number, m: number): string {
+  return `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+
+export function runTab3Analysis(aoa: unknown[][], cols: Tab3Cols, refDate: Date): Tab3Result {
+  const periods: Tab3Period[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
+    periods.push({ key: monthKey3(d.getFullYear(), d.getMonth()), label: `${MES_CORTO3[d.getMonth()]} ${d.getFullYear()}` });
+  }
+  const periodIndex: Record<string, number> = {};
+  periods.forEach((p, i) => { periodIndex[p.key] = i; });
+
+  // Comparación pareja: si la fecha de referencia es el día X, en cada uno de los
+  // 6 meses solo se cuentan los chips asignados entre el día 1 y el día X (no el
+  // mes calendario completo), para no comparar un mes en curso a medias contra
+  // meses ya cerrados.
+  const cutoffDay = refDate.getDate();
+  let sinFecha = 0, fueraDeRango = 0, fueraDeCorte = 0;
+
+  const empresaAgg = new Map<string, number[]>();
+  const detail: Tab3Detail[] = [];
+
+  for (let r = 1; r < aoa.length; r++) {
+    const row = aoa[r] as unknown[];
+    if (!row || row.length === 0) continue;
+
+    const f = parseFlexibleDate(row[cols.cFechaAsigPdv]);
+    if (!f) { sinFecha++; continue; }
+
+    const key = monthKey3(f.getFullYear(), f.getMonth());
+    if (!(key in periodIndex)) { fueraDeRango++; continue; }
+    if (f.getDate() > cutoffDay) { fueraDeCorte++; continue; }
+
+    const emp = fixMojibake(String(row[cols.cEmpresa] ?? '').trim()) || '(sin empresa)';
+    if (!empresaAgg.has(emp)) empresaAgg.set(emp, new Array(6).fill(0));
+    empresaAgg.get(emp)![periodIndex[key]]++;
+
+    detail.push({
+      empresa: emp,
+      periodo: periods[periodIndex[key]].label,
+      fecha: f,
+      mid: cols.cMid3 >= 0 ? cleanMid(row[cols.cMid3]) : '',
+      chip: cols.cChip3 >= 0 ? String(row[cols.cChip3] ?? '').replace(/^="?/, '').replace(/"$/, '') : '',
+      distribuidor: cols.cDist3 >= 0 ? fixMojibake(String(row[cols.cDist3] ?? '')) : '',
+      puntoVenta: cols.cPdv3 >= 0 ? fixMojibake(String(row[cols.cPdv3] ?? '')) : '',
+      estado: cols.cEstado3 >= 0 ? String(row[cols.cEstado3] ?? '') : '',
+    });
+  }
+
+  const rows: Tab3EmpresaRow[] = Array.from(empresaAgg.entries())
+    .map(([empresa, values]) => ({ empresa, values, total: values.reduce((a, b) => a + b, 0) }))
+    .sort((a, b) => b.total - a.total);
+
+  const totalPorPeriodo = periods.map((_, i) => rows.reduce((s, r) => s + r.values[i], 0));
+
+  return { periods, rows, totalPorPeriodo, detail, cutoffDay, sinFecha, fueraDeRango, fueraDeCorte };
+}
+
+export function niceCeil3(v: number): number {
+  if (v <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v / pow;
+  let nice: number;
+  if (n <= 1) nice = 1;
+  else if (n <= 2) nice = 2;
+  else if (n <= 5) nice = 5;
+  else nice = 10;
+  return nice * pow;
+}

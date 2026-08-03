@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
+import type { ReactNode } from 'react';
 import {
   AlertTriangle, FileSpreadsheet, Download, RefreshCw, Upload, Loader2,
-  ChevronUp, ChevronDown,
+  ChevronUp, ChevronDown, Info, X,
 } from 'lucide-react';
 import Header from '../../components/Header';
 import FileUploader from '../../components/FileUploader';
@@ -9,11 +10,13 @@ import {
   parseChips, type ChipResult, type ParseResult,
   readAoaFromFile, classifyDesempenoFile, defaultDesempenoPeriod, parseDesempeno,
   type DesempenoResult, type DistribuidorRow,
+  parseTab3, runTab3Analysis, niceCeil3,
+  type Tab3Cols, type Tab3Result,
 } from './chipsParser';
-import { exportChipsExcel, exportChipsPDF, exportEliminadosExcel } from './ChipsExport';
+import { exportChipsExcel, exportChipsPDF, exportEliminadosExcel, exportTab3Excel, exportTab3PDF } from './ChipsExport';
 
 type Stage = 'upload' | 'loading' | 'analysis' | 'error';
-type ModuleTab = 'asignar' | 'desempeno';
+type ModuleTab = 'asignar' | 'desempeno' | 'tab3';
 
 // ── Situation colors ──────────────────────────────────────────────────────────
 
@@ -184,6 +187,8 @@ export default function ChipsModule() {
   const [toast, setToast]               = useState<string | null>(null);
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3000); }
 
+  const [showCriterios, setShowCriterios] = useState(false);
+
   const results = parseResult?.results ?? [];
 
   const empresas = useMemo(() => [...new Set(results.map(r => r.empresa).filter(Boolean))].sort(), [results]);
@@ -322,6 +327,20 @@ export default function ChipsModule() {
             }`}
           >
             Desempeño de distribuidores
+          </button>
+          <button
+            onClick={() => setModuleTab('tab3')}
+            className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${
+              moduleTab === 'tab3' ? 'bg-[#1A1A2E] text-white' : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            Activaciones por empresa
+          </button>
+          <button
+            onClick={() => setShowCriterios(true)}
+            className="ml-auto mb-2 flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors self-center"
+          >
+            <Info size={13} /> Criterios del sistema
           </button>
         </div>
 
@@ -566,7 +585,16 @@ export default function ChipsModule() {
           <DesempenoTab />
         </div>
 
+        {/* ── Tab 3: Activaciones por empresa ── */}
+        <div
+          style={moduleTab === 'tab3' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' } : { display: 'none' }}
+        >
+          <Tab3Panel />
+        </div>
+
       </div>
+
+      {showCriterios && <CriteriosModal onClose={() => setShowCriterios(false)} />}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-medium px-5 py-2.5 rounded-xl shadow-lg flex items-center gap-2">
@@ -574,6 +602,60 @@ export default function ChipsModule() {
           {toast}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Criterios del sistema ───────────────────────────────────────────────────────
+
+function CriteriosModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-7" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-1">
+          <h2 className="font-bold text-gray-900 text-lg">Criterios del sistema</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        </div>
+        <p className="text-xs text-gray-400 mb-5">Solo lectura — esto documenta cómo calcula el panel, no se puede editar desde acá.</p>
+
+        <h3 className="font-bold text-gray-800 text-sm mb-2">Asignar visitas</h3>
+        <ul className="text-[13px] text-gray-600 leading-relaxed list-disc pl-5 space-y-1.5 mb-5">
+          <li><strong>Fecha de referencia (&quot;hoy&quot;):</strong> por defecto la fecha más reciente que aparece en tus datos, pero se puede fijar manualmente arriba.</li>
+          <li><strong>Ventana de 8 meses:</strong> muestra el comportamiento/potencial de fondo del punto (asignados, activados, % activación). No cambia con las reglas nuevas.</li>
+          <li><strong>Filtro de calidad:</strong> solo se cuentan chips con Estado de activación = OK. Los que fallaron se excluyen.</li>
+          <li><strong>Puntos dados de baja:</strong> si un punto aparece en activaciones pero ya no existe en la hoja de puntos de venta, se excluye del todo (no se sugiere visitarlo).</li>
+          <li><strong>Ritmo reciente (chips/mes):</strong> usa la fecha real de la planilla de comisiones — cuenta activaciones de los últimos 3 meses ÷ 3. Si no hay fechas de comisión utilizables, usa el promedio de 8 meses como respaldo (marcado con &quot;*&quot;).</li>
+          <li><strong>Alerta de suba/baja:</strong> compara los últimos 3 meses contra los 3 anteriores (por fecha de comisión). Con al menos 3 chips activados entre ambas ventanas: caída ≥45% → Baja; suba ≥45% → Suba.</li>
+          <li><strong>Puntos eliminados (Excel):</strong> puntos con fecha de &quot;Eliminado&quot; dentro de la ventana de 8 meses, con la empresa cruzada por nombre de distribuidor contra activaciones.</li>
+          <li><strong>Vencimiento:</strong> si el chip más viejo vence en ≤30 días (o ya venció): si activó algo en la última entrega → sugiere el mínimo de sub-lotes de 5 que cubra lo vendido (ej: vendió 6 → sugiere 10), no el remanente completo. Sin activaciones y ≤2 visitas → lote mínimo de 5, a prueba. Sin activaciones y &gt;2 visitas → &quot;sin actividad&quot;, solo retirar, sin dejar nuevos.</li>
+          <li><strong>Reposición por stock bajo:</strong> el remanente suma el stock sin activar de todas las entregas de los últimos 2 meses (no solo la última), para contar los chips recién entregados como stock físico real aunque su comisión no se haya reportado todavía. Proyección = ritmo reciente × 2 meses − remanente, redondeado a múltiplos de 5.</li>
+          <li><strong>Visitar (chequeo):</strong> puntos &quot;buenos&quot; (% activación 8m ≥ 60% y ritmo reciente ≥ 3 chips/mes) sin cambio de estado hace más de 30 días se marcan para visitar como control preventivo, aunque el stock esté bien.</li>
+        </ul>
+
+        <h3 className="font-bold text-gray-800 text-sm mb-2">Desempeño de distribuidores</h3>
+        <ul className="text-[13px] text-gray-600 leading-relaxed list-disc pl-5 space-y-1.5 mb-5">
+          <li><strong>Chips asignados (período):</strong> filas cuya Fecha asignación distribuidor cae dentro del período elegido.</li>
+          <li><strong>Con/sin punto de venta:</strong> de esos chips, si tienen o no Id de Punto de venta cargado.</li>
+          <li><strong>Prom. chips/día a PDV:</strong> chips con Fecha asignación punto venta en el período ÷ días distintos con al menos una entrega.</li>
+          <li><strong>Puntos pendientes / con chip por vencer:</strong> foto actual, no se filtran por período. Cruce con distribuidor por nombre (esos archivos no traen ID de distribuidor).</li>
+          <li><strong>Total puntos activos:</strong> cantidad de puntos de venta asignados al distribuidor en la planilla de puntos de venta, excluyendo los que tienen fecha en la columna &quot;Eliminado&quot;.</li>
+          <li><strong>Departamentos principales:</strong> departamentos con 5% o más del total de puntos activos del distribuidor; los de menor peso se descartan por considerarse asignaciones viejas.</li>
+          <li><strong>Stock le alcanza para:</strong> chips sin punto de venta asignado ÷ promedio diario a PDV. Rojo ≤7 días, ámbar ≤15 días.</li>
+          <li><strong>Resumen por empresa:</strong> chips armados = Fecha de activación en el período. Activados = Estado de activación = OK dentro de esos armados.</li>
+          <li><strong>Visitas por distribuidor:</strong> sale del archivo de visitas (Fecha visita), excluyendo filas con Estado Cancelado, Pendiente, Visita de autor suprimida o Visita permanente, para cada uno de los últimos 6 días, siempre relativo a la fecha real de hoy.</li>
+        </ul>
+
+        <h3 className="font-bold text-gray-800 text-sm mb-2">Activaciones por empresa</h3>
+        <ul className="text-[13px] text-gray-600 leading-relaxed list-disc pl-5 space-y-1.5">
+          <li><strong>Fecha de referencia:</strong> por defecto la fecha de asignación a PDV más reciente en el archivo; se puede fijar manualmente y recalcular.</li>
+          <li><strong>Períodos comparables (6 meses):</strong> el mes de la fecha de referencia y los 5 anteriores.</li>
+          <li><strong>Corte por día:</strong> en cada uno de los 6 meses solo se cuentan los chips asignados entre el día 1 y el mismo día del mes de la fecha de referencia, para comparar parejo un mes en curso (incompleto) contra meses ya cerrados.</li>
+          <li><strong>Chips excluidos:</strong> los que no tienen fecha de asignación a punto de venta, los que caen fuera de la ventana de 6 meses, o los que caen después del día de corte en su mes.</li>
+          <li><strong>Por empresa:</strong> agrupa la cantidad de chips por Empresa y mes dentro de la ventana 1–día de corte, con una gráfica de barras agrupadas para comparar el ritmo de asignación de cada empresa mes a mes.</li>
+          <li><strong>Total general:</strong> suma de todas las empresas en cada uno de los 6 períodos, para ver la tendencia global.</li>
+          <li><strong>Variación último mes vs. anterior:</strong> compara el total del último período contra el del período previo, ambos ya recortados al mismo rango de días.</li>
+        </ul>
+      </div>
     </div>
   );
 }
@@ -950,6 +1032,337 @@ function DesempenoTab() {
 
       <DesempenoFootnote />
 
+      </div>
+    </>
+  );
+}
+
+// ── Tab 3: Activaciones por empresa (6 meses) ────────────────────────────────────
+
+function Kpi3Card({ label, value, borderColor, valueColor }: {
+  label: string; value: string | number; borderColor: string; valueColor?: string;
+}) {
+  const isNum = typeof value === 'number';
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4" style={{ borderTop: `3px solid ${borderColor}` }}>
+      <div className={isNum ? 'text-2xl font-bold' : 'text-base font-bold'} style={{ color: valueColor ?? '#1A1A2E' }}>
+        {isNum ? (value as number).toLocaleString('es-UY') : value}
+      </div>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mt-1">{label}</div>
+    </div>
+  );
+}
+
+const CHART3_PALETTE = [
+  '#003DA5', '#E3000F', '#28a745', '#fd7e14', '#6f42c1',
+  '#20c997', '#0052CC', '#dc3545', '#6c757d', '#ffc107',
+];
+
+function GroupedBarChart3({ categories, series, colors }: {
+  categories: string[]; series: { name: string; values: number[] }[]; colors: string[];
+}) {
+  const W = 900, H = 320, padL = 54, padR = 16, padT = 24, padB = 50;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxVal = Math.max(1, ...series.flatMap(s => s.values));
+  const niceMax = niceCeil3(maxVal);
+  const groupW = plotW / Math.max(1, categories.length);
+  const barGap = 5;
+  const barW = Math.max(4, (groupW - barGap * (series.length + 1)) / series.length);
+  const steps = 4;
+
+  const gridEls: ReactNode[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const y = padT + plotH - (plotH * i / steps);
+    const v = Math.round(niceMax * i / steps);
+    gridEls.push(
+      <line key={`g${i}`} x1={padL} y1={y} x2={W - padR} y2={y} stroke="#E2E8F0" strokeWidth={1} />,
+      <text key={`t${i}`} x={padL - 8} y={y + 4} textAnchor="end" fontSize={10} fill="#4A4A6A" fontFamily="monospace">{v.toLocaleString('es-UY')}</text>,
+    );
+  }
+
+  const barEls: ReactNode[] = [];
+  categories.forEach((cat, ci) => {
+    const groupX = padL + ci * groupW;
+    series.forEach((s, si) => {
+      const val = s.values[ci] || 0;
+      const barH = plotH * (val / niceMax);
+      const x = groupX + barGap + si * (barW + barGap);
+      const y = padT + plotH - barH;
+      barEls.push(
+        <rect key={`b${ci}-${si}`} x={x} y={y} width={barW} height={barH} style={{ fill: colors[si % colors.length] }} rx={2}>
+          <title>{s.name} — {cat}: {val}</title>
+        </rect>,
+      );
+      if (val > 0 && barW >= 9) {
+        barEls.push(
+          <text key={`v${ci}-${si}`} x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize={9} fill="#1A1A2E" fontFamily="monospace">{val}</text>,
+        );
+      }
+    });
+    barEls.push(
+      <text key={`c${ci}`} x={groupX + groupW / 2} y={H - padB + 18} textAnchor="middle" fontSize={10.5} fill="#1A1A2E" fontWeight={600}>{cat}</text>,
+    );
+  });
+
+  return (
+    <div>
+      {series.length > 1 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2 text-xs text-gray-700">
+          {series.map((s, si) => (
+            <span key={s.name} className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: colors[si % colors.length] }} />
+              {s.name}
+            </span>
+          ))}
+        </div>
+      )}
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', background: '#ffffff' }}>
+        {gridEls}
+        {barEls}
+      </svg>
+    </div>
+  );
+}
+
+function Tab3Footnote() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-3 text-left"
+      >
+        <span className="text-sm font-semibold text-gray-700">ℹ️ Cómo se calcula</span>
+        {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+      </button>
+      {open && (
+        <div className="px-5 pb-4 text-xs text-gray-500 leading-relaxed space-y-2 border-t border-gray-100 pt-3">
+          <p>Se toma la columna <b>Fecha asignación punto venta</b> de cada chip del archivo de Activaciones — es la fecha en la que ese chip quedó entregado a un punto de venta. La <b>fecha de referencia</b> es por defecto la más reciente que aparece en esa columna, pero se puede fijar manualmente arriba y volver a calcular.</p>
+          <p><b>Períodos comparables:</b> se arman 6 meses calendario (el mes de la fecha de referencia y los 5 anteriores), pero en cada uno de esos 6 meses solo se cuentan los chips asignados entre el día 1 y el mismo día del mes que tiene la fecha de referencia — así el mes en curso, que suele estar incompleto, se compara parejo contra los meses anteriores y no queda en desventaja. Los chips sin esa fecha cargada, o los que caen fuera de ese rango de 6 meses o después del día de corte en su mes, no se cuentan.</p>
+          <p><b>Por empresa:</b> agrupa la cantidad de chips por Empresa y mes (dentro de la ventana 1–día de corte), con una gráfica de barras agrupadas para comparar el ritmo de asignación de cada empresa mes a mes.</p>
+          <p><b>Total general:</b> suma de todas las empresas en cada uno de los 6 períodos, para ver la tendencia global.</p>
+          <p><b>Variación último mes vs. anterior:</b> compara el total del último período contra el del período previo, ambos ya recortados al mismo rango de días, por lo que la comparación es pareja.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function toInputDate3(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function Tab3Panel() {
+  const [aoa, setAoa]           = useState<unknown[][] | null>(null);
+  const [cols, setCols]         = useState<Tab3Cols | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [refDate, setRefDate]   = useState('');
+  const [result, setResult]     = useState<Tab3Result | null>(null);
+
+  const handleFile3 = useCallback(async (file: File) => {
+    setLoading(true); setErrorMsg(''); setFileName(file.name);
+    try {
+      const r = await parseTab3(file);
+      setAoa(r.aoa); setCols(r.cols);
+      const s = toInputDate3(r.refDate);
+      setRefDate(s);
+      setResult(runTab3Analysis(r.aoa, r.cols, r.refDate));
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al procesar el archivo');
+    }
+    setLoading(false);
+  }, []);
+
+  function handleRecalcular3() {
+    if (!aoa || !cols || !refDate) return;
+    setResult(runTab3Analysis(aoa, cols, new Date(refDate + 'T12:00:00')));
+  }
+
+  function handleReset3() {
+    setAoa(null); setCols(null); setFileName(''); setErrorMsg('');
+    setRefDate(''); setResult(null);
+  }
+
+  if (!result) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-xl mx-auto">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-100 rounded-2xl mb-3">
+              <Upload size={28} className="text-[#003DA5]" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800">Cargar archivo de Activaciones</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Subí el archivo de Activaciones con columnas <strong>Empresa</strong> y{' '}
+              <strong>Fecha asignación punto venta</strong>, con al menos 7 meses de historia.
+              El reporte compara el mismo rango de días en cada uno de los últimos 6 meses.
+            </p>
+          </div>
+          <FileUploader onFile={handleFile3} accept=".xlsx,.xls,.csv" />
+          {loading && (
+            <div className="mt-4 flex items-center justify-center gap-2 text-gray-500 text-sm">
+              <Loader2 size={16} className="animate-spin" /> Procesando archivo...
+            </div>
+          )}
+          {errorMsg && (
+            <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 whitespace-pre-line flex items-start gap-2">
+              <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+          {fileName && !errorMsg && !loading && (
+            <div className="text-xs text-gray-400 mt-2">{fileName}</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const { periods, rows, totalPorPeriodo, cutoffDay, sinFecha, fueraDeRango, fueraDeCorte, detail } = result;
+  const totalGeneral = totalPorPeriodo.reduce((a, b) => a + b, 0);
+
+  let bestIdx = 0;
+  totalPorPeriodo.forEach((v, i) => { if (v > totalPorPeriodo[bestIdx]) bestIdx = i; });
+  const mejorLabel = totalGeneral > 0
+    ? `${periods[bestIdx].label} (${totalPorPeriodo[bestIdx].toLocaleString('es-UY')})`
+    : '—';
+
+  const last = totalPorPeriodo[5], prev = totalPorPeriodo[4];
+  let varLabel = '—', varColor = '#16a34a';
+  if (prev > 0) {
+    const pct = ((last - prev) / prev) * 100;
+    varLabel = `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%`;
+    varColor = pct < 0 ? '#dc2626' : '#16a34a';
+  }
+
+  const noteParts = [
+    `Comparando el día 1 al ${cutoffDay} de cada mes (según fecha de referencia)`,
+    `Períodos: ${periods[0].label} – ${periods[5].label}`,
+  ];
+  if (sinFecha)     noteParts.push(`${sinFecha.toLocaleString('es-UY')} filas sin fecha de asignación a PDV`);
+  if (fueraDeRango) noteParts.push(`${fueraDeRango.toLocaleString('es-UY')} filas fuera del rango de 6 meses`);
+  if (fueraDeCorte) noteParts.push(`${fueraDeCorte.toLocaleString('es-UY')} filas después del día ${cutoffDay} de su mes (excluidas para comparar parejo)`);
+
+  const categories = periods.map(p => p.label);
+  const seriesEmpresas = rows.map(r => ({ name: r.empresa, values: r.values }));
+
+  return (
+    <>
+      {/* PARTE FIJA — fecha de referencia, KPIs */}
+      <div style={{ flexShrink: 0 }} className="px-6 pt-4">
+        <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-200 px-5 py-3 mb-3">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha de referencia (último día asignado a PDV):</span>
+          <input
+            type="date" value={refDate} onChange={e => setRefDate(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-[#003DA5]"
+          />
+          <button
+            onClick={handleRecalcular3}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#003DA5] hover:bg-blue-800 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <RefreshCw size={14} /> Recalcular
+          </button>
+          <span className="text-xs text-gray-400">{noteParts.join(' | ')}</span>
+          <div className="ml-auto flex gap-2">
+            <button onClick={() => exportTab3Excel(periods, rows, totalPorPeriodo, detail)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors">
+              <FileSpreadsheet size={15} /> Excel
+            </button>
+            <button onClick={() => exportTab3PDF(periods, rows, totalPorPeriodo)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
+              <Download size={15} /> PDF
+            </button>
+            <button onClick={handleReset3}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+              <RefreshCw size={15} /> Cambiar archivo
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginBottom: 12 }}>
+          <Kpi3Card label="Chips asignados a PDV (6m)" value={totalGeneral} borderColor="#20c997" valueColor="#20c997" />
+          <Kpi3Card label="Promedio mensual" value={Math.round(totalGeneral / 6)} borderColor="#20c997" valueColor="#20c997" />
+          <Kpi3Card label="Mes con más asignaciones" value={mejorLabel} borderColor="#fd7e14" />
+          <Kpi3Card label="Var. último mes vs. anterior" value={varLabel} borderColor={varColor} valueColor={varColor} />
+        </div>
+      </div>
+
+      {/* Contenido — scroll propio */}
+      <div style={{
+        flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'auto',
+        border: '1px solid #E2E8F0', borderRadius: 8, margin: '0 24px 16px', padding: 16,
+      }}>
+        <h3 className="text-sm font-bold text-gray-700 mb-2">Chips asignados a punto de venta por empresa — últimos 6 meses</h3>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+          {seriesEmpresas.length
+            ? <GroupedBarChart3 categories={categories} series={seriesEmpresas} colors={CHART3_PALETTE} />
+            : <p className="text-sm text-gray-400">Sin datos para el período.</p>}
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6 overflow-x-auto">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }} className="text-sm">
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#003DA5' }}>
+              <tr>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap">Empresa</th>
+                {periods.map(p => (
+                  <th key={p.key} className="px-3 py-2.5 text-right text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap">{p.label}</th>
+                ))}
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.empresa} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <td className="px-3 py-2 border-b border-gray-100 text-xs font-medium">{r.empresa}</td>
+                  {r.values.map((v, vi) => (
+                    <td key={vi} className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{v.toLocaleString('es-UY')}</td>
+                  ))}
+                  <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums font-bold">{r.total.toLocaleString('es-UY')}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={periods.length + 2} className="px-4 py-8 text-center text-sm text-gray-400">Sin datos en el rango de 6 meses.</td></tr>
+              )}
+              <tr className="bg-gray-100 font-bold">
+                <td className="px-3 py-2 text-xs">TOTAL</td>
+                {totalPorPeriodo.map((v, i) => (
+                  <td key={i} className="px-3 py-2 text-xs text-right tabular-nums">{v.toLocaleString('es-UY')}</td>
+                ))}
+                <td className="px-3 py-2 text-xs text-right tabular-nums">{totalGeneral.toLocaleString('es-UY')}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="text-sm font-bold text-gray-700 mb-2">Total general — todas las empresas</h3>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+          <GroupedBarChart3 categories={categories} series={[{ name: 'Total', values: totalPorPeriodo }]} colors={['#003DA5']} />
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-4 overflow-x-auto">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }} className="text-sm">
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#003DA5' }}>
+              <tr>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap">Período</th>
+                <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-white bg-[#003DA5] whitespace-nowrap">Chips asignados a PDV</th>
+              </tr>
+            </thead>
+            <tbody>
+              {periods.map((p, i) => (
+                <tr key={p.key} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <td className="px-3 py-2 border-b border-gray-100 text-xs font-medium">{p.label}</td>
+                  <td className="px-3 py-2 border-b border-gray-100 text-xs text-right tabular-nums">{totalPorPeriodo[i].toLocaleString('es-UY')}</td>
+                </tr>
+              ))}
+              <tr className="bg-gray-100 font-bold">
+                <td className="px-3 py-2 text-xs">Total 6 meses</td>
+                <td className="px-3 py-2 text-xs text-right tabular-nums">{totalGeneral.toLocaleString('es-UY')}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <Tab3Footnote />
       </div>
     </>
   );

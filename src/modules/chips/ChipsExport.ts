@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { ChipResult, ChipEliminado } from './chipsParser';
+import type { ChipResult, ChipEliminado, Tab3Period, Tab3EmpresaRow, Tab3Detail } from './chipsParser';
 
 function fmt(d: Date | null): string {
   if (!d) return '—';
@@ -156,4 +156,92 @@ export function exportChipsPDF(results: ChipResult[]): void {
   }
 
   doc.save(`Chips_${fecha.replace(/\//g, '-')}.pdf`);
+}
+
+// ── Tab 3: Activaciones por empresa (6 meses) ───────────────────────────────────
+
+export function exportTab3Excel(
+  periods: Tab3Period[],
+  rows: Tab3EmpresaRow[],
+  totalPorPeriodo: number[],
+  detail: Tab3Detail[],
+): void {
+  const wb = XLSX.utils.book_new();
+
+  const dataEmp = rows.map(r => {
+    const obj: Record<string, string | number> = { Empresa: r.empresa };
+    periods.forEach((p, i) => { obj[p.label] = r.values[i]; });
+    obj['Total'] = r.total;
+    return obj;
+  });
+  const wsEmp = XLSX.utils.json_to_sheet(dataEmp);
+  XLSX.utils.book_append_sheet(wb, wsEmp, 'Por empresa');
+
+  const dataTotal = periods.map((p, i) => ({ 'Período': p.label, 'Chips asignados a PDV': totalPorPeriodo[i] }));
+  dataTotal.push({ 'Período': 'Total 6 meses', 'Chips asignados a PDV': totalPorPeriodo.reduce((a, b) => a + b, 0) });
+  const wsTotal = XLSX.utils.json_to_sheet(dataTotal);
+  XLSX.utils.book_append_sheet(wb, wsTotal, 'Total general');
+
+  const dataDetalle = detail.map(d => ({
+    'Empresa': d.empresa,
+    'Período': d.periodo,
+    'Fecha asignación PDV': fmt(d.fecha),
+    'MID': d.mid,
+    'Chip': d.chip,
+    'Distribuidor': d.distribuidor,
+    'Punto de venta': d.puntoVenta,
+    'Estado de activación': d.estado,
+  }));
+  const wsDetalle = XLSX.utils.json_to_sheet(dataDetalle);
+  XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle (una fila por chip)');
+
+  const fecha3 = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `chips_asignados_pdv_${fecha3}.xlsx`);
+}
+
+export function exportTab3PDF(
+  periods: Tab3Period[],
+  rows: Tab3EmpresaRow[],
+  totalPorPeriodo: number[],
+): void {
+  const doc  = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W    = 297;
+  const fecha = new Date().toLocaleDateString('es-UY');
+
+  function drawHeader(subtitle: string) {
+    doc.setFillColor(0, 61, 165);  doc.rect(0, 0, W, 14, 'F');
+    doc.setFillColor(227, 0, 15);  doc.rect(0, 14, W, 1.5, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+    doc.text('ELARED · Chips — Activaciones por empresa', 7, 9);
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.setTextColor(180, 210, 255);
+    doc.text(subtitle, W / 2, 9, { align: 'center' });
+    doc.text(fecha, W - 7, 9, { align: 'right' });
+  }
+
+  drawHeader(`${periods[0]?.label ?? ''} – ${periods[5]?.label ?? ''}`);
+
+  autoTable(doc, {
+    startY: 20,
+    head: [['Empresa', ...periods.map(p => p.label), 'Total']],
+    body: rows.map(r => [r.empresa, ...r.values.map(v => v.toLocaleString('es-UY')), r.total.toLocaleString('es-UY')]),
+    foot: [['Total', ...totalPorPeriodo.map(v => v.toLocaleString('es-UY')), totalPorPeriodo.reduce((a, b) => a + b, 0).toLocaleString('es-UY')]],
+    headStyles:  { fillColor: [0, 61, 165], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    footStyles:  { fillColor: [226, 232, 240], textColor: [30, 41, 59], fontSize: 8, fontStyle: 'bold' },
+    bodyStyles:  { fontSize: 7.5 },
+    alternateRowStyles: { fillColor: [232, 240, 254] },
+    margin: { left: 7, right: 7 },
+  });
+
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFillColor(230, 238, 255); doc.rect(0, 200, W, 10, 'F');
+    doc.setFontSize(7); doc.setTextColor(74, 74, 106); doc.setFont('helvetica', 'normal');
+    doc.text('Chips · Confidencial', 7, 207);
+    doc.text(`Pág. ${p}/${pages}`, W - 7, 207, { align: 'right' });
+  }
+
+  doc.save(`chips_asignados_pdv_${new Date().toISOString().slice(0, 10)}.pdf`);
 }

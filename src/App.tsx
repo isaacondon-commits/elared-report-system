@@ -18,6 +18,7 @@ import AtencionModule from './modules/atencion/AtencionModule';
 import BackOfficePage from './pages/BackOfficePage';
 import ChipsPage from './pages/ChipsPage';
 import VicidialModule from './modules/vicidial/VicidialModule';
+import LlamadasModule from './modules/llamadas/LlamadasModule';
 import PersonalPage from './pages/PersonalPage';
 import CertificacionesPage from './pages/CertificacionesPage';
 import LicenciasPage from './pages/LicenciasPage';
@@ -93,6 +94,9 @@ function AppLayout() {
             } />
             <Route path="/pausas-vicidial" element={
               <ProtectedRoute modulo="pausas_vicidial"><VicidialModule /></ProtectedRoute>
+            } />
+            <Route path="/tiempo-llamadas" element={
+              <ProtectedRoute modulo="tiempo_llamadas"><LlamadasModule /></ProtectedRoute>
             } />
             <Route path="/personal" element={
               <ProtectedRoute modulo="personal"><PersonalPage /></ProtectedRoute>

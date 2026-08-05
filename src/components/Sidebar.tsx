@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   BarChart2, Clock, Settings, Home, Users, FileCheck,
   Smartphone, Wifi, Headphones, Briefcase, Cpu, LogOut, PauseCircle, Menu, Calendar, Umbrella,
-  UserPlus, UserMinus, FolderOpen,
+  UserPlus, UserMinus, FolderOpen, PhoneCall,
 } from 'lucide-react';
 import { useAuthContext } from '../contexts/AuthContext';
 import { tieneAcceso, NOMBRES_ROLES, ROL_COLORS, type ModuloSistema } from '../config/permisos';
@@ -27,6 +27,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/',                icon: Home,         label: 'Inicio',          modulo: 'inicio' },
       { to: '/ventas',          icon: BarChart2,    label: 'Ventas',          modulo: 'ventas' },
       { to: '/pausas-vicidial', icon: PauseCircle,  label: 'Pausas Vicidial', modulo: 'pausas_vicidial' },
+      { to: '/tiempo-llamadas', icon: PhoneCall,    label: 'Tiempo de Llamadas', modulo: 'tiempo_llamadas' },
     ],
   },
   {

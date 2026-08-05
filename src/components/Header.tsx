@@ -16,6 +16,7 @@ const BREADCRUMB_PREFIX: Record<string, string[]> = {
   '/':                  [],
   '/ventas':            ['Análisis'],
   '/pausas-vicidial':   ['Análisis'],
+  '/tiempo-llamadas':   ['Análisis'],
   '/reloj':             ['Operaciones'],
   '/sanciones':         ['Operaciones'],
   '/config':            ['Sistema'],

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { resolveOperador } from './operadores';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ function ingest(aoa: unknown[][], fname: string, acc: Accumulator): { rows: numb
     const stStr = String(st).trim();
 
     const us: unknown = ci.user >= 0 ? row[ci.user] : null;
-    const usStr = (us == null || us === '') ? '(sin user)' : String(us).trim();
+    const usStr = (us == null || us === '') ? '(sin user)' : resolveOperador(String(us).trim());
 
     const lenRaw = row[ci.len];
     const ln = typeof lenRaw === 'number' ? lenRaw : (parseInt(String(lenRaw ?? ''), 10) || 0);

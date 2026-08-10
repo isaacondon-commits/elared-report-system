@@ -696,9 +696,19 @@ function SeccionEmpresa({ stats }: { stats: GestionesStats }) {
 
 // ── Panel de debug de columnas detectadas ─────────────────────────────────────
 function DebugPanel({ data }: { data: GestionesData }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(data.total === 0);
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {data.total === 0 && (
+        <div className="flex items-start gap-2 bg-red-50 border-b border-red-200 text-red-700 px-5 py-3 text-sm">
+          <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+          <span>
+            No se detectó ninguna gestión válida en el archivo. Revisá abajo qué columna
+            (si alguna) se mapeó a cada campo — si dice "no detectada" en Estado, Concepto
+            u Operador, es probable que los valores reales sean distintos a los esperados.
+          </span>
+        </div>
+      )}
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between px-5 py-3 text-left" style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
         <span className="text-sm font-semibold text-gray-700 flex items-center gap-2">
           <Bug size={14} className="text-gray-400" /> Columnas detectadas automáticamente

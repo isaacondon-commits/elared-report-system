@@ -59,23 +59,39 @@ function normalize(str: string): string {
     .replace(/\s+/g, ' ');
 }
 
-function splitCsvLine(line: string, sep: string): string[] {
-  const result: string[] = [];
-  let current = '';
+/**
+ * Parsea el CSV completo (no línea por línea) respetando comillas, incluyendo
+ * campos entre comillas que contienen saltos de línea — algo muy probable en
+ * "Observaciones" (texto libre largo). Si se separara primero por \n y
+ * recién después por columnas, un salto de línea dentro de una observación
+ * partía un registro en dos, desalineaba el conteo de columnas de casi TODAS
+ * las filas siguientes y el filtro de líneas malformadas terminaba
+ * descartando prácticamente todo el archivo.
+ */
+function parseCsvRows(text: string, sep: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (ch === sep && !inQuotes) {
-      result.push(current); current = '';
-    } else {
-      current += ch;
+  const n = text.length;
+  let i = 0;
+  while (i < n) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      field += ch; i++; continue;
     }
+    if (ch === '"') { inQuotes = true; i++; continue; }
+    if (ch === sep) { row.push(field); field = ''; i++; continue; }
+    if (ch === '\r') { i++; continue; }
+    if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+    field += ch; i++;
   }
-  result.push(current);
-  return result;
+  if (field !== '' || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
 }
 
 // ── Detección de columnas por CONTENIDO ────────────────────────────────────────
@@ -219,13 +235,19 @@ function detectColumns(dataRows: string[][], numCols: number): { mapping: Record
     return score;
   }, 0.25);
 
-  // 10: lugar de contacto — texto corto/variado, muchos valores distintos
+  // 10: lugar de contacto — catálogo de motivos cortos que SE REPITEN mucho
+  // (ojo: no confundir con "distintos" = mejor. Un texto libre único por fila,
+  // como Observaciones, también tiene muchos valores distintos; lo que
+  // diferencia a un catálogo de motivos es que los mismos valores se repiten
+  // una y otra vez, así que se premia la REPETICIÓN, no la unicidad).
   pickBest('lugarContacto', c => {
-    if (c.distinctCount < 6) return 0;
-    if (c.avgLen < 3 || c.avgLen > 60) return 0;
+    if (c.distinctCount < 6 || c.distinctCount > 60) return 0;
+    if (c.avgLen < 3 || c.avgLen > 40) return 0;
     if (c.dateRatio > 0.1 || c.numericRatio > 0.2) return 0;
-    return c.distinctCount / (c.values.length || 1);
-  }, 0.02);
+    const cardinalityRatio = c.distinctCount / (c.values.length || 1);
+    if (cardinalityRatio > 0.5) return 0; // demasiado único → probablemente texto libre
+    return 1 - cardinalityRatio;
+  }, 0.3);
 
   // 11: operador — "Nombre Apellido"
   pickBest('operador', c => c.nameRatio, 0.6);
@@ -241,7 +263,7 @@ function detectColumns(dataRows: string[][], numCols: number): { mapping: Record
   pickBest('usuario', c => c.userRatio, 0.6);
 
   // 14: observaciones — lo que quede con el texto más largo en promedio
-  pickBest('observaciones', c => c.avgLen, 30);
+  pickBest('observaciones', c => c.avgLen, 12);
 
   return { mapping, stats };
 }
@@ -259,15 +281,12 @@ function buildGestiones(
   const rows: Gestion[] = [];
   for (const row of dataRows) {
     const fechaRaw = get(row, 'fechaCreacion');
-    const concepto = get(row, 'concepto').toUpperCase();
-    // Filas totalmente vacías (posibles residuos de líneas malformadas) se descartan.
-    if (!fechaRaw && !concepto && !get(row, 'operador') && !get(row, 'estado')) continue;
-    rows.push({
+    const g: Gestion = {
       area: get(row, 'area'),
       empresa: get(row, 'empresa'),
       numeroTramite: get(row, 'numeroTramite'),
       fechaCreacion: fechaRaw ? normalizeFechaVenta(fechaRaw).substring(0, 10) : '',
-      concepto,
+      concepto: get(row, 'concepto').toUpperCase(),
       tipoProducto: get(row, 'tipoProducto'),
       lugarContacto: get(row, 'lugarContacto'),
       equipo: get(row, 'equipo'),
@@ -277,7 +296,13 @@ function buildGestiones(
       usuario: get(row, 'usuario'),
       estado: get(row, 'estado').toUpperCase(),
       observaciones: get(row, 'observaciones'),
-    });
+    };
+    // Solo se descarta si TODOS los campos quedaron vacíos (fila realmente vacía).
+    // Antes se exigía fecha+concepto+operador+estado no vacíos a la vez, lo que
+    // borraba el archivo entero si alguno de esos 4 campos no se detectaba bien.
+    const estaVacia = Object.values(g).every(v => v === '');
+    if (estaVacia) continue;
+    rows.push(g);
   }
   return rows;
 }
@@ -328,17 +353,17 @@ async function parseGestionesCsv(file: File): Promise<GestionesData> {
   catch { text = new TextDecoder('utf-8').decode(buffer); }
   text = text.replace(/^﻿/, '');
 
-  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
-  if (lines.length < 2) throw new Error('El CSV de gestiones está vacío o sin datos.');
-
   const sep = ';';
-  const headerRow = splitCsvLine(lines[0], sep).map(h => h.trim().replace(/^"|"$/g, ''));
+  const allRows = parseCsvRows(text, sep).filter(r => !(r.length === 1 && r[0].trim() === ''));
+  if (allRows.length < 2) throw new Error('El CSV de gestiones está vacío o sin datos.');
+
+  const headerRow = allRows[0].map(h => h.trim());
   const expectedCols = headerRow.length;
 
   const dataRows: string[][] = [];
   let skippedRows = 0;
-  for (let i = 1; i < lines.length; i++) {
-    const cells = splitCsvLine(lines[i], sep).map(c => c.trim().replace(/^"|"$/g, ''));
+  for (let i = 1; i < allRows.length; i++) {
+    const cells = allRows[i].map(c => c.trim());
     if (cells.length !== expectedCols) { skippedRows++; continue; } // on_bad_lines='skip'
     dataRows.push(cells);
   }

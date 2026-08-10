@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Upload, FileText, DownloadCloud, FileSpreadsheet, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, FileText, DownloadCloud, FileSpreadsheet, ChevronDown, ChevronUp, Phone, ClipboardList } from 'lucide-react';
 import { recordActivity } from '../../utils/activityTracker';
 import Header from '../../components/Header';
 import { parseAtencion, fmtSecs, agregarHorasTodos } from './atencionParser';
@@ -8,6 +8,7 @@ import { LlamadasBarChart, HeatmapGrid, MultiLineChart, ColaBarChart, GaugeChart
 import { AtencionAlertas } from './AtencionAlertas';
 import { exportarExcel, exportarPPTX, exportarPDF } from './AtencionExport';
 import { useAnalisisStore } from '../../store/analisisStore';
+import GestionesModule from './GestionesModule';
 
 // ─── Upload stage ──────────────────────────────────────────────────────────────
 
@@ -438,7 +439,8 @@ function AnalysisStage({ data, fileName, onReset }: { data: AtencionData; fileNa
 
 type Stage = 'upload' | 'loading' | 'analysis';
 
-export default function AtencionModule() {
+// sin ningún cambio respecto al módulo original — solo se renombró para anidarlo como tab
+function LlamadasPorGrupoTab() {
   const { atencion: storeEntry, setAtencion: saveToStore, clearAtencion } = useAnalisisStore();
 
   const [stage, setStage] = useState<Stage>(() => storeEntry ? 'analysis' : 'upload');
@@ -482,6 +484,44 @@ export default function AtencionModule() {
           {error}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Contenedor con tabs ─────────────────────────────────────────────────────────
+
+type ModuleTab = 'llamadas' | 'gestiones';
+
+export default function AtencionModule() {
+  const [tab, setTab] = useState<ModuleTab>('llamadas');
+
+  return (
+    <div className="flex flex-col h-full min-w-0">
+      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 pt-3 flex gap-2">
+        <button
+          onClick={() => setTab('llamadas')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${
+            tab === 'llamadas' ? 'bg-[#1A1A2E] text-white' : 'text-gray-500 hover:bg-gray-100'
+          }`}
+        >
+          <Phone size={14} /> Llamadas por grupo
+        </button>
+        <button
+          onClick={() => setTab('gestiones')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${
+            tab === 'gestiones' ? 'bg-[#1A1A2E] text-white' : 'text-gray-500 hover:bg-gray-100'
+          }`}
+        >
+          <ClipboardList size={14} /> Gestiones
+        </button>
+      </div>
+
+      <div style={tab === 'llamadas' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : { display: 'none' }}>
+        <LlamadasPorGrupoTab />
+      </div>
+      <div style={tab === 'gestiones' ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : { display: 'none' }}>
+        <GestionesModule />
+      </div>
     </div>
   );
 }

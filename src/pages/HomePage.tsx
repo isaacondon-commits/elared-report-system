@@ -10,7 +10,7 @@ import { getAllActivity, formatActivityDate } from '../utils/activityTracker';
 import type { ModuloSistema } from '../config/permisos';
 import { useAnalisisStore, formatFechaCarga } from '../store/analisisStore';
 
-type StoreKey = 'ventas' | 'reloj' | 'sanciones' | 'vicidial' | 'atencion' | 'comisionesMovil' | 'comisionesFibra';
+type StoreKey = 'ventas' | 'reloj' | 'sanciones' | 'vicidial' | 'atencion' | 'comisionesMovil' | 'comisionesFibra' | 'backOffice';
 
 interface ModuleCard {
   to: string;
@@ -64,11 +64,15 @@ const ACTIVE_MODULES: ModuleCard[] = [
     desc: 'Comisiones de fibra óptica por vendedor, plan y condición alcanzada.',
     accent: '#003DA5', bg: 'bg-indigo-50', border: 'border-indigo-200', export: 'Excel + PPT',
   },
+  {
+    to: '/back-office', icon: Briefcase, title: 'Back Office', modulo: 'back_office', storeKey: 'backOffice',
+    desc: 'Contratos procesados, estados y rechazos desde la perspectiva del back office.',
+    accent: '#6f42c1', bg: 'bg-purple-50', border: 'border-purple-200', export: 'Excel',
+  },
 ];
 
 const COMING_MODULES: ComingCard[] = [
-  { to: '/back-office', icon: Briefcase, title: 'Back Office', accent: '#6f42c1', modulo: 'back_office' },
-  { to: '/chips',       icon: Cpu,       title: 'Chips',       accent: '#fd7e14', modulo: 'chips'       },
+  { to: '/chips', icon: Cpu, title: 'Chips', accent: '#fd7e14', modulo: 'chips' },
 ];
 
 export default function HomePage() {

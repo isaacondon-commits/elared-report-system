@@ -6,6 +6,7 @@ import type { SancionesStats } from '../modules/sanciones/SancionesModule';
 import type { VicidialData } from '../modules/vicidial/vicidialParser';
 import type { AtencionData } from '../modules/atencion/atencionParser';
 import type { LlamadasData } from '../modules/llamadas/llamadasParser';
+import type { BackOfficeStats } from '../modules/backoffice/BackOfficeModule';
 
 // ─── Entry types ───────────────────────────────────────────────────────────────
 
@@ -50,6 +51,16 @@ export interface LlamadasEntry {
   fechaCarga: string;
 }
 
+export interface BackOfficeEntry {
+  data: BackOfficeStats;
+  parsed: ParseResult;
+  mapping: Record<string, string>;
+  empresas: { nombre: string; count: number }[];
+  empresaActiva: string;
+  nombreArchivo: string;
+  fechaCarga: string;
+}
+
 export interface ComisionesEntry {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ventasRaw: any[];
@@ -89,6 +100,7 @@ interface AnalisisStore {
   llamadas:        LlamadasEntry  | null;
   comisionesMovil: ComisionesEntry | null;
   comisionesFibra: ComisionesEntry | null;
+  backOffice:      BackOfficeEntry | null;
 
   setVentas:          (e: Omit<VentasEntry,    'fechaCarga'>) => void;
   setReloj:           (e: Omit<RelojEntry,     'fechaCarga'>) => void;
@@ -98,6 +110,7 @@ interface AnalisisStore {
   setLlamadas:        (e: Omit<LlamadasEntry,  'fechaCarga'>) => void;
   setComisionesMovil: (e: Omit<ComisionesEntry,'fechaCarga'>) => void;
   setComisionesFibra: (e: Omit<ComisionesEntry,'fechaCarga'>) => void;
+  setBackOffice:      (e: Omit<BackOfficeEntry,'fechaCarga'>) => void;
 
   clearVentas:          () => void;
   clearReloj:           () => void;
@@ -107,6 +120,7 @@ interface AnalisisStore {
   clearLlamadas:        () => void;
   clearComisionesMovil: () => void;
   clearComisionesFibra: () => void;
+  clearBackOffice:      () => void;
   clearAll:             () => void;
 }
 
@@ -121,6 +135,7 @@ export const useAnalisisStore = create<AnalisisStore>((set) => ({
   llamadas:        null,
   comisionesMovil: null,
   comisionesFibra: null,
+  backOffice:      null,
 
   setVentas:          (e) => set({ ventas:          { ...e, fechaCarga: ts() } }),
   setReloj:           (e) => set({ reloj:           { ...e, fechaCarga: ts() } }),
@@ -130,6 +145,7 @@ export const useAnalisisStore = create<AnalisisStore>((set) => ({
   setLlamadas:        (e) => set({ llamadas:        { ...e, fechaCarga: ts() } }),
   setComisionesMovil: (e) => set({ comisionesMovil: { ...e, fechaCarga: ts() } }),
   setComisionesFibra: (e) => set({ comisionesFibra: { ...e, fechaCarga: ts() } }),
+  setBackOffice:      (e) => set({ backOffice:      { ...e, fechaCarga: ts() } }),
 
   clearVentas:          () => set({ ventas:          null }),
   clearReloj:           () => set({ reloj:           null }),
@@ -139,8 +155,10 @@ export const useAnalisisStore = create<AnalisisStore>((set) => ({
   clearLlamadas:        () => set({ llamadas:        null }),
   clearComisionesMovil: () => set({ comisionesMovil: null }),
   clearComisionesFibra: () => set({ comisionesFibra: null }),
+  clearBackOffice:      () => set({ backOffice:      null }),
   clearAll: () => set({
     ventas: null, reloj: null, sanciones: null, vicidial: null,
     atencion: null, llamadas: null, comisionesMovil: null, comisionesFibra: null,
+    backOffice: null,
   }),
 }));

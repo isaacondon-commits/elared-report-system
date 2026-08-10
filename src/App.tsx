@@ -15,7 +15,7 @@ import UsuariosPage from './pages/admin/UsuariosPage';
 import ComisionesMovilModule from './modules/comisiones/ComisionesMovilModule';
 import ComisionesFibraModule from './modules/comisiones/fibra/ComisionesFibraModule';
 import AtencionModule from './modules/atencion/AtencionModule';
-import BackOfficePage from './pages/BackOfficePage';
+import BackOfficeModule from './modules/backoffice/BackOfficeModule';
 import ChipsPage from './pages/ChipsPage';
 import VicidialModule from './modules/vicidial/VicidialModule';
 import LlamadasModule from './modules/llamadas/LlamadasModule';
@@ -87,7 +87,7 @@ function AppLayout() {
               <ProtectedRoute modulo="atencion_cliente"><AtencionModule /></ProtectedRoute>
             } />
             <Route path="/back-office" element={
-              <ProtectedRoute modulo="back_office"><BackOfficePage /></ProtectedRoute>
+              <ProtectedRoute modulo="back_office"><BackOfficeModule /></ProtectedRoute>
             } />
             <Route path="/chips" element={
               <ProtectedRoute modulo="chips"><ChipsPage /></ProtectedRoute>

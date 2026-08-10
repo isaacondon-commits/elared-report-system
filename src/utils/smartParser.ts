@@ -78,6 +78,7 @@ const VENTAS_FIELDS: Record<string, string[]> = {
   empresa:      ['empresa', 'company', 'negocio', 'linea', 'línea', 'servicio'],
   estado:       ['estado', 'status', 'resultado', 'situacion', 'situación'],
   backOffice:   ['back-office', 'back office', 'backoffice', 'back_office'],
+  fechaBackOffice: ['fecha de back-office', 'fecha de back office', 'fecha back-office', 'fecha back office', 'fecha de backoffice', 'fecha backoffice'],
   departamento: ['departamento', 'provincia', 'localidad'],
   modalidad:    ['modalidad de venta', 'modalidad', 'canal de venta', 'canal'],
   contrato:     ['número de contrato', 'numero de contrato', 'nro contrato', 'contrato'],

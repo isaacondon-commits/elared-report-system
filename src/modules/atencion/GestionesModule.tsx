@@ -59,28 +59,29 @@ function formatFechaCorta(iso: string): string {
 // ── Lógica de negocio ─────────────────────────────────────────────────────────
 
 export interface OperadorStat {
-  operador: string; rol: string; total: number;
+  operador: string; empresa: string; rol: string; total: number;
   consultas: number; reclamos: number; solicitudes: number; solucionados: number;
   pctSolucionados: number;
   porEstado: { estado: string; count: number }[];
   porMotivo: { motivo: string; count: number }[];
   porDia: { fecha: string; count: number }[];
 }
-export interface MotivoStat { motivo: string; consultas: number; reclamos: number; solicitudes: number; total: number; pct: number }
-export interface EstadoStat { estado: string; count: number; pct: number }
-export interface DiaStat { fecha: string; consultas: number; reclamos: number; solicitudes: number; total: number }
-export interface PlanEquipoStat { nombre: string; count: number; pct: number }
+export interface MotivoStat { motivo: string; empresa: string; consultas: number; reclamos: number; solicitudes: number; total: number; pct: number }
+export interface EstadoStat { estado: string; empresa: string; count: number; pct: number }
+export interface DiaStat { fecha: string; consultas: number; reclamos: number; solicitudes: number; total: number; porEmpresa: Record<string, number> }
+export interface PlanEquipoStat { nombre: string; empresa: string; count: number; pct: number }
 export interface EmpresaStat {
   empresa: string; total: number; consultas: number; reclamos: number; solicitudes: number;
   pctReclamos: number; solucionados: number;
 }
-export interface TiempoResolucionStat { nombre: string; promedioDias: number; n: number }
+export interface TiempoResolucionStat { nombre: string; empresa: string; promedioDias: number; n: number }
 
 export interface GestionesStats {
   total: number;
   consultas: number; reclamos: number; solicitudes: number;
   solucionados: number; supervision: number;
   operadoresActivos: number;
+  empresasList: string[];
   fechaMin: string; fechaMax: string;
   byOperador: OperadorStat[];
   byMotivo: MotivoStat[];
@@ -94,29 +95,39 @@ export interface GestionesStats {
   casosConFechaCierre: number;
 }
 
+// Todas las agrupaciones (operador, motivo, estado, plan, router, tiempo de
+// resolución) usan clave compuesta "nombre||empresa" — cada fila de las
+// tablas queda separada por empresa en vez de mezclar todas las compañías.
+const SIN_ESPECIFICAR = 'Sin especificar';
+function claveCompuesta(nombre: string, empresa: string): string {
+  return `${nombre}||${empresa || SIN_ESPECIFICAR}`;
+}
+
 export function computeGestionesStats(rows: Gestion[]): GestionesStats {
   const total = rows.length;
   let consultas = 0, reclamos = 0, solicitudes = 0, solucionados = 0, supervision = 0;
 
   interface OpAcc {
-    rol: string; total: number; consultas: number; reclamos: number; solicitudes: number; solucionados: number;
+    operador: string; empresa: string; rol: string; total: number;
+    consultas: number; reclamos: number; solicitudes: number; solucionados: number;
     estados: Map<string, number>; motivos: Map<string, number>; dias: Map<string, number>;
   }
   const operadorMap = new Map<string, OpAcc>();
-  const motivoMap = new Map<string, { consultas: number; reclamos: number; solicitudes: number; total: number }>();
-  const estadoMap = new Map<string, number>();
-  const diaMap = new Map<string, { consultas: number; reclamos: number; solicitudes: number; total: number }>();
-  const planMap = new Map<string, number>();
-  const equipoMap = new Map<string, number>();
+  const motivoMap = new Map<string, { motivo: string; empresa: string; consultas: number; reclamos: number; solicitudes: number; total: number }>();
+  const estadoMap = new Map<string, { estado: string; empresa: string; count: number }>();
+  const diaMap = new Map<string, { consultas: number; reclamos: number; solicitudes: number; total: number; porEmpresa: Record<string, number> }>();
+  const planMap = new Map<string, { nombre: string; empresa: string; count: number }>();
+  const equipoMap = new Map<string, { nombre: string; empresa: string; count: number }>();
   const empresaMap = new Map<string, { total: number; consultas: number; reclamos: number; solicitudes: number; solucionados: number }>();
-  const resolucionOperadorMap = new Map<string, { sumaDias: number; n: number }>();
-  const resolucionMotivoMap = new Map<string, { sumaDias: number; n: number }>();
+  const resolucionOperadorMap = new Map<string, { operador: string; empresa: string; sumaDias: number; n: number }>();
+  const resolucionMotivoMap = new Map<string, { motivo: string; empresa: string; sumaDias: number; n: number }>();
   let casosConFechaCierre = 0;
 
   for (const r of rows) {
     const isConsulta = r.concepto === 'CONSULTA';
     const isReclamo = r.concepto === 'RECLAMO';
     const isSolicitud = r.concepto === 'SOLICITUD';
+    const empKey = r.empresa || SIN_ESPECIFICAR;
     if (isConsulta) consultas++;
     if (isReclamo) reclamos++;
     if (isSolicitud) solicitudes++;
@@ -124,10 +135,15 @@ export function computeGestionesStats(rows: Gestion[]): GestionesStats {
     if (r.estado === 'SUPERVISION') supervision++;
 
     if (r.operador) {
-      if (!operadorMap.has(r.operador)) {
-        operadorMap.set(r.operador, { rol: r.rol, total: 0, consultas: 0, reclamos: 0, solicitudes: 0, solucionados: 0, estados: new Map(), motivos: new Map(), dias: new Map() });
+      const opKey = claveCompuesta(r.operador, r.empresa);
+      if (!operadorMap.has(opKey)) {
+        operadorMap.set(opKey, {
+          operador: r.operador, empresa: empKey, rol: r.rol, total: 0,
+          consultas: 0, reclamos: 0, solicitudes: 0, solucionados: 0,
+          estados: new Map(), motivos: new Map(), dias: new Map(),
+        });
       }
-      const o = operadorMap.get(r.operador)!;
+      const o = operadorMap.get(opKey)!;
       o.total++;
       if (isConsulta) o.consultas++;
       if (isReclamo) o.reclamos++;
@@ -139,23 +155,36 @@ export function computeGestionesStats(rows: Gestion[]): GestionesStats {
       if (r.fechaCreacion) o.dias.set(r.fechaCreacion, (o.dias.get(r.fechaCreacion) ?? 0) + 1);
     }
 
-    const motivoKey = r.lugarContacto || 'Sin especificar';
-    if (!motivoMap.has(motivoKey)) motivoMap.set(motivoKey, { consultas: 0, reclamos: 0, solicitudes: 0, total: 0 });
+    const motivoNombre = r.lugarContacto || SIN_ESPECIFICAR;
+    const motivoKey = claveCompuesta(motivoNombre, r.empresa);
+    if (!motivoMap.has(motivoKey)) motivoMap.set(motivoKey, { motivo: motivoNombre, empresa: empKey, consultas: 0, reclamos: 0, solicitudes: 0, total: 0 });
     const m = motivoMap.get(motivoKey)!;
     m.total++; if (isConsulta) m.consultas++; if (isReclamo) m.reclamos++; if (isSolicitud) m.solicitudes++;
 
-    if (r.estado) estadoMap.set(r.estado, (estadoMap.get(r.estado) ?? 0) + 1);
-
-    if (r.fechaCreacion) {
-      if (!diaMap.has(r.fechaCreacion)) diaMap.set(r.fechaCreacion, { consultas: 0, reclamos: 0, solicitudes: 0, total: 0 });
-      const d = diaMap.get(r.fechaCreacion)!;
-      d.total++; if (isConsulta) d.consultas++; if (isReclamo) d.reclamos++; if (isSolicitud) d.solicitudes++;
+    if (r.estado) {
+      const estadoKey = claveCompuesta(r.estado, r.empresa);
+      if (!estadoMap.has(estadoKey)) estadoMap.set(estadoKey, { estado: r.estado, empresa: empKey, count: 0 });
+      estadoMap.get(estadoKey)!.count++;
     }
 
-    if (r.plan) planMap.set(r.plan, (planMap.get(r.plan) ?? 0) + 1);
-    if (r.equipo) equipoMap.set(r.equipo, (equipoMap.get(r.equipo) ?? 0) + 1);
+    if (r.fechaCreacion) {
+      if (!diaMap.has(r.fechaCreacion)) diaMap.set(r.fechaCreacion, { consultas: 0, reclamos: 0, solicitudes: 0, total: 0, porEmpresa: {} });
+      const d = diaMap.get(r.fechaCreacion)!;
+      d.total++; if (isConsulta) d.consultas++; if (isReclamo) d.reclamos++; if (isSolicitud) d.solicitudes++;
+      d.porEmpresa[empKey] = (d.porEmpresa[empKey] ?? 0) + 1;
+    }
 
-    const empKey = r.empresa || 'Sin especificar';
+    if (r.plan) {
+      const planKey = claveCompuesta(r.plan, r.empresa);
+      if (!planMap.has(planKey)) planMap.set(planKey, { nombre: r.plan, empresa: empKey, count: 0 });
+      planMap.get(planKey)!.count++;
+    }
+    if (r.equipo) {
+      const equipoKey = claveCompuesta(r.equipo, r.empresa);
+      if (!equipoMap.has(equipoKey)) equipoMap.set(equipoKey, { nombre: r.equipo, empresa: empKey, count: 0 });
+      equipoMap.get(equipoKey)!.count++;
+    }
+
     if (!empresaMap.has(empKey)) empresaMap.set(empKey, { total: 0, consultas: 0, reclamos: 0, solicitudes: 0, solucionados: 0 });
     const e = empresaMap.get(empKey)!;
     e.total++; if (isConsulta) e.consultas++; if (isReclamo) e.reclamos++; if (isSolicitud) e.solicitudes++;
@@ -167,51 +196,52 @@ export function computeGestionesStats(rows: Gestion[]): GestionesStats {
       if (Number.isFinite(dias) && dias >= 0) {
         casosConFechaCierre++;
         if (r.operador) {
-          const prevOp = resolucionOperadorMap.get(r.operador) ?? { sumaDias: 0, n: 0 };
-          resolucionOperadorMap.set(r.operador, { sumaDias: prevOp.sumaDias + dias, n: prevOp.n + 1 });
+          const opResKey = claveCompuesta(r.operador, r.empresa);
+          const prevOp = resolucionOperadorMap.get(opResKey) ?? { operador: r.operador, empresa: empKey, sumaDias: 0, n: 0 };
+          resolucionOperadorMap.set(opResKey, { ...prevOp, sumaDias: prevOp.sumaDias + dias, n: prevOp.n + 1 });
         }
-        const prevMot = resolucionMotivoMap.get(motivoKey) ?? { sumaDias: 0, n: 0 };
-        resolucionMotivoMap.set(motivoKey, { sumaDias: prevMot.sumaDias + dias, n: prevMot.n + 1 });
+        const prevMot = resolucionMotivoMap.get(motivoKey) ?? { motivo: motivoNombre, empresa: empKey, sumaDias: 0, n: 0 };
+        resolucionMotivoMap.set(motivoKey, { ...prevMot, sumaDias: prevMot.sumaDias + dias, n: prevMot.n + 1 });
       }
     }
   }
 
-  const byOperador: OperadorStat[] = Array.from(operadorMap.entries()).map(([operador, o]) => ({
-    operador, rol: o.rol, total: o.total, consultas: o.consultas, reclamos: o.reclamos, solicitudes: o.solicitudes,
+  const byOperador: OperadorStat[] = Array.from(operadorMap.values()).map(o => ({
+    operador: o.operador, empresa: o.empresa, rol: o.rol, total: o.total, consultas: o.consultas, reclamos: o.reclamos, solicitudes: o.solicitudes,
     solucionados: o.solucionados, pctSolucionados: o.total > 0 ? (o.solucionados / o.total) * 100 : 0,
     porEstado: Array.from(o.estados.entries()).map(([estado, count]) => ({ estado, count })).sort((a, b) => b.count - a.count),
     porMotivo: Array.from(o.motivos.entries()).map(([motivo, count]) => ({ motivo, count })).sort((a, b) => b.count - a.count).slice(0, 10),
     porDia: Array.from(o.dias.entries()).map(([fecha, count]) => ({ fecha, count })).sort((a, b) => a.fecha.localeCompare(b.fecha)),
   })).sort((a, b) => b.total - a.total);
 
-  const byMotivo: MotivoStat[] = Array.from(motivoMap.entries())
-    .map(([motivo, v]) => ({ motivo, ...v, pct: total > 0 ? (v.total / total) * 100 : 0 }))
+  const byMotivo: MotivoStat[] = Array.from(motivoMap.values())
+    .map(v => ({ ...v, pct: total > 0 ? (v.total / total) * 100 : 0 }))
     .sort((a, b) => b.total - a.total);
-  const byEstado: EstadoStat[] = Array.from(estadoMap.entries())
-    .map(([estado, count]) => ({ estado, count, pct: total > 0 ? (count / total) * 100 : 0 }))
+  const byEstado: EstadoStat[] = Array.from(estadoMap.values())
+    .map(v => ({ ...v, pct: total > 0 ? (v.count / total) * 100 : 0 }))
     .sort((a, b) => b.count - a.count);
   const byDia: DiaStat[] = Array.from(diaMap.entries()).map(([fecha, v]) => ({ fecha, ...v })).sort((a, b) => b.fecha.localeCompare(a.fecha));
-  const byPlan: PlanEquipoStat[] = Array.from(planMap.entries())
-    .map(([nombre, count]) => ({ nombre, count, pct: total > 0 ? (count / total) * 100 : 0 })).sort((a, b) => b.count - a.count);
-  const byEquipo: PlanEquipoStat[] = Array.from(equipoMap.entries())
-    .map(([nombre, count]) => ({ nombre, count, pct: total > 0 ? (count / total) * 100 : 0 })).sort((a, b) => b.count - a.count);
+  const byPlan: PlanEquipoStat[] = Array.from(planMap.values()).map(v => ({ ...v, pct: total > 0 ? (v.count / total) * 100 : 0 })).sort((a, b) => b.count - a.count);
+  const byEquipo: PlanEquipoStat[] = Array.from(equipoMap.values()).map(v => ({ ...v, pct: total > 0 ? (v.count / total) * 100 : 0 })).sort((a, b) => b.count - a.count);
   const byEmpresa: EmpresaStat[] = Array.from(empresaMap.entries()).map(([empresa, v]) => ({
     empresa, total: v.total, consultas: v.consultas, reclamos: v.reclamos, solicitudes: v.solicitudes,
     pctReclamos: v.total > 0 ? (v.reclamos / v.total) * 100 : 0, solucionados: v.solucionados,
   })).sort((a, b) => b.total - a.total);
 
-  const tiempoResolucionOperador: TiempoResolucionStat[] = Array.from(resolucionOperadorMap.entries())
-    .map(([nombre, v]) => ({ nombre, promedioDias: v.sumaDias / v.n, n: v.n }))
+  const tiempoResolucionOperador: TiempoResolucionStat[] = Array.from(resolucionOperadorMap.values())
+    .map(v => ({ nombre: v.operador, empresa: v.empresa, promedioDias: v.sumaDias / v.n, n: v.n }))
     .sort((a, b) => b.promedioDias - a.promedioDias);
-  const tiempoResolucionMotivo: TiempoResolucionStat[] = Array.from(resolucionMotivoMap.entries())
-    .map(([nombre, v]) => ({ nombre, promedioDias: v.sumaDias / v.n, n: v.n }))
+  const tiempoResolucionMotivo: TiempoResolucionStat[] = Array.from(resolucionMotivoMap.values())
+    .map(v => ({ nombre: v.motivo, empresa: v.empresa, promedioDias: v.sumaDias / v.n, n: v.n }))
     .sort((a, b) => b.promedioDias - a.promedioDias);
 
   const fechas = rows.map(r => r.fechaCreacion).filter(Boolean).sort();
+  const empresasList = Array.from(empresaMap.keys()).sort();
 
   return {
     total, consultas, reclamos, solicitudes, solucionados, supervision,
-    operadoresActivos: operadorMap.size,
+    operadoresActivos: new Set(Array.from(operadorMap.values()).map(o => o.operador)).size,
+    empresasList,
     fechaMin: fechas[0] ?? '', fechaMax: fechas[fechas.length - 1] ?? '',
     byOperador, byMotivo, byEstado, byDia, byPlan, byEquipo, byEmpresa,
     tiempoResolucionOperador, tiempoResolucionMotivo, casosConFechaCierre,
@@ -313,7 +343,10 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
     { key: 'pctSolucionados', label: '% Soluc.' },
   ];
 
-  const top10 = [...stats.byOperador].slice(0, 10).map(o => ({ nombre: o.operador.length > 18 ? o.operador.slice(0, 17) + '…' : o.operador, total: o.total }));
+  const top10 = [...stats.byOperador].slice(0, 10).map(o => ({
+    nombre: `${o.operador.length > 14 ? o.operador.slice(0, 13) + '…' : o.operador} · ${o.empresa}`,
+    total: o.total,
+  }));
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -324,6 +357,7 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
             <tr className="bg-[#003DA5] text-white">
               <th className="px-2 py-2 text-center text-xs font-semibold w-8">#</th>
               <th className="px-3 py-2 text-left text-xs font-semibold">Rol</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold">Empresa</th>
               {cols.map(c => (
                 <th key={c.key} onClick={() => handleSort(c.key)}
                   className={`px-3 py-2 text-xs font-semibold cursor-pointer select-none whitespace-nowrap ${c.key === 'operador' ? 'text-left' : 'text-right'}`}>
@@ -334,14 +368,16 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
           </thead>
           <tbody>
             {rows.map((o, i) => {
-              const isOpen = expandido === o.operador;
+              const rowKey = `${o.operador}||${o.empresa}`;
+              const isOpen = expandido === rowKey;
               const badge = pctSolucionadosBadge(o.pctSolucionados);
               return (
                 <>
-                  <tr key={o.operador} onClick={() => setExpandido(isOpen ? null : o.operador)}
+                  <tr key={rowKey} onClick={() => setExpandido(isOpen ? null : rowKey)}
                     className={`border-t border-gray-100 cursor-pointer hover:bg-blue-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     <td className="px-2 py-2 text-center text-xs text-gray-400">{i + 1}</td>
                     <td className="px-3 py-2 text-xs text-gray-500">{o.rol.includes('Supervisor') ? 'Supervisor' : 'Operador'}</td>
+                    <td className="px-3 py-2 text-xs text-gray-500">{o.empresa}</td>
                     <td className="px-3 py-2 font-medium text-gray-800">
                       <span className="inline-flex items-center gap-1">
                         {isOpen ? <ChevronDown size={13} className="text-gray-400" /> : <ChevronRight size={13} className="text-gray-400" />}
@@ -358,8 +394,8 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
                     </td>
                   </tr>
                   {isOpen && (
-                    <tr key={`${o.operador}-detail`}>
-                      <td colSpan={9} className="p-0"><OperadorDetail op={o} /></td>
+                    <tr key={`${rowKey}-detail`}>
+                      <td colSpan={10} className="p-0"><OperadorDetail op={o} /></td>
                     </tr>
                   )}
                 </>
@@ -373,7 +409,7 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
           <BarChart data={top10} layout="vertical" margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-            <YAxis dataKey="nombre" type="category" tick={{ fontSize: 10 }} width={130} />
+            <YAxis dataKey="nombre" type="category" tick={{ fontSize: 10 }} width={170} />
             <Tooltip formatter={(v: unknown) => [Number(v).toLocaleString(), 'Gestiones']} />
             <Bar dataKey="total" fill={P.azul} radius={[0, 4, 4, 0]}>
               <LabelList dataKey="total" position="right" style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
@@ -401,14 +437,16 @@ function TablaTiempoResolucion({ titulo, data }: { titulo: string; data: TiempoR
           <thead>
             <tr className="bg-[#003DA5] text-white">
               <th className="px-3 py-2 text-left text-xs font-semibold">{titulo}</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold">Empresa</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Prom. días</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Casos</th>
             </tr>
           </thead>
           <tbody>
             {data.map((d, i) => (
-              <tr key={d.nombre} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+              <tr key={`${d.nombre}||${d.empresa}`} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                 <td className="px-3 py-1.5 text-gray-800">{d.nombre}</td>
+                <td className="px-3 py-1.5 text-gray-500 text-xs">{d.empresa}</td>
                 <td className="px-3 py-1.5 text-right font-bold text-[#003DA5]">{d.promedioDias.toFixed(1)}</td>
                 <td className="px-3 py-1.5 text-right text-gray-500 text-xs">{d.n}</td>
               </tr>
@@ -481,7 +519,10 @@ function SeccionMotivos({ stats }: { stats: GestionesStats }) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paged = filtered.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
 
-  const top15 = stats.byMotivo.slice(0, 15).map(m => ({ nombre: m.motivo.length > 22 ? m.motivo.slice(0, 21) + '…' : m.motivo, total: m.total }));
+  const top15 = stats.byMotivo.slice(0, 15).map(m => ({
+    nombre: `${m.motivo.length > 18 ? m.motivo.slice(0, 17) + '…' : m.motivo} · ${m.empresa}`,
+    total: m.total,
+  }));
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -499,6 +540,7 @@ function SeccionMotivos({ stats }: { stats: GestionesStats }) {
           <thead>
             <tr className="bg-[#003DA5] text-white">
               <th className="px-3 py-2 text-left text-xs font-semibold">Motivo</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold">Empresa</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Consultas</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Reclamos</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Solicitudes</th>
@@ -508,8 +550,9 @@ function SeccionMotivos({ stats }: { stats: GestionesStats }) {
           </thead>
           <tbody>
             {paged.map((m, i) => (
-              <tr key={m.motivo} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+              <tr key={`${m.motivo}||${m.empresa}`} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                 <td className="px-3 py-1.5 text-gray-800">{m.motivo}</td>
+                <td className="px-3 py-1.5 text-gray-500 text-xs">{m.empresa}</td>
                 <td className="px-3 py-1.5 text-right text-gray-600">{m.consultas}</td>
                 <td className="px-3 py-1.5 text-right text-red-600">{m.reclamos}</td>
                 <td className="px-3 py-1.5 text-right text-green-700">{m.solicitudes}</td>
@@ -518,7 +561,7 @@ function SeccionMotivos({ stats }: { stats: GestionesStats }) {
               </tr>
             ))}
             {paged.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400 text-sm">Sin resultados</td></tr>
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400 text-sm">Sin resultados</td></tr>
             )}
           </tbody>
         </table>
@@ -551,7 +594,7 @@ function SeccionMotivos({ stats }: { stats: GestionesStats }) {
 
 // ── Sección 4: Distribución por estado ────────────────────────────────────────
 function SeccionEstado({ stats }: { stats: GestionesStats }) {
-  const data = stats.byEstado.map(e => ({ ...e, color: estadoBadge(e.estado).color }));
+  const data = stats.byEstado.map(e => ({ ...e, color: estadoBadge(e.estado).color, label: `${e.estado} · ${e.empresa}` }));
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <h3 className="font-semibold text-gray-900 mb-4">Distribución por estado</h3>
@@ -561,6 +604,7 @@ function SeccionEstado({ stats }: { stats: GestionesStats }) {
             <thead>
               <tr className="bg-[#003DA5] text-white">
                 <th className="px-3 py-2 text-left text-xs font-semibold">Estado</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold">Empresa</th>
                 <th className="px-3 py-2 text-right text-xs font-semibold">Cantidad</th>
                 <th className="px-3 py-2 text-right text-xs font-semibold">%</th>
                 <th className="px-3 py-2 text-left text-xs font-semibold">Descripción</th>
@@ -570,10 +614,11 @@ function SeccionEstado({ stats }: { stats: GestionesStats }) {
               {data.map((e, i) => {
                 const b = estadoBadge(e.estado);
                 return (
-                  <tr key={e.estado} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <tr key={`${e.estado}||${e.empresa}`} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     <td className="px-3 py-2">
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: b.bg, color: b.fg }}>{e.estado}</span>
                     </td>
+                    <td className="px-3 py-2 text-xs text-gray-500">{e.empresa}</td>
                     <td className="px-3 py-2 text-right font-bold text-[#003DA5]">{e.count.toLocaleString()}</td>
                     <td className="px-3 py-2 text-right text-gray-500 text-xs">{e.pct.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-xs text-gray-500">{b.desc}</td>
@@ -587,7 +632,7 @@ function SeccionEstado({ stats }: { stats: GestionesStats }) {
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-            <YAxis dataKey="estado" type="category" tick={{ fontSize: 10 }} width={100} />
+            <YAxis dataKey="label" type="category" tick={{ fontSize: 10 }} width={140} />
             <Tooltip formatter={(v: unknown) => [Number(v).toLocaleString(), '']} />
             <Bar dataKey="count" radius={[0, 4, 4, 0]}>
               <LabelList dataKey="count" position="right" style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
@@ -637,6 +682,9 @@ function SeccionEvolucion({ stats }: { stats: GestionesStats }) {
               <th className="px-3 py-2 text-right text-xs font-semibold">Reclamos</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Solicitudes</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Total</th>
+              {stats.empresasList.map(emp => (
+                <th key={emp} className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap">{emp}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -647,6 +695,14 @@ function SeccionEvolucion({ stats }: { stats: GestionesStats }) {
                 <td className="px-3 py-1.5 text-right text-red-600">{d.reclamos}</td>
                 <td className="px-3 py-1.5 text-right text-green-700">{d.solicitudes}</td>
                 <td className="px-3 py-1.5 text-right font-bold text-[#003DA5]">{d.total}</td>
+                {stats.empresasList.map(emp => {
+                  const v = d.porEmpresa[emp] ?? 0;
+                  return (
+                    <td key={emp} className="px-3 py-1.5 text-right whitespace-nowrap">
+                      {v === 0 ? <span className="text-gray-300">—</span> : <span className="text-gray-600">{v}</span>}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -672,14 +728,16 @@ function TablaPlanEquipo({ titulo, data }: { titulo: string; data: PlanEquipoSta
           <thead>
             <tr className="bg-[#003DA5] text-white">
               <th className="px-3 py-2 text-left text-xs font-semibold">{titulo}</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold">Empresa</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Cantidad</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">%</th>
             </tr>
           </thead>
           <tbody>
             {data.map((d, i) => (
-              <tr key={d.nombre} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+              <tr key={`${d.nombre}||${d.empresa}`} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                 <td className="px-3 py-1.5 text-gray-800">{d.nombre}</td>
+                <td className="px-3 py-1.5 text-gray-500 text-xs">{d.empresa}</td>
                 <td className="px-3 py-1.5 text-right font-bold text-[#003DA5]">{d.count.toLocaleString()}</td>
                 <td className="px-3 py-1.5 text-right text-gray-500 text-xs">{d.pct.toFixed(1)}%</td>
               </tr>

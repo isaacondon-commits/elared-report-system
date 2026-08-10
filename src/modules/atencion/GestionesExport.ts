@@ -27,34 +27,37 @@ export function exportGestionesExcel(stats: GestionesStats, rows: Gestion[]): vo
   styledExcelSheet(wb, 'Resumen', resumenHeaders, resumenRows);
 
   // ── Hoja 2: Por operador ──
-  const opHeaders = ['Operador', 'Rol', 'Total', 'Consultas', 'Reclamos', 'Solicitudes', 'Solucionados', '% Solucionados'];
+  const opHeaders = ['Operador', 'Empresa', 'Rol', 'Total', 'Consultas', 'Reclamos', 'Solicitudes', 'Solucionados', '% Solucionados'];
   const opRows: (string | number)[][] = stats.byOperador.map(o => [
-    o.operador, o.rol, o.total, o.consultas, o.reclamos, o.solicitudes, o.solucionados, `${o.pctSolucionados.toFixed(1)}%`,
+    o.operador, o.empresa, o.rol, o.total, o.consultas, o.reclamos, o.solicitudes, o.solucionados, `${o.pctSolucionados.toFixed(1)}%`,
   ]);
   styledExcelSheet(wb, 'Por operador', opHeaders, opRows);
 
   // ── Hoja 3: Por motivo ──
-  const motivoHeaders = ['Motivo', 'Consultas', 'Reclamos', 'Solicitudes', 'Total', '%'];
+  const motivoHeaders = ['Motivo', 'Empresa', 'Consultas', 'Reclamos', 'Solicitudes', 'Total', '%'];
   const motivoRows: (string | number)[][] = stats.byMotivo.map(m => [
-    m.motivo, m.consultas, m.reclamos, m.solicitudes, m.total, `${m.pct.toFixed(1)}%`,
+    m.motivo, m.empresa, m.consultas, m.reclamos, m.solicitudes, m.total, `${m.pct.toFixed(1)}%`,
   ]);
   styledExcelSheet(wb, 'Por motivo', motivoHeaders, motivoRows);
 
   // ── Hoja 4: Por estado ──
-  const estadoHeaders = ['Estado', 'Cantidad', '%'];
-  const estadoRows: (string | number)[][] = stats.byEstado.map(e => [e.estado, e.count, `${e.pct.toFixed(1)}%`]);
+  const estadoHeaders = ['Estado', 'Empresa', 'Cantidad', '%'];
+  const estadoRows: (string | number)[][] = stats.byEstado.map(e => [e.estado, e.empresa, e.count, `${e.pct.toFixed(1)}%`]);
   styledExcelSheet(wb, 'Por estado', estadoHeaders, estadoRows);
 
-  // ── Hoja 5: Por día ──
-  const diaHeaders = ['Fecha', 'Consultas', 'Reclamos', 'Solicitudes', 'Total'];
-  const diaRows: (string | number)[][] = stats.byDia.map(d => [formatFecha(d.fecha), d.consultas, d.reclamos, d.solicitudes, d.total]);
+  // ── Hoja 5: Por día (con columnas por empresa) ──
+  const diaHeaders = ['Fecha', 'Consultas', 'Reclamos', 'Solicitudes', 'Total', ...stats.empresasList];
+  const diaRows: (string | number)[][] = stats.byDia.map(d => [
+    formatFecha(d.fecha), d.consultas, d.reclamos, d.solicitudes, d.total,
+    ...stats.empresasList.map(emp => d.porEmpresa[emp] ?? 0),
+  ]);
   styledExcelSheet(wb, 'Por dia', diaHeaders, diaRows);
 
   // ── Hoja 6: Tiempo de resolución (por operador y por tipo de contacto) ──
-  const resHeaders = ['Tipo', 'Nombre', 'Promedio días', 'Casos'];
+  const resHeaders = ['Tipo', 'Nombre', 'Empresa', 'Promedio días', 'Casos'];
   const resRows: (string | number)[][] = [
-    ...stats.tiempoResolucionOperador.map(o => ['Operador', o.nombre, Number(o.promedioDias.toFixed(1)), o.n]),
-    ...stats.tiempoResolucionMotivo.map(m => ['Tipo de contacto', m.nombre, Number(m.promedioDias.toFixed(1)), m.n]),
+    ...stats.tiempoResolucionOperador.map(o => ['Operador', o.nombre, o.empresa, Number(o.promedioDias.toFixed(1)), o.n]),
+    ...stats.tiempoResolucionMotivo.map(m => ['Tipo de contacto', m.nombre, m.empresa, Number(m.promedioDias.toFixed(1)), m.n]),
   ] as (string | number)[][];
   styledExcelSheet(wb, 'Tiempo resolucion', resHeaders, resRows);
 

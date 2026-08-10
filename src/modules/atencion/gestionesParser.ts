@@ -52,21 +52,12 @@ function fixEncoding(str: string): string {
   }
 }
 
-function normalize(str: string): string {
-  return fixEncoding(str)
-    .toLowerCase().trim()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ');
-}
-
 /**
  * Parsea el CSV completo (no línea por línea) respetando comillas, incluyendo
  * campos entre comillas que contienen saltos de línea — algo muy probable en
  * "Observaciones" (texto libre largo). Si se separara primero por \n y
  * recién después por columnas, un salto de línea dentro de una observación
- * partía un registro en dos, desalineaba el conteo de columnas de casi TODAS
- * las filas siguientes y el filtro de líneas malformadas terminaba
- * descartando prácticamente todo el archivo.
+ * partía un registro en dos y desalineaba el conteo de columnas de ahí en más.
  */
 function parseCsvRows(text: string, sep: string): string[][] {
   const rows: string[][] = [];
@@ -94,212 +85,74 @@ function parseCsvRows(text: string, sep: string): string[][] {
   return rows;
 }
 
-// ── Detección de columnas por CONTENIDO ────────────────────────────────────────
+// ── Mapeo por POSICIÓN REAL (no por header) ────────────────────────────────────
+//
+// El CSV trae 20 headers en la fila 0, pero cada fila de datos tiene en
+// realidad 24 columnas — la primera (Área) no tiene header propio y corre
+// todo lo demás. Los headers de la fila 0 NO sirven para saber a qué
+// corresponde cada dato; hay que ubicarlos por posición real.
+//
+// Posiciones verificadas contra un archivo real (1034 filas):
+//   total=1034, Concepto CONSULTA=528/RECLAMO=293/SOLICITUD=191,
+//   Estado SOLUCIONADO=886/SUPERVISION=80/ANTEL=38/COMERCIAL=14/
+//   RECHAZADO=10/LLAMAR=6, Rol Operador=860/Supervisor=174 — coinciden
+//   exactamente con estas posiciones.
+//
+// Caso especial — OPERADOR: cuando Rol es "Supervisor…" (col 20), el
+// supervisor actuó directamente y su nombre queda en la col 19 en vez de
+// la 21 (la 21 queda vacía). Cuando Rol es "Operador…", el nombre está en
+// la col 21 normalmente.
+const COL = {
+  area: 0,
+  empresa: 1,
+  numeroTramite: 3,
+  fechaCreacion: 5,
+  concepto: 6,
+  tipoProducto: 7,
+  lugarContacto: 11,
+  equipo: 12,
+  plan: 13,
+  rol: 20,
+  operadorPrincipal: 21,   // usado cuando Rol = Operador
+  operadorSupervisor: 19,  // usado cuando Rol = Supervisor
+  estado: 22,
+  observaciones: 23,
+} as const;
 
-type FieldKey =
-  | 'estado' | 'concepto' | 'rol' | 'fechaCreacion' | 'area' | 'empresa'
-  | 'tipoProducto' | 'equipo' | 'plan' | 'lugarContacto' | 'operador'
-  | 'usuario' | 'numeroTramite' | 'observaciones';
+const MIN_COLUMNAS = 20;
 
-const ESTADO_SET = ['solucionado', 'supervision', 'antel', 'rechazado', 'comercial', 'llamar'];
-const CONCEPTO_SET = ['consulta', 'reclamo', 'solicitud'];
-const DATE_RE = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
-const NAME_RE = /^[A-Za-zÀ-ÿ'.-]+(\s[A-Za-zÀ-ÿ'.-]+){1,2}$/;
-const USER_RE = /^[A-Za-z0-9._-]{3,20}$/;
-const EQUIPO_CODE_RE = /^[A-Za-z]\d{2,4}$/;
-
-interface ColStats {
-  index: number;
-  values: string[];      // valores crudos no vacíos
-  normValues: string[];  // normalizados
-  distinctCount: number;
-  topRatio: number;      // frecuencia del valor normalizado más común
-  topValue: string;
-  avgLen: number;
-  dateRatio: number;
-  numericRatio: number;
-  nameRatio: number;
-  userRatio: number;
+function celda(row: string[], idx: number): string {
+  return fixEncoding((row[idx] ?? '').toString().trim());
 }
 
-function computeColStats(dataRows: string[][], numCols: number): ColStats[] {
-  const stats: ColStats[] = [];
-  for (let c = 0; c < numCols; c++) {
-    // fixEncoding ANTES de analizar — si no, los acentos mal decodificados (mojibake)
-    // rompen los regex de nombres/patrones (ej: "López" → "LÃ³pez").
-    const raw = dataRows.map(r => fixEncoding((r[c] ?? '').toString().trim())).filter(v => v !== '');
-    const norm = raw.map(normalize);
-    const freq = new Map<string, number>();
-    for (const v of norm) freq.set(v, (freq.get(v) ?? 0) + 1);
-    let topValue = '', topCount = 0;
-    for (const [v, n] of freq.entries()) if (n > topCount) { topCount = n; topValue = v; }
-    const n = raw.length || 1;
-    stats.push({
-      index: c,
-      values: raw,
-      normValues: norm,
-      distinctCount: freq.size,
-      topRatio: topCount / n,
-      topValue,
-      avgLen: raw.reduce((s, v) => s + v.length, 0) / n,
-      dateRatio: raw.filter(v => DATE_RE.test(v)).length / n,
-      numericRatio: raw.filter(v => /^\d+$/.test(v)).length / n,
-      nameRatio: raw.filter(v => NAME_RE.test(v) && !/\d/.test(v)).length / n,
-      userRatio: raw.filter(v => USER_RE.test(v) && /[A-Za-z]/.test(v)).length / n,
-    });
-  }
-  return stats;
-}
+function buildGestion(row: string[]): Gestion {
+  const fechaRaw = celda(row, COL.fechaCreacion);
+  const rol = celda(row, COL.rol);
+  const esSupervisor = rol.toLowerCase().includes('supervisor');
+  const operador = esSupervisor ? celda(row, COL.operadorSupervisor) : celda(row, COL.operadorPrincipal);
 
-function setMatchRatio(col: ColStats, set: string[]): number {
-  if (col.values.length === 0) return 0;
-  return col.normValues.filter(v => set.includes(v)).length / col.normValues.length;
-}
-
-function substringMatchRatio(col: ColStats, needles: string[]): number {
-  if (col.values.length === 0) return 0;
-  return col.normValues.filter(v => needles.some(n => v.includes(n))).length / col.normValues.length;
-}
-
-/**
- * Detecta a qué campo corresponde cada columna del CSV/Excel de Gestiones
- * mirando el CONTENIDO real de los datos, no los headers (que vienen corridos
- * / mal rotulados en el archivo real). Orden: primero vocabularios cerrados
- * (estado/concepto/rol) por ser los más inconfundibles, luego patrones
- * estructurales (fecha), luego columnas cuasi-constantes (área), y por último
- * las más "libres" (empresa/equipo/plan/lugar de contacto/operador/etc).
- */
-function detectColumns(dataRows: string[][], numCols: number): { mapping: Record<FieldKey, number | null>; stats: ColStats[] } {
-  const stats = computeColStats(dataRows, numCols);
-  const claimed = new Set<number>();
-  const mapping = {} as Record<FieldKey, number | null>;
-
-  function pickBest(field: FieldKey, score: (c: ColStats) => number, threshold: number) {
-    let best: ColStats | null = null;
-    let bestScore = threshold;
-    for (const c of stats) {
-      if (claimed.has(c.index)) continue;
-      const s = score(c);
-      if (s > bestScore) { bestScore = s; best = c; }
-    }
-    mapping[field] = best ? best.index : null;
-    if (best) claimed.add(best.index);
-  }
-
-  // 1-3: vocabularios cerrados
-  pickBest('estado', c => setMatchRatio(c, ESTADO_SET), 0.6);
-  pickBest('concepto', c => setMatchRatio(c, CONCEPTO_SET), 0.6);
-  pickBest('rol', c => substringMatchRatio(c, ['operador', 'supervisor']), 0.6);
-
-  // 4: primera columna (de izq. a derecha) con patrón de fecha d/M/yyyy
-  {
-    let found: ColStats | null = null;
-    for (const c of stats) {
-      if (claimed.has(c.index)) continue;
-      if (c.dateRatio > 0.6) { found = c; break; }
-    }
-    mapping.fechaCreacion = found ? found.index : null;
-    if (found) claimed.add(found.index);
-  }
-
-  // 5: área — columna casi constante que contiene "atencion"
-  pickBest('area', c => (c.topRatio > 0.85 && c.topValue.includes('atencion')) ? c.topRatio : 0, 0.5);
-
-  // 6: empresa — pocos valores distintos, cortos, sin fechas/números
-  pickBest('empresa', c => {
-    if (c.distinctCount < 2 || c.distinctCount > 15) return 0;
-    if (c.avgLen > 25) return 0;
-    if (c.dateRatio > 0.1 || c.numericRatio > 0.1) return 0;
-    return 1 - c.avgLen / 25; // más corto = mejor puntaje
-  }, 0.05);
-
-  // 7: tipo de producto — baja cardinalidad, valor dominante tipo "fibra/movil/tv"
-  pickBest('tipoProducto', c => {
-    if (c.distinctCount > 8) return 0;
-    if (!/fibra|movil|optic|tv|internet/.test(c.topValue)) return 0;
-    return c.topRatio;
-  }, 0.4);
-
-  // 8: equipo — códigos cortos (F680, F660) o "FIBRA <palabra>"
-  pickBest('equipo', c => {
-    if (c.distinctCount < 2 || c.distinctCount > 80) return 0;
-    const codeRatio = c.values.filter(v => EQUIPO_CODE_RE.test(v)).length / (c.values.length || 1);
-    const fibraRatio = c.normValues.filter(v => /fibra\s+\w+/.test(v)).length / (c.normValues.length || 1);
-    return Math.max(codeRatio, fibraRatio);
-  }, 0.3);
-
-  // 9: plan — similar a equipo pero en otra columna
-  pickBest('plan', c => {
-    if (c.distinctCount < 2 || c.distinctCount > 80) return 0;
-    const score = c.normValues.filter(v => /fibra|plan/.test(v)).length / (c.normValues.length || 1);
-    return score;
-  }, 0.25);
-
-  // 10: lugar de contacto — catálogo de motivos cortos que SE REPITEN mucho
-  // (ojo: no confundir con "distintos" = mejor. Un texto libre único por fila,
-  // como Observaciones, también tiene muchos valores distintos; lo que
-  // diferencia a un catálogo de motivos es que los mismos valores se repiten
-  // una y otra vez, así que se premia la REPETICIÓN, no la unicidad).
-  pickBest('lugarContacto', c => {
-    if (c.distinctCount < 6 || c.distinctCount > 60) return 0;
-    if (c.avgLen < 3 || c.avgLen > 40) return 0;
-    if (c.dateRatio > 0.1 || c.numericRatio > 0.2) return 0;
-    const cardinalityRatio = c.distinctCount / (c.values.length || 1);
-    if (cardinalityRatio > 0.5) return 0; // demasiado único → probablemente texto libre
-    return 1 - cardinalityRatio;
-  }, 0.3);
-
-  // 11: operador — "Nombre Apellido"
-  pickBest('operador', c => c.nameRatio, 0.6);
-
-  // 12: número de trámite — numérico, mayormente único (antes que usuario para
-  // que no se lo lleve un token corto que también matchea dígitos)
-  pickBest('numeroTramite', c => {
-    if (c.numericRatio < 0.8) return 0;
-    return c.distinctCount / (c.values.length || 1);
-  }, 0.7);
-
-  // 13: usuario — token corto sin espacios, con al menos una letra
-  pickBest('usuario', c => c.userRatio, 0.6);
-
-  // 14: observaciones — lo que quede con el texto más largo en promedio
-  pickBest('observaciones', c => c.avgLen, 12);
-
-  return { mapping, stats };
-}
-
-// ── Construcción de filas Gestion a partir del mapeo ───────────────────────────
-
-function buildGestiones(
-  dataRows: string[][],
-  mapping: Record<FieldKey, number | null>,
-): Gestion[] {
-  const get = (row: string[], field: FieldKey): string => {
-    const idx = mapping[field];
-    return idx === null ? '' : fixEncoding((row[idx] ?? '').toString().trim());
+  return {
+    area: celda(row, COL.area),
+    empresa: celda(row, COL.empresa),
+    numeroTramite: celda(row, COL.numeroTramite),
+    fechaCreacion: fechaRaw ? normalizeFechaVenta(fechaRaw).substring(0, 10) : '',
+    concepto: celda(row, COL.concepto).toUpperCase(),
+    tipoProducto: celda(row, COL.tipoProducto),
+    lugarContacto: celda(row, COL.lugarContacto),
+    equipo: celda(row, COL.equipo),
+    plan: celda(row, COL.plan),
+    operador,
+    rol,
+    usuario: '',
+    estado: celda(row, COL.estado).toUpperCase(),
+    observaciones: celda(row, COL.observaciones),
   };
+}
+
+function buildGestiones(dataRows: string[][]): Gestion[] {
   const rows: Gestion[] = [];
   for (const row of dataRows) {
-    const fechaRaw = get(row, 'fechaCreacion');
-    const g: Gestion = {
-      area: get(row, 'area'),
-      empresa: get(row, 'empresa'),
-      numeroTramite: get(row, 'numeroTramite'),
-      fechaCreacion: fechaRaw ? normalizeFechaVenta(fechaRaw).substring(0, 10) : '',
-      concepto: get(row, 'concepto').toUpperCase(),
-      tipoProducto: get(row, 'tipoProducto'),
-      lugarContacto: get(row, 'lugarContacto'),
-      equipo: get(row, 'equipo'),
-      plan: get(row, 'plan'),
-      operador: get(row, 'operador'),
-      rol: get(row, 'rol'),
-      usuario: get(row, 'usuario'),
-      estado: get(row, 'estado').toUpperCase(),
-      observaciones: get(row, 'observaciones'),
-    };
-    // Solo se descarta si TODOS los campos quedaron vacíos (fila realmente vacía).
-    // Antes se exigía fecha+concepto+operador+estado no vacíos a la vez, lo que
-    // borraba el archivo entero si alguno de esos 4 campos no se detectaba bien.
+    const g = buildGestion(row);
     const estaVacia = Object.values(g).every(v => v === '');
     if (estaVacia) continue;
     rows.push(g);
@@ -307,22 +160,42 @@ function buildGestiones(
   return rows;
 }
 
-function buildDebug(mapping: Record<FieldKey, number | null>, stats: ColStats[], headerRow: string[]): ColumnDebugInfo[] {
-  const labels: Record<FieldKey, string> = {
-    area: 'Área', empresa: 'Empresa', numeroTramite: 'Número de trámite',
-    fechaCreacion: 'Fecha creación', concepto: 'Concepto', tipoProducto: 'Tipo producto',
-    lugarContacto: 'Lugar de contacto', equipo: 'Equipo', plan: 'Plan', operador: 'Operador',
-    rol: 'Rol', usuario: 'Usuario', estado: 'Estado', observaciones: 'Observaciones',
-  };
-  return (Object.keys(labels) as FieldKey[]).map(field => {
-    const idx = mapping[field];
-    const col = idx !== null ? stats.find(s => s.index === idx) : undefined;
+function buildDebug(dataRows: string[][], headerRow: string[]): ColumnDebugInfo[] {
+  const entries: { field: string; idx: number | null; note?: string }[] = [
+    { field: 'Área', idx: COL.area },
+    { field: 'Empresa', idx: COL.empresa },
+    { field: 'Número de trámite', idx: COL.numeroTramite },
+    { field: 'Fecha creación', idx: COL.fechaCreacion },
+    { field: 'Concepto', idx: COL.concepto },
+    { field: 'Tipo producto', idx: COL.tipoProducto },
+    { field: 'Lugar de contacto', idx: COL.lugarContacto },
+    { field: 'Equipo', idx: COL.equipo },
+    { field: 'Plan', idx: COL.plan },
+    { field: 'Rol', idx: COL.rol },
+    { field: 'Operador', idx: null, note: `col ${COL.operadorPrincipal} (Operador) / col ${COL.operadorSupervisor} (si Rol = Supervisor)` },
+    { field: 'Usuario', idx: null, note: 'sin columna confiable — se deja vacío' },
+    { field: 'Estado', idx: COL.estado },
+    { field: 'Observaciones', idx: COL.observaciones },
+  ];
+
+  return entries.map(({ field, idx, note }) => {
+    if (idx === null) {
+      return { field, columnIndex: null, sample: note ? [note] : [] };
+    }
+    // Busca los primeros valores NO vacíos en vez de las primeras 3 filas —
+    // varios campos (Tipo producto, Equipo, Plan, Observaciones) solo se
+    // completan en una fracción de las filas, así que tomar literalmente las
+    // primeras 3 filas suele dar una muestra vacía y poco útil para depurar.
+    const sample: string[] = [];
+    for (const r of dataRows) {
+      if (sample.length >= 3) break;
+      const v = celda(r, idx);
+      if (v) sample.push(v);
+    }
     return {
-      field: labels[field],
+      field,
       columnIndex: idx,
-      sample: idx !== null
-        ? [`header original: "${headerRow[idx] ?? ''}"`, ...(col?.values.slice(0, 3) ?? [])]
-        : [],
+      sample: [`header original (no confiable): "${headerRow[idx] ?? ''}"`, ...sample],
     };
   });
 }
@@ -344,13 +217,19 @@ function finalizeData(rows: Gestion[], debug: ColumnDebugInfo[], skippedRows: nu
   };
 }
 
-// ── Parser CSV (latin1, separador ';', skip de líneas malformadas) ────────────
+// ── Parser CSV (latin1, separador ';') ─────────────────────────────────────────
 
 async function parseGestionesCsv(file: File): Promise<GestionesData> {
   const buffer = await file.arrayBuffer();
-  let text: string;
-  try { text = new TextDecoder('windows-1252').decode(buffer); }
-  catch { text = new TextDecoder('utf-8').decode(buffer); }
+  // Probar UTF-8 primero: si el archivo ya es UTF-8 válido (lo más común en
+  // exports recientes) evita el problema de que fixEncoding no revierte bien
+  // el mojibake de ciertas mayúsculas acentuadas (ej. "Ó") al decodificar como
+  // windows-1252 de entrada. Solo se cae a windows-1252 si UTF-8 produce
+  // caracteres de reemplazo (U+FFFD), señal de que el archivo es realmente latin1.
+  let text = new TextDecoder('utf-8').decode(buffer);
+  if (text.includes('�')) {
+    try { text = new TextDecoder('windows-1252').decode(buffer); } catch { /* se queda con utf-8 */ }
+  }
   text = text.replace(/^﻿/, '');
 
   const sep = ';';
@@ -358,21 +237,22 @@ async function parseGestionesCsv(file: File): Promise<GestionesData> {
   if (allRows.length < 2) throw new Error('El CSV de gestiones está vacío o sin datos.');
 
   const headerRow = allRows[0].map(h => h.trim());
-  const expectedCols = headerRow.length;
 
+  // Ya NO se descartan filas por no coincidir con la cantidad de headers
+  // (los headers vienen corridos y no representan la cantidad real de
+  // columnas de datos). Solo se exige un mínimo razonable de columnas.
   const dataRows: string[][] = [];
   let skippedRows = 0;
   for (let i = 1; i < allRows.length; i++) {
     const cells = allRows[i].map(c => c.trim());
-    if (cells.length !== expectedCols) { skippedRows++; continue; } // on_bad_lines='skip'
+    if (cells.length < MIN_COLUMNAS) { skippedRows++; continue; }
     dataRows.push(cells);
   }
 
-  const { mapping, stats } = detectColumns(dataRows, expectedCols);
-  const rows = buildGestiones(dataRows, mapping);
-  const debug = buildDebug(mapping, stats, headerRow);
+  const rows = buildGestiones(dataRows);
+  const debug = buildDebug(dataRows, headerRow);
   // eslint-disable-next-line no-console
-  console.debug('[gestionesParser] columnas detectadas:', debug);
+  console.debug('[gestionesParser] columnas (posición fija):', debug);
   return finalizeData(rows, debug, skippedRows);
 }
 
@@ -386,18 +266,19 @@ async function parseGestionesExcel(file: File): Promise<GestionesData> {
   if (aoa.length < 2) throw new Error('El Excel de gestiones está vacío o sin datos.');
 
   const headerRow = aoa[0].map(v => String(v ?? ''));
-  const expectedCols = headerRow.length;
-  const dataRows = aoa.slice(1).map(r => {
-    const row = Array.from({ length: expectedCols }, (_, i) => String(r[i] ?? '').trim());
-    return row;
-  });
+  let skippedRows = 0;
+  const dataRows: string[][] = [];
+  for (let i = 1; i < aoa.length; i++) {
+    const row = aoa[i].map(v => String(v ?? '').trim());
+    if (row.length < MIN_COLUMNAS) { skippedRows++; continue; }
+    dataRows.push(row);
+  }
 
-  const { mapping, stats } = detectColumns(dataRows, expectedCols);
-  const rows = buildGestiones(dataRows, mapping);
-  const debug = buildDebug(mapping, stats, headerRow);
+  const rows = buildGestiones(dataRows);
+  const debug = buildDebug(dataRows, headerRow);
   // eslint-disable-next-line no-console
-  console.debug('[gestionesParser] columnas detectadas:', debug);
-  return finalizeData(rows, debug, 0);
+  console.debug('[gestionesParser] columnas (posición fija):', debug);
+  return finalizeData(rows, debug, skippedRows);
 }
 
 // ── API pública ─────────────────────────────────────────────────────────────────

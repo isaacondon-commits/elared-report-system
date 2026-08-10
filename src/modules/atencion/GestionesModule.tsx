@@ -266,20 +266,92 @@ function KpiCard({ label, value, sub, icon: Icon, color }: { label: string; valu
 
 // ── Sección 1: Gestiones por operador ─────────────────────────────────────────
 type OpSortKey = 'operador' | 'total' | 'consultas' | 'reclamos' | 'solicitudes' | 'solucionados' | 'pctSolucionados';
-type DetailTab = 'estado' | 'motivo' | 'dia';
+type DetailTab = 'empresa' | 'estado' | 'motivo' | 'dia';
 
-function OperadorDetail({ op }: { op: OperadorStat }) {
-  const [tab, setTab] = useState<DetailTab>('estado');
+interface OperadorAgg {
+  operador: string; rol: string; total: number;
+  consultas: number; reclamos: number; solicitudes: number; solucionados: number;
+  pctSolucionados: number;
+  empresas: OperadorStat[];
+  porEstado: { estado: string; count: number }[];
+  porMotivo: { motivo: string; count: number }[];
+  porDia: { fecha: string; count: number }[];
+}
+
+// Un mismo operador puede atender varias empresas — stats.byOperador ya viene
+// desglosado por (operador, empresa). Acá se junta todo por operador para que
+// la tabla principal no repita el mismo nombre una vez por empresa; el
+// desglose por empresa se conserva y se muestra al desplegar la fila.
+function aggregateOperadores(byOperador: OperadorStat[]): OperadorAgg[] {
+  interface Acc {
+    rol: string; total: number; consultas: number; reclamos: number; solicitudes: number; solucionados: number;
+    empresas: OperadorStat[]; estados: Map<string, number>; motivos: Map<string, number>; dias: Map<string, number>;
+  }
+  const map = new Map<string, Acc>();
+  for (const o of byOperador) {
+    if (!map.has(o.operador)) {
+      map.set(o.operador, { rol: o.rol, total: 0, consultas: 0, reclamos: 0, solicitudes: 0, solucionados: 0, empresas: [], estados: new Map(), motivos: new Map(), dias: new Map() });
+    }
+    const a = map.get(o.operador)!;
+    a.total += o.total; a.consultas += o.consultas; a.reclamos += o.reclamos;
+    a.solicitudes += o.solicitudes; a.solucionados += o.solucionados;
+    if (o.rol) a.rol = o.rol;
+    a.empresas.push(o);
+    for (const e of o.porEstado) a.estados.set(e.estado, (a.estados.get(e.estado) ?? 0) + e.count);
+    for (const m of o.porMotivo) a.motivos.set(m.motivo, (a.motivos.get(m.motivo) ?? 0) + m.count);
+    for (const d of o.porDia) a.dias.set(d.fecha, (a.dias.get(d.fecha) ?? 0) + d.count);
+  }
+  return Array.from(map.entries()).map(([operador, a]) => ({
+    operador, rol: a.rol, total: a.total, consultas: a.consultas, reclamos: a.reclamos,
+    solicitudes: a.solicitudes, solucionados: a.solucionados,
+    pctSolucionados: a.total > 0 ? (a.solucionados / a.total) * 100 : 0,
+    empresas: a.empresas.sort((x, y) => y.total - x.total),
+    porEstado: Array.from(a.estados.entries()).map(([estado, count]) => ({ estado, count })).sort((x, y) => y.count - x.count),
+    porMotivo: Array.from(a.motivos.entries()).map(([motivo, count]) => ({ motivo, count })).sort((x, y) => y.count - x.count).slice(0, 10),
+    porDia: Array.from(a.dias.entries()).map(([fecha, count]) => ({ fecha, count })).sort((x, y) => x.fecha.localeCompare(y.fecha)),
+  })).sort((a, b) => b.total - a.total);
+}
+
+function OperadorDetail({ op }: { op: OperadorAgg }) {
+  const [tab, setTab] = useState<DetailTab>('empresa');
   return (
     <div className="bg-gray-50 border-t border-gray-100 p-4">
       <div className="flex gap-2 mb-3">
-        {([['estado', 'Por estado'], ['motivo', 'Por motivo'], ['dia', 'Por día']] as [DetailTab, string][]).map(([id, label]) => (
+        {([['empresa', 'Por empresa'], ['estado', 'Por estado'], ['motivo', 'Por motivo'], ['dia', 'Por día']] as [DetailTab, string][]).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${tab === id ? 'bg-[#003DA5] text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
             {label}
           </button>
         ))}
       </div>
+      {tab === 'empresa' && (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-gray-500">
+              <th className="text-left py-1">Empresa</th>
+              <th className="text-right py-1">Total</th>
+              <th className="text-right py-1">Consultas</th>
+              <th className="text-right py-1">Reclamos</th>
+              <th className="text-right py-1">Solicitudes</th>
+              <th className="text-right py-1">Solucionados</th>
+              <th className="text-right py-1">% Soluc.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {op.empresas.map(e => (
+              <tr key={e.empresa} className="border-t border-gray-200">
+                <td className="py-1 text-gray-700">{e.empresa}</td>
+                <td className="py-1 text-right font-semibold text-[#003DA5]">{e.total}</td>
+                <td className="py-1 text-right text-gray-600">{e.consultas}</td>
+                <td className="py-1 text-right text-red-600">{e.reclamos}</td>
+                <td className="py-1 text-right text-green-700">{e.solicitudes}</td>
+                <td className="py-1 text-right text-gray-600">{e.solucionados}</td>
+                <td className="py-1 text-right text-gray-500">{e.pctSolucionados.toFixed(1)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {tab === 'estado' && (
         <div className="flex flex-wrap gap-2">
           {op.porEstado.map(e => {
@@ -321,15 +393,17 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandido, setExpandido] = useState<string | null>(null);
 
+  const agregados = useMemo(() => aggregateOperadores(stats.byOperador), [stats.byOperador]);
+
   const rows = useMemo(() => {
-    const arr = [...stats.byOperador];
+    const arr = [...agregados];
     arr.sort((a, b) => {
       const av = a[sortKey], bv = b[sortKey];
       const cmp = typeof av === 'string' ? av.localeCompare(String(bv)) : (av as number) - (bv as number);
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return arr;
-  }, [stats.byOperador, sortKey, sortDir]);
+  }, [agregados, sortKey, sortDir]);
 
   function handleSort(key: OpSortKey) {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -343,28 +417,20 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
     { key: 'pctSolucionados', label: '% Soluc.' },
   ];
 
-  // El gráfico agrupa por operador (sumando todas sus empresas) para que no
-  // quede desordenado con el mismo nombre repetido varias veces — el detalle
-  // por empresa ya está en la tabla de arriba.
-  const top10 = useMemo(() => {
-    const agg = new Map<string, number>();
-    for (const o of stats.byOperador) agg.set(o.operador, (agg.get(o.operador) ?? 0) + o.total);
-    return Array.from(agg.entries())
-      .map(([operador, total]) => ({ nombre: operador.length > 18 ? operador.slice(0, 17) + '…' : operador, total }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
-  }, [stats.byOperador]);
+  const top10 = useMemo(() => agregados.slice(0, 10)
+    .map(o => ({ nombre: o.operador.length > 18 ? o.operador.slice(0, 17) + '…' : o.operador, total: o.total }))
+    .sort((a, b) => b.total - a.total), [agregados]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Gestiones por operador</h3>
+      <h3 className="font-semibold text-gray-900">Gestiones por operador</h3>
+      <p className="text-xs text-gray-400 mb-4">Un operador puede atender varias empresas — desplegá la fila para ver el desglose por empresa</p>
       <div className="overflow-x-auto mb-6">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-[#003DA5] text-white">
               <th className="px-2 py-2 text-center text-xs font-semibold w-8">#</th>
               <th className="px-3 py-2 text-left text-xs font-semibold">Rol</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold">Empresa</th>
               {cols.map(c => (
                 <th key={c.key} onClick={() => handleSort(c.key)}
                   className={`px-3 py-2 text-xs font-semibold cursor-pointer select-none whitespace-nowrap ${c.key === 'operador' ? 'text-left' : 'text-right'}`}>
@@ -375,20 +441,21 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
           </thead>
           <tbody>
             {rows.map((o, i) => {
-              const rowKey = `${o.operador}||${o.empresa}`;
-              const isOpen = expandido === rowKey;
+              const isOpen = expandido === o.operador;
               const badge = pctSolucionadosBadge(o.pctSolucionados);
               return (
                 <>
-                  <tr key={rowKey} onClick={() => setExpandido(isOpen ? null : rowKey)}
+                  <tr key={o.operador} onClick={() => setExpandido(isOpen ? null : o.operador)}
                     className={`border-t border-gray-100 cursor-pointer hover:bg-blue-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     <td className="px-2 py-2 text-center text-xs text-gray-400">{i + 1}</td>
                     <td className="px-3 py-2 text-xs text-gray-500">{o.rol.includes('Supervisor') ? 'Supervisor' : 'Operador'}</td>
-                    <td className="px-3 py-2 text-xs text-gray-500">{o.empresa}</td>
                     <td className="px-3 py-2 font-medium text-gray-800">
                       <span className="inline-flex items-center gap-1">
                         {isOpen ? <ChevronDown size={13} className="text-gray-400" /> : <ChevronRight size={13} className="text-gray-400" />}
                         {o.operador}
+                        {o.empresas.length > 1 && (
+                          <span className="text-[10px] font-normal text-gray-400 ml-1">({o.empresas.length} empresas)</span>
+                        )}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-[#003DA5]">{o.total}</td>
@@ -401,8 +468,8 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
                     </td>
                   </tr>
                   {isOpen && (
-                    <tr key={`${rowKey}-detail`}>
-                      <td colSpan={10} className="p-0"><OperadorDetail op={o} /></td>
+                    <tr key={`${o.operador}-detail`}>
+                      <td colSpan={9} className="p-0"><OperadorDetail op={o} /></td>
                     </tr>
                   )}
                 </>

@@ -343,10 +343,17 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
     { key: 'pctSolucionados', label: '% Soluc.' },
   ];
 
-  const top10 = [...stats.byOperador].slice(0, 10).map(o => ({
-    nombre: `${o.operador.length > 14 ? o.operador.slice(0, 13) + '…' : o.operador} · ${o.empresa}`,
-    total: o.total,
-  }));
+  // El gráfico agrupa por operador (sumando todas sus empresas) para que no
+  // quede desordenado con el mismo nombre repetido varias veces — el detalle
+  // por empresa ya está en la tabla de arriba.
+  const top10 = useMemo(() => {
+    const agg = new Map<string, number>();
+    for (const o of stats.byOperador) agg.set(o.operador, (agg.get(o.operador) ?? 0) + o.total);
+    return Array.from(agg.entries())
+      .map(([operador, total]) => ({ nombre: operador.length > 18 ? operador.slice(0, 17) + '…' : operador, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+  }, [stats.byOperador]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -409,7 +416,7 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
           <BarChart data={top10} layout="vertical" margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-            <YAxis dataKey="nombre" type="category" tick={{ fontSize: 10 }} width={170} />
+            <YAxis dataKey="nombre" type="category" tick={{ fontSize: 10 }} width={130} />
             <Tooltip formatter={(v: unknown) => [Number(v).toLocaleString(), 'Gestiones']} />
             <Bar dataKey="total" fill={P.azul} radius={[0, 4, 4, 0]}>
               <LabelList dataKey="total" position="right" style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
@@ -474,36 +481,6 @@ function SeccionTiempoResolucion({ stats }: { stats: GestionesStats }) {
   );
 }
 
-// ── Sección 2: Distribución por concepto ──────────────────────────────────────
-function SeccionConcepto({ stats }: { stats: GestionesStats }) {
-  const items = [
-    { label: 'CONSULTA', value: stats.consultas, color: P.azul },
-    { label: 'RECLAMO', value: stats.reclamos, color: P.rojo },
-    { label: 'SOLICITUD', value: stats.solicitudes, color: P.verde },
-  ];
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Distribución por concepto</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {items.map(it => {
-          const pct = stats.total > 0 ? (it.value / stats.total) * 100 : 0;
-          return (
-            <div key={it.label} className="border border-gray-200 rounded-xl p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: it.color }}>{it.label}</div>
-              <div className="text-3xl font-bold mt-1" style={{ color: it.color }}>{it.value.toLocaleString()}</div>
-              <div className="text-xs text-gray-400 mb-2">{pct.toFixed(1)}% del total</div>
-              <div className="w-full bg-gray-100 rounded-full h-2">
-                <div className="h-2 rounded-full" style={{ width: `${pct}%`, background: it.color }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ── Sección 3: Motivos de contacto ────────────────────────────────────────────
 function SeccionMotivos({ stats }: { stats: GestionesStats }) {
   const [page, setPage] = useState(0);
@@ -519,10 +496,16 @@ function SeccionMotivos({ stats }: { stats: GestionesStats }) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paged = filtered.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
 
-  const top15 = stats.byMotivo.slice(0, 15).map(m => ({
-    nombre: `${m.motivo.length > 18 ? m.motivo.slice(0, 17) + '…' : m.motivo} · ${m.empresa}`,
-    total: m.total,
-  }));
+  // Igual que en operadores: se agrupa por motivo (sumando empresas) para que
+  // el gráfico no repita el mismo motivo una vez por cada empresa.
+  const top15 = useMemo(() => {
+    const agg = new Map<string, number>();
+    for (const m of stats.byMotivo) agg.set(m.motivo, (agg.get(m.motivo) ?? 0) + m.total);
+    return Array.from(agg.entries())
+      .map(([motivo, total]) => ({ nombre: motivo.length > 22 ? motivo.slice(0, 21) + '…' : motivo, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 15);
+  }, [stats.byMotivo]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -594,7 +577,19 @@ function SeccionMotivos({ stats }: { stats: GestionesStats }) {
 
 // ── Sección 4: Distribución por estado ────────────────────────────────────────
 function SeccionEstado({ stats }: { stats: GestionesStats }) {
-  const data = stats.byEstado.map(e => ({ ...e, color: estadoBadge(e.estado).color, label: `${e.estado} · ${e.empresa}` }));
+  const data = stats.byEstado.map(e => ({ ...e, color: estadoBadge(e.estado).color }));
+
+  // El gráfico agrupa por estado (sumando empresas) — la tabla de al lado
+  // conserva el detalle por empresa, pero repetir cada estado una vez por
+  // empresa en el gráfico lo dejaba desordenado.
+  const chartData = useMemo(() => {
+    const agg = new Map<string, number>();
+    for (const e of stats.byEstado) agg.set(e.estado, (agg.get(e.estado) ?? 0) + e.count);
+    return Array.from(agg.entries())
+      .map(([estado, count]) => ({ estado, count, color: estadoBadge(estado).color }))
+      .sort((a, b) => b.count - a.count);
+  }, [stats.byEstado]);
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <h3 className="font-semibold text-gray-900 mb-4">Distribución por estado</h3>
@@ -628,15 +623,15 @@ function SeccionEstado({ stats }: { stats: GestionesStats }) {
             </tbody>
           </table>
         </div>
-        <ResponsiveContainer width="100%" height={Math.max(data.length * 34 + 30, 200)}>
-          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height={Math.max(chartData.length * 34 + 30, 200)}>
+          <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-            <YAxis dataKey="label" type="category" tick={{ fontSize: 10 }} width={140} />
+            <YAxis dataKey="estado" type="category" tick={{ fontSize: 10 }} width={100} />
             <Tooltip formatter={(v: unknown) => [Number(v).toLocaleString(), '']} />
             <Bar dataKey="count" radius={[0, 4, 4, 0]}>
               <LabelList dataKey="count" position="right" style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
-              {data.map((d, i) => <Cell key={i} fill={d.color} />)}
+              {chartData.map((d, i) => <Cell key={i} fill={d.color} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -1061,7 +1056,6 @@ export default function GestionesModule() {
 
             <SeccionOperadores stats={stats} />
             <SeccionTiempoResolucion stats={stats} />
-            <SeccionConcepto stats={stats} />
             <SeccionMotivos stats={stats} />
             <SeccionEstado stats={stats} />
             <SeccionEvolucion stats={stats} />

@@ -1,5 +1,5 @@
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LabelList, Cell,
 } from 'recharts';
 import { format, parseISO } from 'date-fns';
@@ -25,21 +25,40 @@ function riesgoColor(pct: number): string {
   return '#E3000F';
 }
 
-// ── Evolución temporal por back office (LineChart) ────────────────────────────
+const TOP_N_EVOLUCION = 6;
+const TOP_N_COMPOSICION = 8;
+const OTROS_COLOR = '#adb5bd';
+
+function abreviarNombre(nombre: string): string {
+  return nombre.length > 14 ? nombre.slice(0, 13) + '…' : nombre;
+}
+
+// ── Evolución temporal por back office (AreaChart apilado, top 6 + Otros) ─────
 function Evolucion({ stats }: { stats: BackOfficeStats }) {
   if (stats.byDia.length < 2) return null;
-  const bos = stats.backOfficesList;
-  const data = [...stats.byDia].reverse().map(d => ({
-    ...d.porBackOffice,
-    fecha: d.fecha,
-    label: formatFechaLabel(d.fecha),
-  }));
+
+  const topBOs = stats.byBackOffice.slice(0, TOP_N_EVOLUCION).map(b => b.nombre);
+  const hayOtros = stats.byBackOffice.length > TOP_N_EVOLUCION;
+
+  const data = [...stats.byDia].reverse().map(d => {
+    const row: Record<string, string | number> = { fecha: d.fecha, label: formatFechaLabel(d.fecha) };
+    let otros = 0;
+    for (const [bo, count] of Object.entries(d.porBackOffice)) {
+      if (topBOs.includes(bo)) row[bo] = count;
+      else otros += count;
+    }
+    if (hayOtros) row.Otros = otros;
+    return row;
+  });
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Evolución de contratos por back office</h3>
+      <h3 className="font-semibold text-gray-900">Evolución de contratos por back office</h3>
+      <p className="text-xs text-gray-400 mb-4">
+        {hayOtros ? `Top ${TOP_N_EVOLUCION} back offices · el resto agrupado en "Otros"` : 'Área apilada por día'}
+      </p>
       <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+        <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="label" tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
@@ -48,21 +67,24 @@ function Evolucion({ stats }: { stats: BackOfficeStats }) {
             labelFormatter={(_: unknown, payload: readonly { payload?: { fecha?: string } }[]) => formatFecha(payload?.[0]?.payload?.fecha ?? '')}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          {bos.map((bo, i) => (
-            <Line key={bo} type="monotone" dataKey={bo} stroke={PALETA[i % PALETA.length]} strokeWidth={2}
-              dot={{ r: 2 }} activeDot={{ r: 4 }} connectNulls />
+          {topBOs.map((bo, i) => (
+            <Area key={bo} type="monotone" dataKey={bo} stackId="1" stroke={PALETA[i % PALETA.length]} fill={PALETA[i % PALETA.length]} fillOpacity={0.75} />
           ))}
-        </LineChart>
+          {hayOtros && <Area type="monotone" dataKey="Otros" stackId="1" stroke={OTROS_COLOR} fill={OTROS_COLOR} fillOpacity={0.5} />}
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-// ── Stacked bar horizontal por back office (estados) ──────────────────────────
+// ── Composición de estados por back office (barras agrupadas, top 8) ──────────
 function Stacked({ stats }: { stats: BackOfficeStats }) {
   if (stats.byBackOffice.length === 0) return null;
-  const data = stats.byBackOffice.map(b => ({
-    nombre: b.nombre,
+  const top = stats.byBackOffice.slice(0, TOP_N_COMPOSICION);
+  const restantes = stats.byBackOffice.length - top.length;
+  const data = top.map(b => ({
+    nombre: abreviarNombre(b.nombre),
+    fullNombre: b.nombre,
     Activos: b.activos,
     Pendientes: b.pendientes,
     Procesados: b.procesados,
@@ -71,18 +93,25 @@ function Stacked({ stats }: { stats: BackOfficeStats }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Composición de estados por back office</h3>
-      <ResponsiveContainer width="100%" height={Math.max(data.length * 42 + 40, 220)}>
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 30, left: 10, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-          <YAxis dataKey="nombre" type="category" tick={{ fontSize: 10 }} width={130} />
-          <Tooltip formatter={(v: unknown) => [Number(v).toLocaleString(), '']} contentStyle={{ fontSize: 12 }} />
+      <h3 className="font-semibold text-gray-900">Composición de estados por back office</h3>
+      <p className="text-xs text-gray-400 mb-4">
+        {restantes > 0 ? `Top ${TOP_N_COMPOSICION} back offices por volumen · +${restantes} más en la tabla de arriba` : 'Cantidad por estado equivalente y back office'}
+      </p>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="nombre" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} />
+          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+          <Tooltip
+            formatter={(v: unknown) => [Number(v).toLocaleString(), '']}
+            labelFormatter={(_: unknown, payload: readonly { payload?: { fullNombre?: string } }[]) => payload?.[0]?.payload?.fullNombre ?? ''}
+            contentStyle={{ fontSize: 12 }}
+          />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="Activos" stackId="a" fill="#003DA5" />
-          <Bar dataKey="Pendientes" stackId="a" fill="#fd7e14" />
-          <Bar dataKey="Procesados" stackId="a" fill="#28a745" />
-          <Bar dataKey="Rechazos" stackId="a" fill="#E3000F" />
+          <Bar dataKey="Activos" fill="#003DA5" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="Pendientes" fill="#fd7e14" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="Procesados" fill="#28a745" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="Rechazos" fill="#E3000F" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

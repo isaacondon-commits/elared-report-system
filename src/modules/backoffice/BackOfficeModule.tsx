@@ -26,6 +26,7 @@ const P = {
 const BACKOFFICE_FIELDS = [
   { key: 'backOffice',      label: 'Back Office',              required: true  },
   { key: 'fechaBackOffice', label: 'Fecha de Back Office',     required: true  },
+  { key: 'fechaEnvioAntel', label: 'Fecha de envío a ANTEL',   required: false },
   { key: 'estado',          label: 'Estado',                    required: true  },
   { key: 'empresa',         label: 'Empresa / Línea',           required: false },
   { key: 'funcionario',     label: 'Vendedor',                  required: false },
@@ -136,6 +137,9 @@ export interface BackOfficeStats {
   hasEstado: boolean;
   hasFuncionario: boolean;
   hasFechaBO: boolean;
+  hasFechaEnvioAntel: boolean;
+  antelPorBackOffice: Record<string, number>;
+  antelTotal: number;
 }
 
 // ── Lógica de negocio ─────────────────────────────────────────────────────────
@@ -148,6 +152,7 @@ export function processBackOffice(
   const hasEstado      = Boolean(mapping.estado);
   const hasFuncionario = Boolean(mapping.funcionario);
   const hasFechaBO     = Boolean(mapping.fechaBackOffice);
+  const hasFechaEnvioAntel = Boolean(mapping.fechaEnvioAntel);
 
   // ── Sección 3: dataset COMPLETO (sin filtro de back office) ──
   const sinAsignarRows: SinAsignarRow[] = [];
@@ -182,8 +187,10 @@ export function processBackOffice(
   }
   const boMap  = new Map<string, BOAcc>();
   const diaMap = new Map<string, Map<string, number>>(); // fecha → bo → count
+  const antelMap = new Map<string, number>(); // bo → count con Fecha de envío a ANTEL cargada
   const todayISO = new Date().toISOString().substring(0, 10);
   let procesadosHoy = 0;
+  let antelTotal = 0;
 
   for (const r of rowsBO) {
     const nombre     = String(r[mapping.backOffice] ?? '').trim();
@@ -222,6 +229,12 @@ export function processBackOffice(
     acc.porVendedor.set(vendedor, { total: prevVend.total + 1, rechazos: prevVend.rechazos + (esRechazo ? 1 : 0) });
 
     if (esRechazo) acc.rechazosDetalle.push({ fecha: fechaBO, vendedor, estado: estadoRaw, plan });
+
+    // "Activo, espero tinco": filas con Fecha de envío a ANTEL cargada (independiente del Estado)
+    if (hasFechaEnvioAntel && String(r[mapping.fechaEnvioAntel] ?? '').trim() !== '') {
+      antelMap.set(nombre, (antelMap.get(nombre) ?? 0) + 1);
+      antelTotal++;
+    }
   }
 
   // byDia (tabla + gráfico sección 1)
@@ -296,6 +309,7 @@ export function processBackOffice(
     diasConActividad, promedioRechazoDiario,
     fechaMin: fechas[0] ?? '', fechaMax: fechas[fechas.length - 1] ?? '',
     empresaActiva, hasEstado, hasFuncionario, hasFechaBO,
+    hasFechaEnvioAntel, antelPorBackOffice: Object.fromEntries(antelMap), antelTotal,
   };
 }
 
@@ -410,9 +424,26 @@ function SeccionPorDia({ stats }: { stats: BackOfficeStats }) {
               })}
               <td className="px-3 py-2 text-right font-bold text-gray-900 whitespace-nowrap">{stats.byDia.reduce((s, d) => s + d.total, 0)}</td>
             </tr>
+            {stats.hasFechaEnvioAntel && (
+              <tr className="border-t-2 border-purple-200" style={{ background: '#f5f3ff' }}>
+                <td className="px-3 py-2 font-bold text-[#6f42c1] whitespace-nowrap">Activo, espero tinco</td>
+                {bos.map(bo => {
+                  const v = stats.antelPorBackOffice[bo] ?? 0;
+                  return (
+                    <td key={bo} className="px-3 py-2 text-right whitespace-nowrap">
+                      {v === 0 ? <span className="text-gray-300">—</span> : <span className="font-bold text-[#6f42c1]">{v}</span>}
+                    </td>
+                  );
+                })}
+                <td className="px-3 py-2 text-right font-bold text-[#6f42c1] whitespace-nowrap">{stats.antelTotal}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+      {stats.hasFechaEnvioAntel && (
+        <p className="text-[11px] text-gray-400 mt-2">"Activo, espero tinco": contratos con Fecha de envío a ANTEL cargada, sin importar el Estado.</p>
+      )}
     </div>
   );
 }

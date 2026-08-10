@@ -79,6 +79,7 @@ const VENTAS_FIELDS: Record<string, string[]> = {
   estado:       ['estado', 'status', 'resultado', 'situacion', 'situación'],
   backOffice:   ['back-office', 'back office', 'backoffice', 'back_office'],
   fechaBackOffice: ['fecha de back-office', 'fecha de back office', 'fecha back-office', 'fecha back office', 'fecha de backoffice', 'fecha backoffice'],
+  fechaEnvioAntel: ['fecha de envio a antel', 'fecha envio a antel', 'fecha de envio antel', 'envio a antel', 'fecha envio antel'],
   departamento: ['departamento', 'provincia', 'localidad'],
   modalidad:    ['modalidad de venta', 'modalidad', 'canal de venta', 'canal'],
   contrato:     ['número de contrato', 'numero de contrato', 'nro contrato', 'contrato'],

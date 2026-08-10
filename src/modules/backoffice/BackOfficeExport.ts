@@ -25,6 +25,9 @@ export function exportBackOfficeExcel(stats: BackOfficeStats, empresaActiva = 'T
   const diaRows: (string | number)[][] = stats.byDia.map(d => [
     formatFecha(d.fecha), ...bos.map(bo => d.porBackOffice[bo] ?? 0), d.total,
   ]);
+  if (stats.hasFechaEnvioAntel) {
+    diaRows.push(['Activo, espero tinco', ...bos.map(bo => stats.antelPorBackOffice[bo] ?? 0), stats.antelTotal]);
+  }
   const totalesRow: (string | number)[] = [
     'TOTAL', ...bos.map(bo => stats.byDia.reduce((s, d) => s + (d.porBackOffice[bo] ?? 0), 0)),
     stats.byDia.reduce((s, d) => s + d.total, 0),

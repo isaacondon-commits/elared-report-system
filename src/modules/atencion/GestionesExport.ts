@@ -50,18 +50,26 @@ export function exportGestionesExcel(stats: GestionesStats, rows: Gestion[]): vo
   const diaRows: (string | number)[][] = stats.byDia.map(d => [formatFecha(d.fecha), d.consultas, d.reclamos, d.solicitudes, d.total]);
   styledExcelSheet(wb, 'Por dia', diaHeaders, diaRows);
 
-  // ── Hoja 6: Datos completos ──
+  // ── Hoja 6: Tiempo de resolución (por operador y por tipo de contacto) ──
+  const resHeaders = ['Tipo', 'Nombre', 'Promedio días', 'Casos'];
+  const resRows: (string | number)[][] = [
+    ...stats.tiempoResolucionOperador.map(o => ['Operador', o.nombre, Number(o.promedioDias.toFixed(1)), o.n]),
+    ...stats.tiempoResolucionMotivo.map(m => ['Tipo de contacto', m.nombre, Number(m.promedioDias.toFixed(1)), m.n]),
+  ] as (string | number)[][];
+  styledExcelSheet(wb, 'Tiempo resolucion', resHeaders, resRows);
+
+  // ── Hoja 7: Datos completos ──
   const datosHeaders = [
-    'Área', 'Empresa', 'N° Trámite', 'Fecha Creación', 'Concepto', 'Tipo Producto',
-    'Lugar Contacto', 'Equipo', 'Plan', 'Operador', 'Rol', 'Usuario', 'Estado', 'Observaciones',
+    'Área', 'Empresa', 'N° Trámite', 'Fecha Creación', 'Fecha Cierre', 'Concepto', 'Tipo Producto',
+    'Lugar Contacto', 'Router', 'Plan', 'Operador', 'Rol', 'Usuario', 'Estado', 'Observaciones',
   ];
   const datosRows: (string | number)[][] = rows.map(r => [
-    r.area, r.empresa, r.numeroTramite, formatFecha(r.fechaCreacion), r.concepto, r.tipoProducto,
+    r.area, r.empresa, r.numeroTramite, formatFecha(r.fechaCreacion), formatFecha(r.fechaCierre), r.concepto, r.tipoProducto,
     r.lugarContacto, r.equipo, r.plan, r.operador, r.rol, r.usuario, r.estado, r.observaciones,
   ]);
-  const ws6 = XLSX.utils.aoa_to_sheet([datosHeaders, ...datosRows]);
-  ws6['!cols'] = autoWidth([datosHeaders, ...datosRows]);
-  XLSX.utils.book_append_sheet(wb, ws6, 'Datos completos');
+  const ws7 = XLSX.utils.aoa_to_sheet([datosHeaders, ...datosRows]);
+  ws7['!cols'] = autoWidth([datosHeaders, ...datosRows]);
+  XLSX.utils.book_append_sheet(wb, ws7, 'Datos completos');
 
   XLSX.writeFile(wb, `Gestiones_${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}.xlsx`);
 }

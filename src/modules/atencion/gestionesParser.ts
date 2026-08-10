@@ -8,6 +8,7 @@ export interface Gestion {
   empresa: string;
   numeroTramite: string;
   fechaCreacion: string; // ISO yyyy-mm-dd
+  fechaCierre: string;   // ISO yyyy-mm-dd — vacío si el caso no tiene fecha de cierre registrada
   concepto: string;      // CONSULTA / RECLAMO / SOLICITUD
   tipoProducto: string;
   lugarContacto: string;
@@ -102,6 +103,14 @@ function parseCsvRows(text: string, sep: string): string[][] {
 // supervisor actuó directamente y su nombre queda en la col 19 en vez de
 // la 21 (la 21 queda vacía). Cuando Rol es "Operador…", el nombre está en
 // la col 21 normalmente.
+//
+// FECHA DE CIERRE (col 17): no hay una columna 100% limpia para esto en los
+// datos reales — se probaron col 15 y col 17 (ambas con formato de fecha
+// válido y sin fechas de cierre anteriores a la de creación). Se eligió
+// col 17 por tener mayor cobertura (312/1034 filas vs 174/1034 de col 15,
+// que resultó ser un subconjunto exacto con los mismos valores). Si algún
+// promedio de "tiempo de resolución" se ve raro, este es el primer lugar
+// para revisar.
 const COL = {
   area: 0,
   empresa: 1,
@@ -112,6 +121,7 @@ const COL = {
   lugarContacto: 11,
   equipo: 12,
   plan: 13,
+  fechaCierre: 17,
   rol: 20,
   operadorPrincipal: 21,   // usado cuando Rol = Operador
   operadorSupervisor: 19,  // usado cuando Rol = Supervisor
@@ -127,6 +137,7 @@ function celda(row: string[], idx: number): string {
 
 function buildGestion(row: string[]): Gestion {
   const fechaRaw = celda(row, COL.fechaCreacion);
+  const fechaCierreRaw = celda(row, COL.fechaCierre);
   const rol = celda(row, COL.rol);
   const esSupervisor = rol.toLowerCase().includes('supervisor');
   const operador = esSupervisor ? celda(row, COL.operadorSupervisor) : celda(row, COL.operadorPrincipal);
@@ -136,6 +147,7 @@ function buildGestion(row: string[]): Gestion {
     empresa: celda(row, COL.empresa),
     numeroTramite: celda(row, COL.numeroTramite),
     fechaCreacion: fechaRaw ? normalizeFechaVenta(fechaRaw).substring(0, 10) : '',
+    fechaCierre: fechaCierreRaw ? normalizeFechaVenta(fechaCierreRaw).substring(0, 10) : '',
     concepto: celda(row, COL.concepto).toUpperCase(),
     tipoProducto: celda(row, COL.tipoProducto),
     lugarContacto: celda(row, COL.lugarContacto),
@@ -166,6 +178,7 @@ function buildDebug(dataRows: string[][], headerRow: string[]): ColumnDebugInfo[
     { field: 'Empresa', idx: COL.empresa },
     { field: 'Número de trámite', idx: COL.numeroTramite },
     { field: 'Fecha creación', idx: COL.fechaCreacion },
+    { field: 'Fecha cierre (baja confianza)', idx: COL.fechaCierre },
     { field: 'Concepto', idx: COL.concepto },
     { field: 'Tipo producto', idx: COL.tipoProducto },
     { field: 'Lugar de contacto', idx: COL.lugarContacto },

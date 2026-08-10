@@ -4,7 +4,7 @@ import {
   Download, Loader2, ChevronDown, ChevronRight, Search, Bug,
 } from 'lucide-react';
 import {
-  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis,
+  BarChart, Bar, Cell, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from 'recharts';
 import { format, parseISO } from 'date-fns';
@@ -74,6 +74,7 @@ export interface EmpresaStat {
   empresa: string; total: number; consultas: number; reclamos: number; solicitudes: number;
   pctReclamos: number; solucionados: number;
 }
+export interface TiempoResolucionStat { nombre: string; promedioDias: number; n: number }
 
 export interface GestionesStats {
   total: number;
@@ -88,6 +89,9 @@ export interface GestionesStats {
   byPlan: PlanEquipoStat[];
   byEquipo: PlanEquipoStat[];
   byEmpresa: EmpresaStat[];
+  tiempoResolucionOperador: TiempoResolucionStat[];
+  tiempoResolucionMotivo: TiempoResolucionStat[];
+  casosConFechaCierre: number;
 }
 
 export function computeGestionesStats(rows: Gestion[]): GestionesStats {
@@ -105,6 +109,9 @@ export function computeGestionesStats(rows: Gestion[]): GestionesStats {
   const planMap = new Map<string, number>();
   const equipoMap = new Map<string, number>();
   const empresaMap = new Map<string, { total: number; consultas: number; reclamos: number; solicitudes: number; solucionados: number }>();
+  const resolucionOperadorMap = new Map<string, { sumaDias: number; n: number }>();
+  const resolucionMotivoMap = new Map<string, { sumaDias: number; n: number }>();
+  let casosConFechaCierre = 0;
 
   for (const r of rows) {
     const isConsulta = r.concepto === 'CONSULTA';
@@ -153,6 +160,20 @@ export function computeGestionesStats(rows: Gestion[]): GestionesStats {
     const e = empresaMap.get(empKey)!;
     e.total++; if (isConsulta) e.consultas++; if (isReclamo) e.reclamos++; if (isSolicitud) e.solicitudes++;
     if (r.estado === 'SOLUCIONADO') e.solucionados++;
+
+    // Tiempo de resolución = Fecha de cierre − Fecha de creación (solo si hay ambas)
+    if (r.fechaCreacion && r.fechaCierre) {
+      const dias = (new Date(r.fechaCierre).getTime() - new Date(r.fechaCreacion).getTime()) / 86400000;
+      if (Number.isFinite(dias) && dias >= 0) {
+        casosConFechaCierre++;
+        if (r.operador) {
+          const prevOp = resolucionOperadorMap.get(r.operador) ?? { sumaDias: 0, n: 0 };
+          resolucionOperadorMap.set(r.operador, { sumaDias: prevOp.sumaDias + dias, n: prevOp.n + 1 });
+        }
+        const prevMot = resolucionMotivoMap.get(motivoKey) ?? { sumaDias: 0, n: 0 };
+        resolucionMotivoMap.set(motivoKey, { sumaDias: prevMot.sumaDias + dias, n: prevMot.n + 1 });
+      }
+    }
   }
 
   const byOperador: OperadorStat[] = Array.from(operadorMap.entries()).map(([operador, o]) => ({
@@ -179,6 +200,13 @@ export function computeGestionesStats(rows: Gestion[]): GestionesStats {
     pctReclamos: v.total > 0 ? (v.reclamos / v.total) * 100 : 0, solucionados: v.solucionados,
   })).sort((a, b) => b.total - a.total);
 
+  const tiempoResolucionOperador: TiempoResolucionStat[] = Array.from(resolucionOperadorMap.entries())
+    .map(([nombre, v]) => ({ nombre, promedioDias: v.sumaDias / v.n, n: v.n }))
+    .sort((a, b) => b.promedioDias - a.promedioDias);
+  const tiempoResolucionMotivo: TiempoResolucionStat[] = Array.from(resolucionMotivoMap.entries())
+    .map(([nombre, v]) => ({ nombre, promedioDias: v.sumaDias / v.n, n: v.n }))
+    .sort((a, b) => b.promedioDias - a.promedioDias);
+
   const fechas = rows.map(r => r.fechaCreacion).filter(Boolean).sort();
 
   return {
@@ -186,6 +214,7 @@ export function computeGestionesStats(rows: Gestion[]): GestionesStats {
     operadoresActivos: operadorMap.size,
     fechaMin: fechas[0] ?? '', fechaMax: fechas[fechas.length - 1] ?? '',
     byOperador, byMotivo, byEstado, byDia, byPlan, byEquipo, byEmpresa,
+    tiempoResolucionOperador, tiempoResolucionMotivo, casosConFechaCierre,
   };
 }
 
@@ -356,6 +385,57 @@ function SeccionOperadores({ stats }: { stats: GestionesStats }) {
   );
 }
 
+// ── Tiempo de resolución (Fecha de cierre − Fecha de creación) ────────────────
+function TablaTiempoResolucion({ titulo, data }: { titulo: string; data: TiempoResolucionStat[] }) {
+  if (data.length === 0) return (
+    <div>
+      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{titulo}</h4>
+      <p className="text-sm text-gray-400">Sin datos.</p>
+    </div>
+  );
+  return (
+    <div>
+      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{titulo}</h4>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-[#003DA5] text-white">
+              <th className="px-3 py-2 text-left text-xs font-semibold">{titulo}</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">Prom. días</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">Casos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d, i) => (
+              <tr key={d.nombre} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                <td className="px-3 py-1.5 text-gray-800">{d.nombre}</td>
+                <td className="px-3 py-1.5 text-right font-bold text-[#003DA5]">{d.promedioDias.toFixed(1)}</td>
+                <td className="px-3 py-1.5 text-right text-gray-500 text-xs">{d.n}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SeccionTiempoResolucion({ stats }: { stats: GestionesStats }) {
+  if (stats.casosConFechaCierre === 0) return null;
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <h3 className="font-semibold text-gray-900">Tiempo de resolución</h3>
+      <p className="text-xs text-gray-400 mb-4">
+        Promedio de días entre Fecha de creación y Fecha de cierre · {stats.casosConFechaCierre.toLocaleString()} de {stats.total.toLocaleString()} gestiones tienen fecha de cierre registrada
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TablaTiempoResolucion titulo="Por operador" data={stats.tiempoResolucionOperador} />
+        <TablaTiempoResolucion titulo="Por tipo de contacto" data={stats.tiempoResolucionMotivo} />
+      </div>
+    </div>
+  );
+}
+
 // ── Sección 2: Distribución por concepto ──────────────────────────────────────
 function SeccionConcepto({ stats }: { stats: GestionesStats }) {
   const items = [
@@ -363,37 +443,24 @@ function SeccionConcepto({ stats }: { stats: GestionesStats }) {
     { label: 'RECLAMO', value: stats.reclamos, color: P.rojo },
     { label: 'SOLICITUD', value: stats.solicitudes, color: P.verde },
   ];
-  const pieData = items.map(i => ({ name: i.label, value: i.value }));
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <h3 className="font-semibold text-gray-900 mb-4">Distribución por concepto</h3>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {items.map(it => {
-            const pct = stats.total > 0 ? (it.value / stats.total) * 100 : 0;
-            return (
-              <div key={it.label} className="border border-gray-200 rounded-xl p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: it.color }}>{it.label}</div>
-                <div className="text-3xl font-bold mt-1" style={{ color: it.color }}>{it.value.toLocaleString()}</div>
-                <div className="text-xs text-gray-400 mb-2">{pct.toFixed(1)}% del total</div>
-                <div className="w-full bg-gray-100 rounded-full h-2">
-                  <div className="h-2 rounded-full" style={{ width: `${pct}%`, background: it.color }} />
-                </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {items.map(it => {
+          const pct = stats.total > 0 ? (it.value / stats.total) * 100 : 0;
+          return (
+            <div key={it.label} className="border border-gray-200 rounded-xl p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: it.color }}>{it.label}</div>
+              <div className="text-3xl font-bold mt-1" style={{ color: it.color }}>{it.value.toLocaleString()}</div>
+              <div className="text-xs text-gray-400 mb-2">{pct.toFixed(1)}% del total</div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div className="h-2 rounded-full" style={{ width: `${pct}%`, background: it.color }} />
               </div>
-            );
-          })}
-        </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={40}
-              label={({ percent }: { percent?: number }) => `${((percent ?? 0) * 100).toFixed(1)}%`}>
-              {items.map((it, i) => <Cell key={i} fill={it.color} />)}
-            </Pie>
-            <Tooltip formatter={(v: unknown) => [Number(v).toLocaleString(), '']} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -628,10 +695,10 @@ function SeccionPlanEquipo({ stats }: { stats: GestionesStats }) {
   if (stats.byPlan.length === 0 && stats.byEquipo.length === 0) return null;
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="font-semibold text-gray-900 mb-4">Distribución por plan / equipo</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">Distribución por plan / router</h3>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <TablaPlanEquipo titulo="Plan" data={stats.byPlan} />
-        <TablaPlanEquipo titulo="Equipo" data={stats.byEquipo} />
+        <TablaPlanEquipo titulo="Router" data={stats.byEquipo} />
       </div>
     </div>
   );
@@ -758,6 +825,7 @@ export default function GestionesModule() {
   const [conceptoF, setConceptoF] = useState('');
   const [estadoF, setEstadoF] = useState('');
   const [operadorF, setOperadorF] = useState('');
+  const [tipoContactoF, setTipoContactoF] = useState('');
   const [search, setSearch] = useState('');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
@@ -780,10 +848,16 @@ export default function GestionesModule() {
   const reset = () => {
     clearGestiones();
     setData(null); setStage('upload'); setError('');
-    setEmpresaF(''); setConceptoF(''); setEstadoF(''); setOperadorF(''); setSearch(''); setDesde(''); setHasta('');
+    setEmpresaF(''); setConceptoF(''); setEstadoF(''); setOperadorF(''); setTipoContactoF('');
+    setSearch(''); setDesde(''); setHasta('');
   };
 
   const estadosDisponibles = useMemo(() => data ? [...new Set(data.rows.map(r => r.estado).filter(Boolean))].sort() : [], [data]);
+  // "Tipo de contacto" se mapea al campo lugarContacto: la columna real con ese
+  // nombre viene siempre vacía en el export, mientras que lugarContacto trae el
+  // motivo del contacto y es lo que efectivamente sirve para ver "qué operador
+  // atiende qué cosa".
+  const tiposContactoDisponibles = useMemo(() => data ? [...new Set(data.rows.map(r => r.lugarContacto).filter(Boolean))].sort() : [], [data]);
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
@@ -792,6 +866,7 @@ export default function GestionesModule() {
     if (conceptoF) rows = rows.filter(r => r.concepto === conceptoF);
     if (estadoF) rows = rows.filter(r => r.estado === estadoF);
     if (operadorF) rows = rows.filter(r => r.operador === operadorF);
+    if (tipoContactoF) rows = rows.filter(r => r.lugarContacto === tipoContactoF);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       rows = rows.filter(r =>
@@ -801,12 +876,15 @@ export default function GestionesModule() {
     if (desde) rows = rows.filter(r => r.fechaCreacion >= desde);
     if (hasta) rows = rows.filter(r => r.fechaCreacion <= hasta);
     return rows;
-  }, [data, empresaF, conceptoF, estadoF, operadorF, search, desde, hasta]);
+  }, [data, empresaF, conceptoF, estadoF, operadorF, tipoContactoF, search, desde, hasta]);
 
   const stats = useMemo(() => computeGestionesStats(filteredRows), [filteredRows]);
 
-  const hayFiltros = Boolean(empresaF || conceptoF || estadoF || operadorF || search || desde || hasta);
-  function limpiarFiltros() { setEmpresaF(''); setConceptoF(''); setEstadoF(''); setOperadorF(''); setSearch(''); setDesde(''); setHasta(''); }
+  const hayFiltros = Boolean(empresaF || conceptoF || estadoF || operadorF || tipoContactoF || search || desde || hasta);
+  function limpiarFiltros() {
+    setEmpresaF(''); setConceptoF(''); setEstadoF(''); setOperadorF(''); setTipoContactoF('');
+    setSearch(''); setDesde(''); setHasta('');
+  }
 
   const subtitle = useMemo(() => {
     if (!data) return 'Análisis de gestiones y reclamos de Atención al Cliente';
@@ -889,6 +967,10 @@ export default function GestionesModule() {
                   <option value="">Operador (todos)</option>
                   {data.operadores.map(v => <option key={v}>{v}</option>)}
                 </select>
+                <select value={tipoContactoF} onChange={e => setTipoContactoF(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#003DA5] max-w-[200px]">
+                  <option value="">Tipo de contacto (todos)</option>
+                  {tiposContactoDisponibles.map(v => <option key={v}>{v}</option>)}
+                </select>
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)}
@@ -920,6 +1002,7 @@ export default function GestionesModule() {
             </div>
 
             <SeccionOperadores stats={stats} />
+            <SeccionTiempoResolucion stats={stats} />
             <SeccionConcepto stats={stats} />
             <SeccionMotivos stats={stats} />
             <SeccionEstado stats={stats} />

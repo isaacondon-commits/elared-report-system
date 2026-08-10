@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import {
-  Briefcase, CheckCircle, Clock, XCircle, Users, Download, Loader2, AlertTriangle, ChevronDown, ChevronRight,
+  Briefcase, CheckCircle, Clock, XCircle, Users, Download, Loader2, AlertTriangle, ChevronDown, ChevronRight, EyeOff,
 } from 'lucide-react';
 import FileUploader from '../../components/FileUploader';
 import ColumnMapper from '../../components/ColumnMapper';
@@ -35,6 +35,32 @@ const BACKOFFICE_FIELDS = [
 ];
 
 type Stage = 'upload' | 'mapping' | 'loading' | 'analysis';
+
+// ── Persistencia de back offices ocultos ──────────────────────────────────────
+const OCULTOS_KEY = 'elared_backoffice_ocultos';
+
+function loadBOOcultos(): Set<string> {
+  try {
+    const raw = localStorage.getItem(OCULTOS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+}
+
+function saveBOOcultos(s: Set<string>) {
+  try {
+    if (s.size === 0) localStorage.removeItem(OCULTOS_KEY);
+    else localStorage.setItem(OCULTOS_KEY, JSON.stringify([...s]));
+  } catch {}
+}
+
+function applyBOOcultosFilter(
+  rows: Record<string, unknown>[],
+  mapping: Record<string, string>,
+  ocultos: Set<string>,
+): Record<string, unknown>[] {
+  if (!ocultos.size || !mapping.backOffice) return rows;
+  return rows.filter(r => !ocultos.has(String(r[mapping.backOffice] ?? '').trim()));
+}
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -392,7 +418,7 @@ function SeccionPorDia({ stats }: { stats: BackOfficeStats }) {
 }
 
 // ── Sección 2: Estados por back office ────────────────────────────────────────
-function SeccionEstados({ stats }: { stats: BackOfficeStats }) {
+function SeccionEstados({ stats, onHideBackOffice }: { stats: BackOfficeStats; onHideBackOffice: (nombre: string) => void }) {
   const [expandido, setExpandido] = useState<string | null>(null);
   if (stats.byBackOffice.length === 0) return null;
   return (
@@ -410,6 +436,7 @@ function SeccionEstados({ stats }: { stats: BackOfficeStats }) {
               <th className="px-3 py-2 text-right text-xs font-semibold">Procesados</th>
               <th className="px-3 py-2 text-right text-xs font-semibold">Rechazos</th>
               <th className="px-3 py-2 text-center text-xs font-semibold">% Rechazo</th>
+              <th className="px-2 py-2 text-center text-xs font-semibold w-8" />
             </tr>
           </thead>
           <tbody>
@@ -438,10 +465,19 @@ function SeccionEstados({ stats }: { stats: BackOfficeStats }) {
                         {b.pctRechazo.toFixed(1)}% · {badge.label}
                       </span>
                     </td>
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        onClick={e => { e.stopPropagation(); onHideBackOffice(b.nombre); }}
+                        title={`Ocultar ${b.nombre}`}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer' }}
+                      >
+                        <EyeOff size={13} className="text-gray-400 hover:text-gray-600" />
+                      </button>
+                    </td>
                   </tr>
                   {isOpen && (
                     <tr key={`${b.nombre}-detalle`}>
-                      <td colSpan={8} className="px-3 py-3 bg-gray-50 border-t border-gray-100">
+                      <td colSpan={9} className="px-3 py-3 bg-gray-50 border-t border-gray-100">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-gray-500">
@@ -564,14 +600,17 @@ function SeccionRechazos({ stats }: { stats: BackOfficeStats }) {
 
       {/* Tabla rechazos por back office y vendedor */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4">Análisis de rechazos por back office</h3>
+        <h3 className="font-semibold text-gray-900">Análisis de rechazos por back office</h3>
+        <p className="text-xs text-gray-400 mb-4">Top 5 vendedores con más rechazos por cada back office</p>
         {boConRechazos.length === 0 ? (
           <p className="text-sm text-gray-400">Sin rechazos registrados.</p>
         ) : (
           <div className="space-y-3">
             {boConRechazos.map(b => {
               const isOpen = expandido === b.nombre;
-              const vendedores = (porVendedorPorBO.get(b.nombre) ?? []).sort((a, c) => c.rechazos - a.rechazos);
+              const vendedoresAll = (porVendedorPorBO.get(b.nombre) ?? []).sort((a, c) => c.rechazos - a.rechazos);
+              const vendedores = vendedoresAll.slice(0, 5);
+              const vendedoresRestantes = vendedoresAll.length - vendedores.length;
               return (
                 <div key={b.nombre} className="border border-gray-200 rounded-lg overflow-hidden">
                   <button
@@ -612,6 +651,9 @@ function SeccionRechazos({ stats }: { stats: BackOfficeStats }) {
                         ))}
                       </tbody>
                     </table>
+                    {vendedoresRestantes > 0 && (
+                      <p className="text-[11px] text-gray-400 mb-2">+ {vendedoresRestantes} vendedor{vendedoresRestantes > 1 ? 'es' : ''} más con rechazos</p>
+                    )}
                     {isOpen && (
                       <div className="mt-3 border-t border-gray-100 pt-3">
                         <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Detalle de rechazos</div>
@@ -774,6 +816,16 @@ export default function BackOfficeModule() {
   const [error, setError]       = useState('');
   const [sessionKey, setSessionKey] = useState(0);
   const [showPDFModal, setShowPDFModal] = useState(false);
+  const [boOcultos, setBoOcultos] = useState<Set<string>>(loadBOOcultos);
+
+  const getRows = useCallback((
+    allRows: Record<string, unknown>[],
+    emp: string,
+    ocultos: Set<string>,
+  ) => {
+    const rows = getFilteredRows(allRows, mapping, emp);
+    return applyBOOcultosFilter(rows, mapping, ocultos);
+  }, [mapping]);
 
   const handleFile = useCallback(async (file: File) => {
     setError(''); setStage('loading');
@@ -798,23 +850,46 @@ export default function BackOfficeModule() {
       setEmpresas(empList);
       const defaultEmpresa = empList.length > 1 ? empList[1].nombre : 'Todas';
       setEmpresaActiva(defaultEmpresa);
-      const rows = getFilteredRows(parsed.rows, mapping, defaultEmpresa);
+      const rows = getRows(parsed.rows, defaultEmpresa, boOcultos);
       const s = processBackOffice(rows, mapping, defaultEmpresa);
       setStats(s);
       recordActivity('back_office', parsed.fileName);
       saveToStore({ data: s, parsed, mapping, empresas: empList, empresaActiva: defaultEmpresa, nombreArchivo: parsed.fileName });
       setStage('analysis');
     }, 300);
-  }, [parsed, mapping, saveToStore]);
+  }, [parsed, mapping, boOcultos, getRows, saveToStore]);
 
   const handleEmpresaChange = useCallback((empresa: string) => {
     if (!parsed) return;
     setEmpresaActiva(empresa);
-    const rows = getFilteredRows(parsed.rows, mapping, empresa);
+    const rows = getRows(parsed.rows, empresa, boOcultos);
     const s = processBackOffice(rows, mapping, empresa);
     setStats(s);
     saveToStore({ data: s, parsed, mapping, empresas, empresaActiva: empresa, nombreArchivo: parsed.fileName });
-  }, [parsed, mapping, empresas, saveToStore]);
+  }, [parsed, mapping, empresas, boOcultos, getRows, saveToStore]);
+
+  const handleHideBackOffice = useCallback((nombre: string) => {
+    if (!parsed) return;
+    const next = new Set(boOcultos);
+    next.add(nombre);
+    setBoOcultos(next);
+    saveBOOcultos(next);
+    const rows = getRows(parsed.rows, empresaActiva, next);
+    const s = processBackOffice(rows, mapping, empresaActiva);
+    setStats(s);
+    saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
+  }, [parsed, mapping, empresas, empresaActiva, boOcultos, getRows, saveToStore]);
+
+  const handleShowAllBO = useCallback(() => {
+    if (!parsed) return;
+    const next = new Set<string>();
+    setBoOcultos(next);
+    saveBOOcultos(next);
+    const rows = getRows(parsed.rows, empresaActiva, next);
+    const s = processBackOffice(rows, mapping, empresaActiva);
+    setStats(s);
+    saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
+  }, [parsed, mapping, empresas, empresaActiva, getRows, saveToStore]);
 
   const handleExportExcel = useCallback(() => {
     if (!stats) return;
@@ -933,6 +1008,9 @@ export default function BackOfficeModule() {
         {stage === 'analysis' && stats && (
           <div id="backoffice-content" key={sessionKey} className="space-y-6">
 
+            {/* Resumen de rendimiento — primero que todo */}
+            <SeccionRendimiento stats={stats} />
+
             {/* KPI Cards — fila de 5 */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <BOKpiCard label="Total Contratos" value={stats.totalContratos.toLocaleString()} icon={Briefcase} color={P.azul} />
@@ -942,15 +1020,26 @@ export default function BackOfficeModule() {
               <BOKpiCard label="Back Offices Activos" value={stats.backOfficesActivos.toLocaleString()} icon={Users} color={P.violeta} />
             </div>
 
-            {/* Selector de empresa */}
-            <EmpresaTabs empresas={empresas} active={empresaActiva} onChange={handleEmpresaChange} />
+            {/* Selector de empresa + back offices ocultos */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1"><EmpresaTabs empresas={empresas} active={empresaActiva} onChange={handleEmpresaChange} /></div>
+              {boOcultos.size > 0 && (
+                <button
+                  onClick={handleShowAllBO}
+                  className="flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-800 font-medium border border-orange-300 rounded-lg px-3 py-1.5 hover:bg-orange-50 self-start"
+                >
+                  <EyeOff size={12} />
+                  {boOcultos.size} back office{boOcultos.size > 1 ? 's' : ''} oculto{boOcultos.size > 1 ? 's' : ''} · Mostrar todos
+                </button>
+              )}
+            </div>
 
             {/* Sección 1 */}
             <SeccionPorDia stats={stats} />
             <BackOfficeCharts.Evolucion stats={stats} />
 
             {/* Sección 2 */}
-            <SeccionEstados stats={stats} />
+            <SeccionEstados stats={stats} onHideBackOffice={handleHideBackOffice} />
             <BackOfficeCharts.Stacked stats={stats} />
 
             {/* Sección 3 */}
@@ -958,9 +1047,6 @@ export default function BackOfficeModule() {
 
             {/* Sección 4 */}
             <SeccionRechazos stats={stats} />
-
-            {/* Sección 5 */}
-            <SeccionRendimiento stats={stats} />
 
           </div>
         )}

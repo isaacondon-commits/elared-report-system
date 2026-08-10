@@ -25,9 +25,6 @@ export function exportBackOfficeExcel(stats: BackOfficeStats, empresaActiva = 'T
   const diaRows: (string | number)[][] = stats.byDia.map(d => [
     formatFecha(d.fecha), ...bos.map(bo => d.porBackOffice[bo] ?? 0), d.total,
   ]);
-  if (stats.hasFechaEnvioAntel) {
-    diaRows.push(['Activo, espero tinco', ...bos.map(bo => stats.antelPorBackOffice[bo] ?? 0), stats.antelTotal]);
-  }
   const totalesRow: (string | number)[] = [
     'TOTAL', ...bos.map(bo => stats.byDia.reduce((s, d) => s + (d.porBackOffice[bo] ?? 0), 0)),
     stats.byDia.reduce((s, d) => s + d.total, 0),
@@ -59,6 +56,17 @@ export function exportBackOfficeExcel(stats: BackOfficeStats, empresaActiva = 'T
   const ws5 = XLSX.utils.aoa_to_sheet([sinAsignarHeaders, ...sinAsignarRows]);
   ws5['!cols'] = autoWidth([sinAsignarHeaders, ...sinAsignarRows]);
   XLSX.utils.book_append_sheet(wb, ws5, 'Sin asignar');
+
+  // ── Hoja 6: Iniciales — RENOVAR / INGRESAR (columna Número de serie) ──
+  if (stats.hasNumeroSerie && stats.iniciales.length > 0) {
+    const inicialesHeaders = ['Iniciales', 'Renovar', 'Ingresar', 'Total'];
+    const inicialesRows: (string | number)[][] = stats.iniciales.map(i => [i.iniciales, i.renovar, i.ingresar, i.total]);
+    const totalesIniciales: (string | number)[] = [
+      'TOTAL', stats.iniciales.reduce((s, i) => s + i.renovar, 0), stats.iniciales.reduce((s, i) => s + i.ingresar, 0),
+      stats.iniciales.reduce((s, i) => s + i.total, 0),
+    ];
+    styledExcelSheet(wb, 'Iniciales', inicialesHeaders, inicialesRows, totalesIniciales);
+  }
 
   const fn = empresaActiva !== 'Todas' ? `BackOffice_${empresaActiva}_` : 'BackOffice_';
   XLSX.writeFile(wb, `${fn}${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}.xlsx`);

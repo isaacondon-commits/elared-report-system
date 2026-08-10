@@ -26,13 +26,13 @@ const P = {
 const BACKOFFICE_FIELDS = [
   { key: 'backOffice',      label: 'Back Office',              required: true  },
   { key: 'fechaBackOffice', label: 'Fecha de Back Office',     required: true  },
-  { key: 'fechaEnvioAntel', label: 'Fecha de envío a ANTEL',   required: false },
   { key: 'estado',          label: 'Estado',                    required: true  },
   { key: 'empresa',         label: 'Empresa / Línea',           required: false },
   { key: 'funcionario',     label: 'Vendedor',                  required: false },
   { key: 'nuevoPlan',       label: 'Nuevo Plan',                required: false },
   { key: 'motivo',          label: 'Motivo de cambio de plan',  required: false },
   { key: 'fecha',           label: 'Fecha de venta',            required: false },
+  { key: 'numeroSerie',     label: 'Número de serie',           required: false },
 ];
 
 type Stage = 'upload' | 'mapping' | 'loading' | 'analysis';
@@ -117,6 +117,13 @@ export interface SinAsignarRow {
   estado: string;
 }
 
+export interface InicialesStat {
+  iniciales: string;
+  renovar: number;
+  ingresar: number;
+  total: number;
+}
+
 export interface BackOfficeStats {
   totalContratos: number;
   procesadosHoy: number;
@@ -137,9 +144,8 @@ export interface BackOfficeStats {
   hasEstado: boolean;
   hasFuncionario: boolean;
   hasFechaBO: boolean;
-  hasFechaEnvioAntel: boolean;
-  antelPorBackOffice: Record<string, number>;
-  antelTotal: number;
+  hasNumeroSerie: boolean;
+  iniciales: InicialesStat[];
 }
 
 // ── Lógica de negocio ─────────────────────────────────────────────────────────
@@ -152,7 +158,7 @@ export function processBackOffice(
   const hasEstado      = Boolean(mapping.estado);
   const hasFuncionario = Boolean(mapping.funcionario);
   const hasFechaBO     = Boolean(mapping.fechaBackOffice);
-  const hasFechaEnvioAntel = Boolean(mapping.fechaEnvioAntel);
+  const hasNumeroSerie = Boolean(mapping.numeroSerie);
 
   // ── Sección 3: dataset COMPLETO (sin filtro de back office) ──
   const sinAsignarRows: SinAsignarRow[] = [];
@@ -187,10 +193,10 @@ export function processBackOffice(
   }
   const boMap  = new Map<string, BOAcc>();
   const diaMap = new Map<string, Map<string, number>>(); // fecha → bo → count
-  const antelMap = new Map<string, number>(); // bo → count con Fecha de envío a ANTEL cargada
+  const inicialesMap = new Map<string, { renovar: number; ingresar: number }>();
+  const NUMERO_SERIE_RE = /^(RENOVAR|INGRESAR)\s+(.+)$/i;
   const todayISO = new Date().toISOString().substring(0, 10);
   let procesadosHoy = 0;
-  let antelTotal = 0;
 
   for (const r of rowsBO) {
     const nombre     = String(r[mapping.backOffice] ?? '').trim();
@@ -230,10 +236,17 @@ export function processBackOffice(
 
     if (esRechazo) acc.rechazosDetalle.push({ fecha: fechaBO, vendedor, estado: estadoRaw, plan });
 
-    // "Activo, espero tinco": filas con Fecha de envío a ANTEL cargada (independiente del Estado)
-    if (hasFechaEnvioAntel && String(r[mapping.fechaEnvioAntel] ?? '').trim() !== '') {
-      antelMap.set(nombre, (antelMap.get(nombre) ?? 0) + 1);
-      antelTotal++;
+    // Iniciales de empleado a partir de "Número de serie": "RENOVAR XX" / "INGRESAR XX"
+    if (hasNumeroSerie) {
+      const serieRaw = String(r[mapping.numeroSerie] ?? '').trim();
+      const m = serieRaw.match(NUMERO_SERIE_RE);
+      if (m) {
+        const accion = m[1].toUpperCase();
+        const iniciales = m[2].trim().toUpperCase();
+        const prev = inicialesMap.get(iniciales) ?? { renovar: 0, ingresar: 0 };
+        if (accion === 'RENOVAR') prev.renovar++; else prev.ingresar++;
+        inicialesMap.set(iniciales, prev);
+      }
     }
   }
 
@@ -294,6 +307,10 @@ export function processBackOffice(
   }
   porVendedor.sort((a, b) => b.rechazos - a.rechazos);
 
+  const iniciales: InicialesStat[] = Array.from(inicialesMap.entries())
+    .map(([iniciales, v]) => ({ iniciales, renovar: v.renovar, ingresar: v.ingresar, total: v.renovar + v.ingresar }))
+    .sort((a, b) => b.total - a.total);
+
   const totalContratos       = rowsBO.length;
   const rechazosTotales      = byBackOffice.reduce((s, b) => s + b.rechazos, 0);
   const rechazosPct          = totalContratos > 0 ? (rechazosTotales / totalContratos) * 100 : 0;
@@ -309,7 +326,7 @@ export function processBackOffice(
     diasConActividad, promedioRechazoDiario,
     fechaMin: fechas[0] ?? '', fechaMax: fechas[fechas.length - 1] ?? '',
     empresaActiva, hasEstado, hasFuncionario, hasFechaBO,
-    hasFechaEnvioAntel, antelPorBackOffice: Object.fromEntries(antelMap), antelTotal,
+    hasNumeroSerie, iniciales,
   };
 }
 
@@ -424,26 +441,9 @@ function SeccionPorDia({ stats }: { stats: BackOfficeStats }) {
               })}
               <td className="px-3 py-2 text-right font-bold text-gray-900 whitespace-nowrap">{stats.byDia.reduce((s, d) => s + d.total, 0)}</td>
             </tr>
-            {stats.hasFechaEnvioAntel && (
-              <tr className="border-t-2 border-purple-200" style={{ background: '#f5f3ff' }}>
-                <td className="px-3 py-2 font-bold text-[#6f42c1] whitespace-nowrap">Activo, espero tinco</td>
-                {bos.map(bo => {
-                  const v = stats.antelPorBackOffice[bo] ?? 0;
-                  return (
-                    <td key={bo} className="px-3 py-2 text-right whitespace-nowrap">
-                      {v === 0 ? <span className="text-gray-300">—</span> : <span className="font-bold text-[#6f42c1]">{v}</span>}
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-2 text-right font-bold text-[#6f42c1] whitespace-nowrap">{stats.antelTotal}</td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
-      {stats.hasFechaEnvioAntel && (
-        <p className="text-[11px] text-gray-400 mt-2">"Activo, espero tinco": contratos con Fecha de envío a ANTEL cargada, sin importar el Estado.</p>
-      )}
     </div>
   );
 }
@@ -590,6 +590,50 @@ function SeccionSinAsignar({ stats }: { stats: BackOfficeStats }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Sección: Iniciales de empleado (columna Número de serie) ─────────────────
+function SeccionIniciales({ stats }: { stats: BackOfficeStats }) {
+  if (!stats.hasNumeroSerie || stats.iniciales.length === 0) return null;
+  const totalRenovar = stats.iniciales.reduce((s, i) => s + i.renovar, 0);
+  const totalIngresar = stats.iniciales.reduce((s, i) => s + i.ingresar, 0);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <h3 className="font-semibold text-gray-900">Gestiones por iniciales (Número de serie)</h3>
+      <p className="text-xs text-gray-400 mb-4">
+        Extraído de "RENOVAR &lt;iniciales&gt;" / "INGRESAR &lt;iniciales&gt;" en la columna Número de serie
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-[#003DA5] text-white">
+              <th className="px-3 py-2 text-left text-xs font-semibold">Iniciales</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">Renovar</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">Ingresar</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.iniciales.map((i, idx) => (
+              <tr key={i.iniciales} className={`border-t border-gray-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                <td className="px-3 py-1.5 font-mono font-medium text-gray-800">{i.iniciales}</td>
+                <td className="px-3 py-1.5 text-right text-gray-600">{i.renovar || <span className="text-gray-300">—</span>}</td>
+                <td className="px-3 py-1.5 text-right text-gray-600">{i.ingresar || <span className="text-gray-300">—</span>}</td>
+                <td className="px-3 py-1.5 text-right font-bold text-[#003DA5]">{i.total}</td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-gray-300" style={{ background: '#f1f5f9' }}>
+              <td className="px-3 py-2 font-bold text-gray-700">TOTAL</td>
+              <td className="px-3 py-2 text-right font-bold text-gray-800">{totalRenovar}</td>
+              <td className="px-3 py-2 text-right font-bold text-gray-800">{totalIngresar}</td>
+              <td className="px-3 py-2 text-right font-bold text-gray-900">{totalRenovar + totalIngresar}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1039,19 +1083,7 @@ export default function BackOfficeModule() {
         {stage === 'analysis' && stats && (
           <div id="backoffice-content" key={sessionKey} className="space-y-6">
 
-            {/* Resumen de rendimiento — primero que todo */}
-            <SeccionRendimiento stats={stats} />
-
-            {/* KPI Cards — fila de 5 */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <BOKpiCard label="Total Contratos" value={stats.totalContratos.toLocaleString()} icon={Briefcase} color={P.azul} />
-              <BOKpiCard label="Procesados Hoy" value={stats.procesadosHoy.toLocaleString()} sub="fecha de back-office de hoy" icon={CheckCircle} color={P.verde} />
-              <BOKpiCard label="Rechazos Totales" value={stats.rechazosTotales.toLocaleString()} sub={`${stats.rechazosPct.toFixed(1)}% del total`} icon={XCircle} color={P.rojo} />
-              <BOKpiCard label="Sin Asignar" value={stats.sinAsignarCount.toLocaleString()} sub="contratos VENDIDO sin back office" icon={AlertTriangle} color={P.naranja} />
-              <BOKpiCard label="Back Offices Activos" value={stats.backOfficesActivos.toLocaleString()} icon={Users} color={P.violeta} />
-            </div>
-
-            {/* Selector de empresa + back offices ocultos */}
+            {/* Selector de empresa + back offices ocultos — primero que todo */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1"><EmpresaTabs empresas={empresas} active={empresaActiva} onChange={handleEmpresaChange} /></div>
               {boOcultos.size > 0 && (
@@ -1065,6 +1097,18 @@ export default function BackOfficeModule() {
               )}
             </div>
 
+            {/* Resumen de rendimiento */}
+            <SeccionRendimiento stats={stats} />
+
+            {/* KPI Cards — fila de 5 */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <BOKpiCard label="Total Contratos" value={stats.totalContratos.toLocaleString()} icon={Briefcase} color={P.azul} />
+              <BOKpiCard label="Procesados Hoy" value={stats.procesadosHoy.toLocaleString()} sub="fecha de back-office de hoy" icon={CheckCircle} color={P.verde} />
+              <BOKpiCard label="Rechazos Totales" value={stats.rechazosTotales.toLocaleString()} sub={`${stats.rechazosPct.toFixed(1)}% del total`} icon={XCircle} color={P.rojo} />
+              <BOKpiCard label="Sin Asignar" value={stats.sinAsignarCount.toLocaleString()} sub="contratos VENDIDO sin back office" icon={AlertTriangle} color={P.naranja} />
+              <BOKpiCard label="Back Offices Activos" value={stats.backOfficesActivos.toLocaleString()} icon={Users} color={P.violeta} />
+            </div>
+
             {/* Sección 1 */}
             <SeccionPorDia stats={stats} />
             <BackOfficeCharts.Evolucion stats={stats} />
@@ -1075,6 +1119,9 @@ export default function BackOfficeModule() {
 
             {/* Sección 3 */}
             <SeccionSinAsignar stats={stats} />
+
+            {/* Iniciales (Número de serie) */}
+            <SeccionIniciales stats={stats} />
 
             {/* Sección 4 */}
             <SeccionRechazos stats={stats} />

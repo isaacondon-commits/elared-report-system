@@ -77,7 +77,7 @@ function Evolucion({ stats }: { stats: BackOfficeStats }) {
   );
 }
 
-// ── Composición de estados por back office (barras agrupadas, top 8) ──────────
+// ── Composición de estados por back office (barras horizontales agrupadas, top 8) ──
 function Stacked({ stats }: { stats: BackOfficeStats }) {
   if (stats.byBackOffice.length === 0) return null;
   const top = stats.byBackOffice.slice(0, TOP_N_COMPOSICION);
@@ -97,21 +97,21 @@ function Stacked({ stats }: { stats: BackOfficeStats }) {
       <p className="text-xs text-gray-400 mb-4">
         {restantes > 0 ? `Top ${TOP_N_COMPOSICION} back offices por volumen · +${restantes} más en la tabla de arriba` : 'Cantidad por estado equivalente y back office'}
       </p>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="nombre" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} />
-          <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+      <ResponsiveContainer width="100%" height={Math.max(data.length * 70 + 40, 260)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+          <YAxis dataKey="nombre" type="category" tick={{ fontSize: 10 }} width={130} />
           <Tooltip
             formatter={(v: unknown) => [Number(v).toLocaleString(), '']}
             labelFormatter={(_: unknown, payload: readonly { payload?: { fullNombre?: string } }[]) => payload?.[0]?.payload?.fullNombre ?? ''}
             contentStyle={{ fontSize: 12 }}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="Activos" fill="#003DA5" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="Pendientes" fill="#fd7e14" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="Procesados" fill="#28a745" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="Rechazos" fill="#E3000F" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="Activos" fill="#003DA5" radius={[0, 3, 3, 0]} />
+          <Bar dataKey="Pendientes" fill="#fd7e14" radius={[0, 3, 3, 0]} />
+          <Bar dataKey="Procesados" fill="#28a745" radius={[0, 3, 3, 0]} />
+          <Bar dataKey="Rechazos" fill="#E3000F" radius={[0, 3, 3, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -24,6 +24,7 @@ import CertificacionesPage from './pages/CertificacionesPage';
 import LicenciasPage from './pages/LicenciasPage';
 import EntrevistasPage from './pages/EntrevistasPage';
 import EgresosPage from './pages/EgresosPage';
+import ContratosPage from './pages/ContratosPage';
 import LegajoPage from './pages/LegajoPage';
 import CalendarioPage from './pages/CalendarioPage';
 import { UpdateNotification } from './components/UpdateNotification';
@@ -112,6 +113,9 @@ function AppLayout() {
             } />
             <Route path="/egresos" element={
               <ProtectedRoute modulo="egresos"><EgresosPage /></ProtectedRoute>
+            } />
+            <Route path="/contratos" element={
+              <ProtectedRoute modulo="contratos"><ContratosPage /></ProtectedRoute>
             } />
             <Route path="/legajo" element={
               <ProtectedRoute modulo="legajo"><LegajoPage /></ProtectedRoute>

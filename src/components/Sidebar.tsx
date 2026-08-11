@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   BarChart2, Clock, Settings, Home, Users, FileCheck,
   Smartphone, Wifi, Headphones, Briefcase, Cpu, LogOut, PauseCircle, Menu, Calendar, Umbrella,
-  UserPlus, UserMinus, FolderOpen, PhoneCall,
+  UserPlus, UserMinus, FolderOpen, PhoneCall, FileSignature,
 } from 'lucide-react';
 import { useAuthContext } from '../contexts/AuthContext';
 import { tieneAcceso, NOMBRES_ROLES, ROL_COLORS, type ModuloSistema } from '../config/permisos';
@@ -55,6 +55,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/licencias',       icon: Umbrella,   label: 'Licencias',       modulo: 'licencias'       },
       { to: '/entrevistas',     icon: UserPlus,   label: 'Entrevistas',     modulo: 'entrevistas'     },
       { to: '/egresos',         icon: UserMinus,  label: 'Egresos',         modulo: 'egresos'         },
+      { to: '/contratos',       icon: FileSignature, label: 'Armado de Contratos', modulo: 'contratos' },
       { to: '/calendario',      icon: Calendar,   label: 'Calendario',      modulo: 'calendario'      },
     ],
   },

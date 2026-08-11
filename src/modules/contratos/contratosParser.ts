@@ -15,10 +15,8 @@ const ARCHIVO_PLANTILLA: Record<Empresa, Record<TipoContrato, string>> = {
 
 // Plantillas todavía no disponibles (ver panel de Armado de Contratos para el
 // motivo exacto) — se listan acá para poder avisar en la UI en vez de fallar
-// con un error de red poco claro.
-export const PLANTILLAS_PENDIENTES: Partial<Record<`${Empresa}_${TipoContrato}`, string>> = {
-  Phonehouse_Móvil: 'La plantilla original está en formato .doc (Word antiguo) y todavía no se convirtió a .docx.',
-};
+// con un error de red poco claro. Las 6 combinaciones ya están cargadas.
+export const PLANTILLAS_PENDIENTES: Partial<Record<`${Empresa}_${TipoContrato}`, string>> = {};
 
 export function getPlantillaUrl(empresa: Empresa, tipo: TipoContrato): string {
   const archivo = ARCHIVO_PLANTILLA[empresa][tipo];
@@ -64,6 +62,43 @@ export function extraerDatosEmpleado(texto: string, fecha: Date): DatosContrato 
     cedula,
     direccion,
   };
+}
+
+// ── Carga masiva ──────────────────────────────────────────────────────────────
+
+const INICIO_BLOQUE_RE = /^\s*(?:nombre completo|nombre)\s*:/i;
+
+/**
+ * Divide un texto con los datos de varias personas pegados uno atrás del otro
+ * en un bloque por persona. Cada persona debe empezar su bloque con una línea
+ * "Nombre Completo: ..." (o "Nombre: ...") — no hace falta ningún separador
+ * manual entre una persona y la siguiente, alcanza con pegar todos los
+ * mensajes seguidos. Si no se detecta ningún inicio de bloque, se devuelve
+ * todo el texto como un único bloque (compatible con pegar una sola persona).
+ */
+export function dividirEnBloques(texto: string): string[] {
+  const lineas = texto.split(/\r?\n/);
+  const inicios: number[] = [];
+  lineas.forEach((linea, i) => { if (INICIO_BLOQUE_RE.test(linea)) inicios.push(i); });
+
+  // Si no se detecta ningún "Nombre Completo:" / "Nombre:", se trata todo el
+  // texto como una sola persona (compatible con pegar sin ese prefijo).
+  if (inicios.length === 0) {
+    const bloque = texto.trim();
+    return bloque ? [bloque] : [];
+  }
+
+  // Cualquier texto ANTES del primer inicio detectado se descarta (es
+  // preámbulo, no una persona) — evita generar un contrato vacío por un
+  // encabezado suelto pegado antes de la primera persona.
+  const bloques: string[] = [];
+  for (let k = 0; k < inicios.length; k++) {
+    const desde = inicios[k];
+    const hasta = k + 1 < inicios.length ? inicios[k + 1] : lineas.length;
+    const bloque = lineas.slice(desde, hasta).join('\n').trim();
+    if (bloque) bloques.push(bloque);
+  }
+  return bloques;
 }
 
 // ── Generación del .docx ────────────────────────────────────────────────────────
@@ -112,7 +147,8 @@ function escaparXml(valor: string): string {
 }
 
 export function nombreArchivoContrato(empresa: string, nombre: string): string {
-  const safe = nombre.trim().replace(/\s+/g, '_').replace(/[^\w-]/g, '') || 'contrato';
+  const sinAcentos = nombre.trim().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const safe = sinAcentos.replace(/\s+/g, '_').replace(/[^\w-]/g, '') || 'contrato';
   return `Contrato_${empresa}_${safe}.docx`;
 }
 
@@ -125,4 +161,26 @@ export function descargarBlob(blob: Blob, nombreArchivo: string): void {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Empaqueta varios .docx generados en un único .zip para descargar todos juntos. */
+export async function empaquetarContratosZip(
+  items: { nombreArchivo: string; blob: Blob }[],
+): Promise<Blob> {
+  const zip = new PizZip();
+  const nombresUsados = new Map<string, number>();
+
+  for (const item of items) {
+    let nombre = item.nombreArchivo;
+    const usos = nombresUsados.get(nombre) ?? 0;
+    if (usos > 0) {
+      nombre = nombre.replace(/\.docx$/i, `_${usos + 1}.docx`);
+    }
+    nombresUsados.set(item.nombreArchivo, usos + 1);
+
+    const buffer = await item.blob.arrayBuffer();
+    zip.file(nombre, buffer);
+  }
+
+  return zip.generate({ type: 'blob', mimeType: 'application/zip' }) as Blob;
 }

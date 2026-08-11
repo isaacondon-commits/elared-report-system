@@ -49,10 +49,15 @@ const MESES = [
  * que suele traer el mensaje (teléfono, banco, hijos a cargo, etc.) no se usan
  * en ninguna plantilla — se verificó contra los .docx reales.
  */
+// Los campos se buscan anclados al INICIO de línea (con ":" obligatorio
+// después de la etiqueta) — no como substring en cualquier parte del texto.
+// Antes "CI" (sin ancla y con [:\s]* opcional) matcheaba el "ci" que hay
+// dentro de "naCImiento" en "Fecha de nacimiento: ...", capturando
+// "miento: 14-02-2007" como si fuera la cédula.
 export function extraerDatosEmpleado(texto: string, fecha: Date): DatosContrato {
-  const nombre = (texto.match(/(?:Nombre Completo|Nombre)[:\s]*([^\n]+)/i) || [])[1]?.trim() || '______________';
-  const cedula = (texto.match(/(?:Cedula|Cédula|C\.I\.?|CI)[:\s]*([^\n]+)/i) || [])[1]?.trim() || '______________';
-  const direccion = (texto.match(/(?:Dirección|Direccion|Domicilio)[:\s]*([^\n]+)/i) || [])[1]?.trim() || '______________';
+  const nombre = (texto.match(/^\s*(?:Nombre Completo|Nombre)\s*:\s*([^\n]+)/im) || [])[1]?.trim() || '______________';
+  const cedula = (texto.match(/^\s*(?:C[ée]dula|C\.I\.?|CI|Documento)\s*:\s*([^\n]+)/im) || [])[1]?.trim() || '______________';
+  const direccion = (texto.match(/^\s*(?:Dirección|Direccion|Domicilio)\s*:\s*([^\n]+)/im) || [])[1]?.trim() || '______________';
 
   return {
     dia: fecha.getDate().toString(),

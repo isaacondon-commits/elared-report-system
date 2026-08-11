@@ -35,7 +35,12 @@ function usePrintScopedToPreview(previewAreaId: string) {
     const style = document.createElement('style');
     style.id = 'contratos-print-style';
     style.innerHTML = `
-      @page { size: A4; margin: 15mm; }
+      /* margin: 0 en @page — además de A4, esto es lo que hace que Chrome no
+         tenga dónde dibujar el encabezado/pie por defecto (fecha, título de
+         la pestaña, URL). El propio documento ya trae sus márgenes internos
+         (docx-preview renderiza la página a tamaño real, márgenes incluidos),
+         así que no hace falta un margen extra acá. */
+      @page { size: A4; margin: 0; }
       @media print {
         body * { visibility: hidden; }
         #${previewAreaId}, #${previewAreaId} * { visibility: visible; }

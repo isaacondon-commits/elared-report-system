@@ -108,7 +108,26 @@ export function dividirEnBloques(texto: string): string[] {
 
 // ── Generación del .docx ────────────────────────────────────────────────────────
 
-const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+/**
+ * Cuenta cuántos placeholders "XXXXXXXX" tiene una plantilla. Se usa para
+ * avisar en la UI ("Contratos originales") si al editar el texto se borró
+ * alguno sin querer — el armado necesita exactamente 6 (día, mes, año,
+ * nombre, cédula, dirección).
+ */
+export function contarPlaceholders(plantillaBuffer: ArrayBuffer): number {
+  try {
+    const zip = new PizZip(plantillaBuffer);
+    const file = zip.file('word/document.xml');
+    if (!file) return 0;
+    return (file.asText().match(/XXXXXXXX/g) || []).length;
+  } catch {
+    return 0;
+  }
+}
+
+export const PLACEHOLDERS_ESPERADOS = 6;
 
 /**
  * Reemplaza, en orden, los 6 placeholders "XXXXXXXX" del documento

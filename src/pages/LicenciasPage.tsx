@@ -13,6 +13,8 @@ type EstadoLicencia = 'activa' | 'proxima_vencer' | 'vencida';
 interface Licencia {
   id: string;
   nombre: string;
+  empresa: string;
+  sector: string;
   fechaInicio: string;
   fechaFin: string;
   diasTotales: number;
@@ -47,7 +49,9 @@ function fmtDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function buildLicencia(nombre: string, fechaInicio: string, fechaFin: string): Licencia {
+function buildLicencia(
+  nombre: string, empresa: string, sector: string, fechaInicio: string, fechaFin: string,
+): Licencia {
   const today = todayISO();
   const diasTotales = diffDays(fechaInicio, fechaFin) + 1;
   const fechaReintegro = addDays(fechaFin, 1);
@@ -63,7 +67,7 @@ function buildLicencia(nombre: string, fechaInicio: string, fechaFin: string): L
   }
 
   const id = `${nombre}__${fechaInicio}__${fechaFin}`;
-  return { id, nombre, fechaInicio, fechaFin, diasTotales, fechaReintegro, estado, diasRestantes };
+  return { id, nombre, empresa, sector, fechaInicio, fechaFin, diasTotales, fechaReintegro, estado, diasRestantes };
 }
 
 const STORAGE_KEY = 'elared_licencias';
@@ -72,8 +76,10 @@ function loadData(): Licencia[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const stored = JSON.parse(raw) as Array<{ nombre: string; fechaInicio: string; fechaFin: string }>;
-      return stored.map(s => buildLicencia(s.nombre, s.fechaInicio, s.fechaFin));
+      const stored = JSON.parse(raw) as Array<{
+        nombre: string; empresa?: string; sector?: string; fechaInicio: string; fechaFin: string;
+      }>;
+      return stored.map(s => buildLicencia(s.nombre, s.empresa ?? '', s.sector ?? '', s.fechaInicio, s.fechaFin));
     }
   } catch { /* ignore */ }
   return [];
@@ -82,7 +88,10 @@ function loadData(): Licencia[] {
 function saveData(licencias: Licencia[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(
-      licencias.map(l => ({ nombre: l.nombre, fechaInicio: l.fechaInicio, fechaFin: l.fechaFin }))
+      licencias.map(l => ({
+        nombre: l.nombre, empresa: l.empresa, sector: l.sector,
+        fechaInicio: l.fechaInicio, fechaFin: l.fechaFin,
+      }))
     ));
   } catch { /* ignore */ }
 }
@@ -93,7 +102,9 @@ function licenciaKey(l: Licencia): string {
 
 // ─── Parser de texto ───────────────────────────────────────────────────────────
 
-function parsearTextoLicencias(texto: string): { licencias: Licencia[]; ignoradas: number } {
+function parsearTextoLicencias(
+  texto: string, empresa: string, sector: string,
+): { licencias: Licencia[]; ignoradas: number } {
   const lines = texto.split('\n');
   const resultados: Licencia[] = [];
   let ignoradas = 0;
@@ -120,7 +131,7 @@ function parsearTextoLicencias(texto: string): { licencias: Licencia[]; ignorada
     const fin = dmyToIso(fechas[1]);
     if (fin < inicio) { ignoradas++; continue; }
 
-    resultados.push(buildLicencia(nombre.toUpperCase(), inicio, fin));
+    resultados.push(buildLicencia(nombre.toUpperCase(), empresa, sector, inicio, fin));
   }
 
   return { licencias: resultados, ignoradas };
@@ -130,7 +141,7 @@ function parsearTextoLicencias(texto: string): { licencias: Licencia[]; ignorada
 
 function exportExcel(licencias: Licencia[]) {
   const wb = XLSX.utils.book_new();
-  const headers = ['Nombre', 'Inicio', 'Fin', 'Días lic.', 'Reintegro', 'Estado', 'Días rest.'];
+  const headers = ['Nombre', 'Empresa', 'Sector', 'Inicio', 'Fin', 'Días lic.', 'Reintegro', 'Estado', 'Días rest.'];
 
   const ESTADO_LABEL: Record<EstadoLicencia, string> = {
     activa: 'En curso', proxima_vencer: 'Próxima a terminar', vencida: 'Finalizada',
@@ -138,7 +149,7 @@ function exportExcel(licencias: Licencia[]) {
 
   function toRows(list: Licencia[]) {
     return list.map(l => [
-      l.nombre, fmtDate(l.fechaInicio), fmtDate(l.fechaFin),
+      l.nombre, l.empresa, l.sector, fmtDate(l.fechaInicio), fmtDate(l.fechaFin),
       l.diasTotales, fmtDate(l.fechaReintegro), ESTADO_LABEL[l.estado],
       l.estado !== 'vencida' ? l.diasRestantes : '—',
     ]);
@@ -162,7 +173,10 @@ function exportExcel(licencias: Licencia[]) {
         if (ws[ref]) ws[ref].s = { fill: { fgColor: { rgb: bg } } };
       });
     });
-    ws['!cols'] = [{ wch: 38 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 10 }];
+    ws['!cols'] = [
+      { wch: 38 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 12 },
+      { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 10 },
+    ];
     return ws;
   }
 
@@ -183,14 +197,14 @@ function exportExcel(licencias: Licencia[]) {
   for (const [nombre, ls] of [...byNombre.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'))) {
     const sortedLs = [...ls].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio));
     for (const l of sortedLs) {
-      personaRows.push([nombre, fmtDate(l.fechaInicio), fmtDate(l.fechaFin), l.diasTotales, fmtDate(l.fechaReintegro), ESTADO_LABEL[l.estado]]);
+      personaRows.push([nombre, l.empresa, l.sector, fmtDate(l.fechaInicio), fmtDate(l.fechaFin), l.diasTotales, fmtDate(l.fechaReintegro), ESTADO_LABEL[l.estado]]);
     }
   }
   const histWs = XLSX.utils.aoa_to_sheet([
-    ['Nombre', 'Inicio', 'Fin', 'Días lic.', 'Reintegro', 'Estado'],
+    ['Nombre', 'Empresa', 'Sector', 'Inicio', 'Fin', 'Días lic.', 'Reintegro', 'Estado'],
     ...personaRows,
   ]);
-  histWs['!cols'] = [{ wch: 38 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 20 }];
+  histWs['!cols'] = [{ wch: 38 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, histWs, 'Historial por persona');
 
   XLSX.writeFile(wb, `Licencias_${new Date().toLocaleDateString('es-UY').replace(/\//g, '-')}.xlsx`);
@@ -218,6 +232,8 @@ function KpiCard({
 
 function AddPanel({ onSave }: { onSave: (l: Licencia) => void }) {
   const [nombre, setNombre] = useState('');
+  const [empresa, setEmpresa] = useState('');
+  const [sector, setSector] = useState('');
   const [inicio, setInicio] = useState('');
   const [fin, setFin] = useState('');
   const [error, setError] = useState('');
@@ -234,8 +250,8 @@ function AddPanel({ onSave }: { onSave: (l: Licencia) => void }) {
     if (!inicio) { setError('La fecha de inicio es requerida.'); return; }
     if (!fin) { setError('La fecha de fin es requerida.'); return; }
     if (fin < inicio) { setError('La fecha de fin debe ser igual o posterior al inicio.'); return; }
-    onSave(buildLicencia(nombre.trim().toUpperCase(), inicio, fin));
-    setNombre(''); setInicio(''); setFin(''); setError('');
+    onSave(buildLicencia(nombre.trim().toUpperCase(), empresa.trim(), sector.trim(), inicio, fin));
+    setNombre(''); setEmpresa(''); setSector(''); setInicio(''); setFin(''); setError('');
   }
 
   return (
@@ -252,6 +268,26 @@ function AddPanel({ onSave }: { onSave: (l: Licencia) => void }) {
             placeholder="APELLIDO, Nombre"
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
           />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Empresa</label>
+            <input
+              type="text" value={empresa} list="lic-empresas"
+              onChange={e => setEmpresa(e.target.value)}
+              placeholder="Empresa"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Sector</label>
+            <input
+              type="text" value={sector} list="lic-sectores"
+              onChange={e => setSector(e.target.value)}
+              placeholder="Sector"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+            />
+          </div>
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha inicio</label>
@@ -339,6 +375,53 @@ function EstadoBadge({ estado }: { estado: EstadoLicencia }) {
   return <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">✓ Finalizada</span>;
 }
 
+// ─── Celda editable (Empresa / Sector) ────────────────────────────────────────
+
+function EditableCell({ value, placeholder, listId, onCommit }: {
+  value: string;
+  placeholder: string;
+  listId: string;
+  onCommit: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  function start() { setDraft(value); setEditing(true); }
+  function commit() {
+    setEditing(false);
+    const v = draft.trim();
+    if (v !== value) onCommit(v);
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="text"
+        value={draft}
+        list={listId}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        className="w-full min-w-[110px] border border-[#003DA5] rounded px-2 py-1 text-xs outline-none"
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={start}
+      title="Clic para editar"
+      className="w-full text-left text-xs text-gray-700 hover:bg-white/60 rounded px-1 py-0.5 -mx-1 transition-colors"
+    >
+      {value || <span className="text-gray-300">{placeholder}</span>}
+    </button>
+  );
+}
+
 // ─── Historial timeline ────────────────────────────────────────────────────────
 
 function PersonaHistorial({ nombre, licencias }: { nombre: string; licencias: Licencia[] }) {
@@ -386,15 +469,39 @@ TABEIRA RODRIGUEZ, Katherine Yuliana    16/03/2026  -  28/03/2026
 ALVEZ ALVEZ, Camila Magali    02/03/2026  -  09/03/2026`;
 
 function TextoLoaderContent({
-  texto, setTexto, onCargarEjemplo, onProcesar,
+  texto, setTexto, empresa, setEmpresa, sector, setSector, onCargarEjemplo, onProcesar,
 }: {
   texto: string;
   setTexto: (t: string) => void;
+  empresa: string;
+  setEmpresa: (v: string) => void;
+  sector: string;
+  setSector: (v: string) => void;
   onCargarEjemplo: () => void;
   onProcesar: () => void;
 }) {
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Empresa (para todo el lote)</label>
+          <input
+            type="text" value={empresa} list="lic-empresas"
+            onChange={e => setEmpresa(e.target.value)}
+            placeholder="Opcional"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Sector (para todo el lote)</label>
+          <input
+            type="text" value={sector} list="lic-sectores"
+            onChange={e => setSector(e.target.value)}
+            placeholder="Opcional"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#003DA5] focus:ring-1 focus:ring-[#003DA5]"
+          />
+        </div>
+      </div>
       <textarea
         value={texto}
         onChange={e => setTexto(e.target.value)}
@@ -424,13 +531,15 @@ function TextoLoaderContent({
 function TextoLoaderModal({
   onCargar, onClose,
 }: {
-  onCargar: (texto: string) => void;
+  onCargar: (texto: string, empresa: string, sector: string) => void;
   onClose: () => void;
 }) {
   const [texto, setTexto] = useState('');
+  const [empresa, setEmpresa] = useState('');
+  const [sector, setSector] = useState('');
 
   function handleProcesar() {
-    if (texto.trim()) onCargar(texto);
+    if (texto.trim()) onCargar(texto, empresa.trim(), sector.trim());
   }
 
   return (
@@ -446,6 +555,10 @@ function TextoLoaderModal({
         <TextoLoaderContent
           texto={texto}
           setTexto={setTexto}
+          empresa={empresa}
+          setEmpresa={setEmpresa}
+          sector={sector}
+          setSector={setSector}
           onCargarEjemplo={() => setTexto(EJEMPLO_TEXTO)}
           onProcesar={handleProcesar}
         />
@@ -519,8 +632,8 @@ export default function LicenciasPage() {
     showToast(`Licencia eliminada · ${deleteTarget.nombre}`);
   }
 
-  function handleProcesarTexto(texto: string) {
-    const { licencias: nuevas, ignoradas } = parsearTextoLicencias(texto);
+  function handleProcesarTexto(texto: string, empresa: string, sector: string) {
+    const { licencias: nuevas, ignoradas } = parsearTextoLicencias(texto, empresa, sector);
     if (nuevas.length === 0) {
       showToast('No se encontraron licencias válidas en el texto');
       return;
@@ -545,6 +658,12 @@ export default function LicenciasPage() {
     showToast('Todos los datos eliminados');
   }
 
+  function handleUpdateField(id: string, field: 'empresa' | 'sector', value: string) {
+    const next = licencias.map(l => (l.id === id ? { ...l, [field]: value } : l));
+    setLicencias(next);
+    saveData(next);
+  }
+
   // ── Stats ──────────────────────────────────────────────────────────────────
 
   const stats = useMemo(() => {
@@ -562,6 +681,15 @@ export default function LicenciasPage() {
     [licencias]
   );
 
+  const empresasUsadas = useMemo(
+    () => [...new Set(licencias.map(l => l.empresa).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
+    [licencias],
+  );
+  const sectoresUsados = useMemo(
+    () => [...new Set(licencias.map(l => l.sector).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
+    [licencias],
+  );
+
   // ── Filters & sort ─────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
@@ -569,7 +697,11 @@ export default function LicenciasPage() {
 
     if (search.trim()) {
       const q = search.toLowerCase().trim();
-      result = result.filter(l => l.nombre.toLowerCase().includes(q));
+      result = result.filter(l =>
+        l.nombre.toLowerCase().includes(q) ||
+        l.empresa.toLowerCase().includes(q) ||
+        l.sector.toLowerCase().includes(q)
+      );
     }
 
     switch (filtroEstado) {
@@ -717,7 +849,7 @@ export default function LicenciasPage() {
               <Search size={13} className="text-gray-400 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Buscar persona..."
+                placeholder="Buscar persona, empresa o sector..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="text-sm outline-none flex-1 bg-transparent"
@@ -767,7 +899,7 @@ export default function LicenciasPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-[#003DA5] text-white">
-                    {['Nombre', 'Inicio', 'Fin', 'Días lic.', 'Reintegro', 'Estado', 'Días rest.', ''].map(h => (
+                    {['Nombre', 'Empresa', 'Sector', 'Inicio', 'Fin', 'Días lic.', 'Reintegro', 'Estado', 'Días rest.', ''].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap">
                         {h}
                       </th>
@@ -777,7 +909,7 @@ export default function LicenciasPage() {
                 <tbody>
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                      <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
                         Ninguna licencia coincide con los filtros.
                       </td>
                     </tr>
@@ -785,6 +917,18 @@ export default function LicenciasPage() {
                   {filtered.map(l => (
                     <tr key={l.id} className={`border-b border-gray-100 group transition-colors hover:brightness-95 ${rowStyle(l)}`}>
                       <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{l.nombre}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap max-w-[160px]">
+                        <EditableCell
+                          value={l.empresa} placeholder="—" listId="lic-empresas"
+                          onCommit={v => handleUpdateField(l.id, 'empresa', v)}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap max-w-[160px]">
+                        <EditableCell
+                          value={l.sector} placeholder="—" listId="lic-sectores"
+                          onCommit={v => handleUpdateField(l.id, 'sector', v)}
+                        />
+                      </td>
                       <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{fmtDate(l.fechaInicio)}</td>
                       <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{fmtDate(l.fechaFin)}</td>
                       <td className="px-3 py-2.5 text-center">
@@ -849,6 +993,13 @@ export default function LicenciasPage() {
         <AddPanel onSave={handleAdd} />
         </div>
       </div>
+
+      <datalist id="lic-empresas">
+        {empresasUsadas.map(v => <option key={v} value={v} />)}
+      </datalist>
+      <datalist id="lic-sectores">
+        {sectoresUsados.map(v => <option key={v} value={v} />)}
+      </datalist>
 
       {deleteTarget && (
         <DeleteModal licencia={deleteTarget} onConfirm={handleDelete} onClose={() => setDeleteTarget(null)} />

@@ -133,6 +133,34 @@ export interface VentasStats {
 const OCULTOS_KEY       = 'elared_vendedores_ocultos';
 const SESSION_FILTRO_KEY = 'elared_ventas_filtro_periodo';
 const MOSTRAR_CANTIDADES_KEY = 'elared_ventas_mostrar_cantidades';
+const RESUMEN_MENSUAL_KEY = 'elared_ventas_resumen_mensual';
+
+// Resumen "Mes → Total general" acumulado entre cargas de distintos meses.
+// Se guarda por empresa: al analizar un archivo se vuelca el total de registros
+// de cada mes que tenga, para la empresa activa. Un mes editado a mano queda
+// marcado `manual` y no se pisa en la próxima carga.
+interface ResumenMes { total: number; manual?: boolean }
+type ResumenMensual = Record<string, Record<string, ResumenMes>>; // empresa → 'YYYY-MM' → {…}
+
+function loadResumenMensual(): ResumenMensual {
+  try {
+    const raw = localStorage.getItem(RESUMEN_MENSUAL_KEY);
+    return raw ? (JSON.parse(raw) as ResumenMensual) : {};
+  } catch { return {}; }
+}
+
+function saveResumenMensual(r: ResumenMensual) {
+  try { localStorage.setItem(RESUMEN_MENSUAL_KEY, JSON.stringify(r)); } catch { /* ignore */ }
+}
+
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function labelMes(mesKey: string, conAnio: boolean): string {
+  const [y, m] = mesKey.split('-');
+  const idx = Number(m) - 1;
+  const nombre = MESES_CORTOS[idx] ?? mesKey;
+  return conAnio ? `${nombre} ${y.slice(2)}` : nombre;
+}
 
 function loadOcultos(): Set<string> {
   try {
@@ -510,6 +538,117 @@ function EmpresaTabs({ empresas, active, onChange }: EmpresaTabsProps) {
   );
 }
 
+// ── Cuadro "Mes → Total general" (acumulado entre cargas) ─────────────────────
+
+interface ResumenMensualCardProps {
+  empresa: string;
+  datos: Record<string, ResumenMes>;
+  onEdit: (mesKey: string, total: number) => void;
+  onDelete: (mesKey: string) => void;
+  onClear: () => void;
+}
+
+function ResumenMensualCard({ empresa, datos, onEdit, onDelete, onClear }: ResumenMensualCardProps) {
+  const [editando, setEditando] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+
+  const meses = Object.keys(datos).sort();
+  const anios = new Set(meses.map(m => m.slice(0, 4)));
+  const conAnio = anios.size > 1;
+  const totalGeneral = meses.reduce((s, m) => s + (datos[m]?.total ?? 0), 0);
+
+  function commit(mesKey: string) {
+    setEditando(null);
+    const n = parseInt(draft, 10);
+    if (!Number.isNaN(n) && n >= 0 && n !== datos[mesKey]?.total) onEdit(mesKey, n);
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 max-w-md">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-gray-400">Resumen mensual</div>
+          <div className="text-[11px] text-gray-400">
+            {empresa === 'Todas' ? 'Todas las empresas' : empresa} · total de registros por mes
+          </div>
+        </div>
+        {meses.length > 0 && (
+          <button
+            onClick={onClear}
+            className="text-[11px] text-gray-400 hover:text-red-600 transition-colors"
+          >
+            Limpiar
+          </button>
+        )}
+      </div>
+
+      {meses.length === 0 ? (
+        <p className="text-xs text-gray-400 py-4 text-center">
+          Se completa solo al analizar archivos de cada mes.
+        </p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+              <th className="text-left pb-1.5">Mes</th>
+              <th className="text-right pb-1.5">Total general</th>
+              <th className="w-6" />
+            </tr>
+          </thead>
+          <tbody>
+            {meses.map(mesKey => (
+              <tr key={mesKey} className="group border-t border-gray-100">
+                <td className="py-1.5 text-gray-700">{labelMes(mesKey, conAnio)}</td>
+                <td className="py-1.5 text-right">
+                  {editando === mesKey ? (
+                    <input
+                      autoFocus
+                      type="number"
+                      value={draft}
+                      onChange={e => setDraft(e.target.value)}
+                      onBlur={() => commit(mesKey)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') commit(mesKey);
+                        if (e.key === 'Escape') setEditando(null);
+                      }}
+                      className="w-20 border border-[#003DA5] rounded px-1.5 py-0.5 text-right text-sm outline-none"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => { setDraft(String(datos[mesKey]?.total ?? 0)); setEditando(mesKey); }}
+                      title={datos[mesKey]?.manual ? 'Editado a mano — no se pisa al recargar' : 'Clic para editar'}
+                      className="font-semibold text-gray-800 tabular-nums hover:text-[#003DA5]"
+                    >
+                      {(datos[mesKey]?.total ?? 0).toLocaleString()}
+                      {datos[mesKey]?.manual && <span className="ml-1 text-[10px] text-amber-500 align-top">✎</span>}
+                    </button>
+                  )}
+                </td>
+                <td className="py-1.5 text-right">
+                  <button
+                    onClick={() => onDelete(mesKey)}
+                    className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-600 transition-all"
+                    title="Quitar este mes"
+                  >
+                    <XCircle size={13} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-200">
+              <td className="pt-1.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total</td>
+              <td className="pt-1.5 text-right font-bold text-[#003DA5] tabular-nums">{totalGeneral.toLocaleString()}</td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      )}
+    </div>
+  );
+}
+
 // ── Sección per-vendedor (Mejora 3) ───────────────────────────────────────────
 function VendedorActivoSection({ vendedor }: { vendedor: FuncionarioStat }) {
   return (
@@ -626,6 +765,7 @@ export default function VentasModule() {
   const [filtroPeriodo, setFiltroPeriodo]         = useState<FiltroState>(loadFiltroPeriodo);
   const [mesSeleccionado, setMesSeleccionado]     = useState<string | null>(null);
   const [mostrarCantidades, setMostrarCantidades] = useState<boolean>(loadMostrarCantidades);
+  const [resumenMensual, setResumenMensual] = useState<ResumenMensual>(loadResumenMensual);
   const initDoneRef = useRef(false);
 
   const toggleMostrarCantidades = useCallback(() => {
@@ -681,6 +821,59 @@ export default function VentasModule() {
     return applyPeriodFilter(rows, mapping, filtro);
   }, [mapping]);
 
+  // Vuelca al resumen mensual el total de registros de cada mes del archivo
+  // actual, para la empresa indicada. No cuenta ocultos ni filtro de período:
+  // es el total "crudo" del mes. Los meses editados a mano no se pisan.
+  const capturarResumen = useCallback((emp: string) => {
+    if (!parsed || !mapping.fecha) return;
+    const rows = getFilteredRows(parsed.rows, mapping, emp);
+    const porMes = new Map<string, number>();
+    for (const r of rows) {
+      const f = normalizeFechaVenta(String(r[mapping.fecha] ?? '')).substring(0, 7);
+      if (/^\d{4}-\d{2}$/.test(f)) porMes.set(f, (porMes.get(f) ?? 0) + 1);
+    }
+    if (porMes.size === 0) return;
+    setResumenMensual(prev => {
+      const empPrev = prev[emp] ?? {};
+      const empNext: Record<string, ResumenMes> = { ...empPrev };
+      for (const [mes, total] of porMes) {
+        if (empNext[mes]?.manual) continue;
+        empNext[mes] = { total };
+      }
+      const next = { ...prev, [emp]: empNext };
+      saveResumenMensual(next);
+      return next;
+    });
+  }, [parsed, mapping]);
+
+  const handleEditResumen = useCallback((mesKey: string, total: number) => {
+    setResumenMensual(prev => {
+      const empPrev = prev[empresaActiva] ?? {};
+      const next = { ...prev, [empresaActiva]: { ...empPrev, [mesKey]: { total, manual: true } } };
+      saveResumenMensual(next);
+      return next;
+    });
+  }, [empresaActiva]);
+
+  const handleDeleteResumen = useCallback((mesKey: string) => {
+    setResumenMensual(prev => {
+      const empPrev = { ...(prev[empresaActiva] ?? {}) };
+      delete empPrev[mesKey];
+      const next = { ...prev, [empresaActiva]: empPrev };
+      saveResumenMensual(next);
+      return next;
+    });
+  }, [empresaActiva]);
+
+  const handleClearResumen = useCallback(() => {
+    setResumenMensual(prev => {
+      const next = { ...prev };
+      delete next[empresaActiva];
+      saveResumenMensual(next);
+      return next;
+    });
+  }, [empresaActiva]);
+
   const handleFile = useCallback(async (file: File) => {
     setError(''); setStage('loading');
     clearVentas();
@@ -709,11 +902,12 @@ export default function VentasModule() {
       setEmpresaActiva(defaultEmpresa);
       const s = processVentas(getRows(parsed.rows, defaultEmpresa, vendedoresOcultos, filtroPeriodo), mapping, defaultEmpresa);
       setStats(s);
+      capturarResumen(defaultEmpresa);
       recordActivity('ventas', parsed.fileName);
       saveToStore({ data: s, parsed, mapping, empresas: empList, empresaActiva: defaultEmpresa, nombreArchivo: parsed.fileName });
       setStage('analysis');
     }, 300);
-  }, [parsed, mapping, vendedoresOcultos, filtroPeriodo, getRows, saveToStore]);
+  }, [parsed, mapping, vendedoresOcultos, filtroPeriodo, getRows, saveToStore, capturarResumen]);
 
   const handleEmpresaChange = useCallback((empresa: string) => {
     if (!parsed) return;
@@ -721,8 +915,9 @@ export default function VentasModule() {
     setVendedorActivo(null);
     const s = processVentas(getRows(parsed.rows, empresa, vendedoresOcultos, filtroPeriodo), mapping, empresa);
     setStats(s);
+    capturarResumen(empresa);
     saveToStore({ data: s, parsed, mapping, empresas, empresaActiva: empresa, nombreArchivo: parsed.fileName });
-  }, [parsed, mapping, empresas, vendedoresOcultos, filtroPeriodo, getRows, saveToStore]);
+  }, [parsed, mapping, empresas, vendedoresOcultos, filtroPeriodo, getRows, saveToStore, capturarResumen]);
 
   const handleHideVendedor = useCallback((nombre: string) => {
     if (!parsed) return;
@@ -820,6 +1015,8 @@ export default function VentasModule() {
   }, [stats, storeEntry, filtroPeriodo, totalSinFiltro]);
 
   const vendedorData = vendedorActivo ? (stats?.byFuncionario.find(f => f.nombre === vendedorActivo) ?? null) : null;
+  const resumenEmpresa = resumenMensual[empresaActiva] ?? {};
+  const mostrarResumen = Boolean(mapping.fecha) || Object.keys(resumenEmpresa).length > 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -987,6 +1184,17 @@ export default function VentasModule() {
 
             {/* Selector de empresa */}
             <EmpresaTabs empresas={empresas} active={empresaActiva} onChange={handleEmpresaChange} />
+
+            {/* Resumen "Mes → Total general" acumulado entre cargas */}
+            {mostrarResumen && (
+              <ResumenMensualCard
+                empresa={empresaActiva}
+                datos={resumenEmpresa}
+                onEdit={handleEditResumen}
+                onDelete={handleDeleteResumen}
+                onClear={handleClearResumen}
+              />
+            )}
 
             {/* Controls bar */}
             <div className="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-gray-200 px-4 py-3">

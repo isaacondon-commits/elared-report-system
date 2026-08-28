@@ -3,6 +3,9 @@ import {
   BarChart2, Users, Calendar, Download, Loader2,
   ArrowUpRight, Layers, Repeat, CheckCircle, XCircle, EyeOff, Hash, Percent, AlertTriangle,
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell,
+} from 'recharts';
 import FileUploader from '../../components/FileUploader';
 import ColumnMapper from '../../components/ColumnMapper';
 import KPICard from '../../components/KPICard';
@@ -538,24 +541,35 @@ function EmpresaTabs({ empresas, active, onChange }: EmpresaTabsProps) {
   );
 }
 
-// ── Cuadro "Mes → Total general" (acumulado entre cargas) ─────────────────────
+// ── Cuadro "Mes → Total general" + gráfico (acumulado entre cargas) ───────────
 
 interface ResumenMensualCardProps {
   empresa: string;
   datos: Record<string, ResumenMes>;
+  mostrarCantidades: boolean;
   onEdit: (mesKey: string, total: number) => void;
   onDelete: (mesKey: string) => void;
   onClear: () => void;
 }
 
-function ResumenMensualCard({ empresa, datos, onEdit, onDelete, onClear }: ResumenMensualCardProps) {
+function MiniStat({ label, value, tone }: { label: string; value: string; tone?: 'up' | 'down' }) {
+  const color = tone === 'up' ? '#16a34a' : tone === 'down' ? '#E3000F' : '#1e293b';
+  return (
+    <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="text-sm font-bold tabular-nums" style={{ color }}>{value}</div>
+    </div>
+  );
+}
+
+function ResumenMensualCard({ empresa, datos, mostrarCantidades, onEdit, onDelete, onClear }: ResumenMensualCardProps) {
   const [editando, setEditando] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
 
   const meses = Object.keys(datos).sort();
-  const anios = new Set(meses.map(m => m.slice(0, 4)));
-  const conAnio = anios.size > 1;
-  const totalGeneral = meses.reduce((s, m) => s + (datos[m]?.total ?? 0), 0);
+  const conAnio = new Set(meses.map(m => m.slice(0, 4))).size > 1;
+  const totales = meses.map(m => datos[m]?.total ?? 0);
+  const totalGeneral = totales.reduce((s, n) => s + n, 0);
 
   function commit(mesKey: string) {
     setEditando(null);
@@ -563,87 +577,158 @@ function ResumenMensualCard({ empresa, datos, onEdit, onDelete, onClear }: Resum
     if (!Number.isNaN(n) && n >= 0 && n !== datos[mesKey]?.total) onEdit(mesKey, n);
   }
 
+  // ── Métricas derivadas ──
+  const maxTotal = totales.length ? Math.max(...totales) : 0;
+  const promedio = totales.length ? Math.round(totalGeneral / totales.length) : 0;
+  const idxMejor = totales.indexOf(maxTotal);
+  const idxPeor = totales.length ? totales.indexOf(Math.min(...totales)) : -1;
+  const deltaUltimo = totales.length >= 2 ? totales[totales.length - 1] - totales[totales.length - 2] : null;
+  const deltaPct = deltaUltimo !== null && totales[totales.length - 2] > 0
+    ? Math.round((deltaUltimo / totales[totales.length - 2]) * 100)
+    : null;
+
+  const chartData = meses.map((m, i) => ({
+    mes: labelMes(m, conAnio),
+    total: datos[m]?.total ?? 0,
+    esMax: i === idxMejor,
+  }));
+
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 max-w-md">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-gray-400">Resumen mensual</div>
-          <div className="text-[11px] text-gray-400">
-            {empresa === 'Todas' ? 'Todas las empresas' : empresa} · total de registros por mes
-          </div>
-        </div>
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="font-semibold text-gray-900">
+          Resumen mensual
+          {empresa && empresa !== 'Todas' && (
+            <span className="ml-2 text-sm font-normal text-gray-400">· {empresa}</span>
+          )}
+        </h3>
         {meses.length > 0 && (
-          <button
-            onClick={onClear}
-            className="text-[11px] text-gray-400 hover:text-red-600 transition-colors"
-          >
+          <button onClick={onClear} className="text-[11px] text-gray-400 hover:text-red-600 transition-colors">
             Limpiar
           </button>
         )}
       </div>
+      <p className="text-[11px] text-gray-400 mb-4">
+        Total de registros por mes · se acumula al analizar archivos de distintos meses.
+      </p>
 
       {meses.length === 0 ? (
-        <p className="text-xs text-gray-400 py-4 text-center">
+        <p className="text-sm text-gray-400 py-8 text-center">
           Se completa solo al analizar archivos de cada mes.
         </p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-              <th className="text-left pb-1.5">Mes</th>
-              <th className="text-right pb-1.5">Total general</th>
-              <th className="w-6" />
-            </tr>
-          </thead>
-          <tbody>
-            {meses.map(mesKey => (
-              <tr key={mesKey} className="group border-t border-gray-100">
-                <td className="py-1.5 text-gray-700">{labelMes(mesKey, conAnio)}</td>
-                <td className="py-1.5 text-right">
-                  {editando === mesKey ? (
-                    <input
-                      autoFocus
-                      type="number"
-                      value={draft}
-                      onChange={e => setDraft(e.target.value)}
-                      onBlur={() => commit(mesKey)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') commit(mesKey);
-                        if (e.key === 'Escape') setEditando(null);
-                      }}
-                      className="w-20 border border-[#003DA5] rounded px-1.5 py-0.5 text-right text-sm outline-none"
-                    />
-                  ) : (
-                    <button
-                      onClick={() => { setDraft(String(datos[mesKey]?.total ?? 0)); setEditando(mesKey); }}
-                      title={datos[mesKey]?.manual ? 'Editado a mano — no se pisa al recargar' : 'Clic para editar'}
-                      className="font-semibold text-gray-800 tabular-nums hover:text-[#003DA5]"
-                    >
-                      {(datos[mesKey]?.total ?? 0).toLocaleString()}
-                      {datos[mesKey]?.manual && <span className="ml-1 text-[10px] text-amber-500 align-top">✎</span>}
-                    </button>
-                  )}
-                </td>
-                <td className="py-1.5 text-right">
-                  <button
-                    onClick={() => onDelete(mesKey)}
-                    className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-600 transition-all"
-                    title="Quitar este mes"
-                  >
-                    <XCircle size={13} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-gray-200">
-              <td className="pt-1.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total</td>
-              <td className="pt-1.5 text-right font-bold text-[#003DA5] tabular-nums">{totalGeneral.toLocaleString()}</td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
+        <>
+          {/* Métricas */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+            <MiniStat label="Promedio/mes" value={promedio.toLocaleString()} />
+            <MiniStat label="Mejor mes" value={idxMejor >= 0 ? `${labelMes(meses[idxMejor], conAnio)} · ${maxTotal}` : '—'} />
+            <MiniStat label="Menor mes" value={idxPeor >= 0 ? `${labelMes(meses[idxPeor], conAnio)} · ${totales[idxPeor]}` : '—'} />
+            <MiniStat
+              label="Último vs. anterior"
+              tone={deltaUltimo == null || deltaUltimo === 0 ? undefined : deltaUltimo > 0 ? 'up' : 'down'}
+              value={deltaUltimo == null ? '—'
+                : `${deltaUltimo > 0 ? '▲ +' : deltaUltimo < 0 ? '▼ ' : ''}${deltaUltimo}${deltaPct != null ? ` (${deltaPct > 0 ? '+' : ''}${deltaPct}%)` : ''}`}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr] gap-6 items-start">
+            {/* Tabla */}
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                  <th className="text-left pb-1.5">Mes</th>
+                  <th className="text-right pb-1.5">Total general</th>
+                  <th className="text-right pb-1.5 pl-2">Var.</th>
+                  <th className="w-6" />
+                </tr>
+              </thead>
+              <tbody>
+                {meses.map((mesKey, i) => {
+                  const total = datos[mesKey]?.total ?? 0;
+                  const delta = i > 0 ? total - (datos[meses[i - 1]]?.total ?? 0) : null;
+                  return (
+                    <tr key={mesKey} className="group border-t border-gray-100">
+                      <td className="py-1.5 text-gray-700">{labelMes(mesKey, conAnio)}</td>
+                      <td className="py-1.5 text-right">
+                        {editando === mesKey ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            value={draft}
+                            onChange={e => setDraft(e.target.value)}
+                            onBlur={() => commit(mesKey)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') commit(mesKey);
+                              if (e.key === 'Escape') setEditando(null);
+                            }}
+                            className="w-20 border border-[#003DA5] rounded px-1.5 py-0.5 text-right text-sm outline-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => { setDraft(String(total)); setEditando(mesKey); }}
+                            title={datos[mesKey]?.manual ? 'Editado a mano — no se pisa al recargar' : 'Clic para editar'}
+                            className="font-semibold text-gray-800 tabular-nums hover:text-[#003DA5]"
+                          >
+                            {total.toLocaleString()}
+                            {datos[mesKey]?.manual && <span className="ml-1 text-[10px] text-amber-500 align-top">✎</span>}
+                          </button>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right pl-2 tabular-nums text-xs">
+                        {delta == null ? (
+                          <span className="text-gray-300">—</span>
+                        ) : delta === 0 ? (
+                          <span className="text-gray-400">0</span>
+                        ) : (
+                          <span className={delta > 0 ? 'text-green-600' : 'text-red-600'}>
+                            {delta > 0 ? `+${delta}` : delta}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right">
+                        <button
+                          onClick={() => onDelete(mesKey)}
+                          className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-600 transition-all"
+                          title="Quitar este mes"
+                        >
+                          <XCircle size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-200">
+                  <td className="pt-1.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total</td>
+                  <td className="pt-1.5 text-right font-bold text-[#003DA5] tabular-nums">{totalGeneral.toLocaleString()}</td>
+                  <td />
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Gráfico */}
+            <div className="min-w-0">
+              <ResponsiveContainer width="100%" height={Math.max(chartData.length * 16 + 80, 200)}>
+                <BarChart data={chartData} margin={{ top: 20, right: 16, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} domain={[0, (m: number) => Math.ceil(m * 1.2)]} />
+                  <Tooltip formatter={(v: unknown) => [`${v} registros`, 'Total']} cursor={{ fill: 'rgba(0,61,165,0.06)' }} />
+                  <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                    {chartData.map((d, i) => (
+                      <Cell key={i} fill={d.esMax ? '#28a745' : '#003DA5'} />
+                    ))}
+                    {mostrarCantidades && (
+                      <LabelList dataKey="total" position="top" style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
+                    )}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -1185,17 +1270,6 @@ export default function VentasModule() {
             {/* Selector de empresa */}
             <EmpresaTabs empresas={empresas} active={empresaActiva} onChange={handleEmpresaChange} />
 
-            {/* Resumen "Mes → Total general" acumulado entre cargas */}
-            {mostrarResumen && (
-              <ResumenMensualCard
-                empresa={empresaActiva}
-                datos={resumenEmpresa}
-                onEdit={handleEditResumen}
-                onDelete={handleDeleteResumen}
-                onClear={handleClearResumen}
-              />
-            )}
-
             {/* Controls bar */}
             <div className="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-gray-200 px-4 py-3">
               <div className="flex items-center gap-2">
@@ -1259,6 +1333,18 @@ export default function VentasModule() {
                 key={`temporal-${stats.byFecha.length}-${stats.fechaMin}-${stats.fechaMax}`}
                 stats={stats}
                 mostrarCantidades={mostrarCantidades}
+              />
+            )}
+
+            {/* 12b. Resumen mensual acumulado entre cargas (Mes → Total + gráfico) */}
+            {mostrarResumen && (
+              <ResumenMensualCard
+                empresa={empresaActiva}
+                datos={resumenEmpresa}
+                mostrarCantidades={mostrarCantidades}
+                onEdit={handleEditResumen}
+                onDelete={handleDeleteResumen}
+                onClear={handleClearResumen}
               />
             )}
 

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { X } from 'lucide-react';
+import { calcularRangos, OPCION_TODOS_MESES } from './periodoRangos';
 
 export interface FiltroState {
   desde: string | null;
@@ -15,27 +16,6 @@ interface Props {
   mesesDisponibles: string[];
   totalVentas: number;
   totalSinFiltro: number;
-}
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
-function calcularRangos(mes: string) {
-  const [year, monthStr] = mes.split('-');
-  const y = Number(year);
-  const m = Number(monthStr);
-  const lastDay = new Date(y, m, 0).getDate();
-  const d = (day: number) => `${year}-${monthStr}-${pad2(day)}`;
-  return {
-    semana1:   { desde: d(1),  hasta: d(7) },
-    semana2:   { desde: d(8),  hasta: d(14) },
-    semana3:   { desde: d(15), hasta: d(21) },
-    semana4:   { desde: d(22), hasta: d(lastDay) },
-    quincena1: { desde: d(1),  hasta: d(15) },
-    quincena2: { desde: d(16), hasta: d(lastDay) },
-    esteMes:   { desde: d(1),  hasta: d(lastDay) },
-  };
 }
 
 function getSemanaActual(): { desde: string; hasta: string } {
@@ -100,8 +80,14 @@ export default function FiltroPeriodo({
     ];
   }, [rangos]);
 
+  // "Todo" con un mes elegido en un archivo multi-mes = ese mes completo.
+  // Con "Todos los meses" (o archivo de un solo mes) = sin filtro.
+  const todoEsMesCompleto = mesSeleccionado !== null && mesesDisponibles.length > 1;
+
   const isActive = (pill: PillDef) => {
-    if (pill.label === 'Todo') return filtro.desde === null;
+    if (pill.label === 'Todo') {
+      return todoEsMesCompleto ? filtro.label === 'Todo' : filtro.desde === null;
+    }
     return filtro.label === pill.label;
   };
 
@@ -109,7 +95,12 @@ export default function FiltroPeriodo({
 
   const handlePill = (pill: PillDef) => {
     if (pill.label === 'Todo') {
-      onChange({ desde: null, hasta: null, label: null });
+      if (todoEsMesCompleto && mesSeleccionado) {
+        const r = calcularRangos(mesSeleccionado).esteMes;
+        onChange({ desde: r.desde, hasta: r.hasta, label: 'Todo' });
+      } else {
+        onChange({ desde: null, hasta: null, label: null });
+      }
     } else if (pill.rango) {
       onChange({ desde: pill.rango.desde, hasta: pill.rango.hasta, label: pill.label });
     }
@@ -148,7 +139,7 @@ export default function FiltroPeriodo({
       {/* Month selector — only when multi-month data */}
       {mesesDisponibles.length > 1 && (
         <select
-          value={mesSeleccionado ?? ''}
+          value={mesSeleccionado ?? OPCION_TODOS_MESES}
           onChange={e => onMesChange(e.target.value)}
           style={{
             fontSize: 12, border: '1px solid #E2E8F0', borderRadius: 6,
@@ -156,6 +147,7 @@ export default function FiltroPeriodo({
             cursor: 'pointer', flexShrink: 0,
           }}
         >
+          <option value={OPCION_TODOS_MESES}>Todos los meses</option>
           {mesesDisponibles.map(m => (
             <option key={m} value={m}>{formatMes(m)}</option>
           ))}

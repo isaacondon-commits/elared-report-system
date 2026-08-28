@@ -13,6 +13,7 @@ import Header from '../../components/Header';
 import { parseExcel, normalizeEstado, normalizeFechaVenta, getEquivalente, getEquivalenteColor, type ParseResult, type EstadoVenta } from '../../utils/smartParser';
 import VentasCharts, { TemporalChart, VendedoresChart } from './VentasCharts';
 import FiltroPeriodo, { type FiltroState } from '../../components/ventas/FiltroPeriodo';
+import { rangoParaLabel, OPCION_TODOS_MESES } from '../../components/ventas/periodoRangos';
 import VentasPerformanceTable from './VentasPerformanceTable';
 import { exportVentasPptx, exportVentasExcel } from './VentasExport';
 import PDFModal from '../../components/PDFModal';
@@ -861,26 +862,26 @@ export default function VentasModule() {
     });
   }, []);
 
-  // Detección del mes predominante y todos los meses presentes en el archivo
-  const { mesPredominante, mesesDisponibles } = useMemo(() => {
-    if (!parsed || !mapping.fecha) return { mesPredominante: null, mesesDisponibles: [] };
-    const mesesMap = new Map<string, number>();
+  // Todos los meses presentes en el archivo (para el selector de mes)
+  const mesesDisponibles = useMemo(() => {
+    if (!parsed || !mapping.fecha) return [] as string[];
+    const set = new Set<string>();
     for (const r of parsed.rows) {
       const f = normalizeFechaVenta(String(r[mapping.fecha] ?? '')).substring(0, 7);
-      if (f && /^\d{4}-\d{2}$/.test(f)) mesesMap.set(f, (mesesMap.get(f) ?? 0) + 1);
+      if (/^\d{4}-\d{2}$/.test(f)) set.add(f);
     }
-    if (mesesMap.size === 0) return { mesPredominante: null, mesesDisponibles: [] };
-    const entries = [...mesesMap.entries()].sort((a, b) => b[1] - a[1]);
-    return {
-      mesPredominante: entries[0][0],
-      mesesDisponibles: entries.map(e => e[0]).sort(),
-    };
+    return [...set].sort();
   }, [parsed, mapping.fecha]);
 
-  // Inicializar mesSeleccionado cuando se carga un nuevo archivo
+  // Inicializa mesSeleccionado: archivo de un solo mes → ese mes; al restaurar
+  // con un filtro guardado que cae dentro de un único mes → ese mes. Multi-mes
+  // sin filtro arranca en "Todos los meses" (null).
   useEffect(() => {
-    if (mesPredominante && !mesSeleccionado) setMesSeleccionado(mesPredominante);
-  }, [mesPredominante]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (mesSeleccionado) return;
+    const dm = filtroPeriodo.desde?.slice(0, 7);
+    if (dm && dm === filtroPeriodo.hasta?.slice(0, 7)) setMesSeleccionado(dm);
+    else if (mesesDisponibles.length === 1) setMesSeleccionado(mesesDisponibles[0]);
+  }, [mesesDisponibles, filtroPeriodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Al restaurar desde store: re-aplicar filtro de sessionStorage si existe
   useEffect(() => {
@@ -1026,7 +1027,7 @@ export default function VentasModule() {
     saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
   }, [parsed, mapping, empresas, empresaActiva, filtroPeriodo, getRows, saveToStore]);
 
-  const handleFiltroPeriodo = useCallback((nuevo: FiltroState) => {
+  const aplicarFiltro = useCallback((nuevo: FiltroState) => {
     if (!parsed) return;
     setFiltroPeriodo(nuevo);
     saveFiltroPeriodo(nuevo);
@@ -1039,21 +1040,23 @@ export default function VentasModule() {
     saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
   }, [parsed, mapping, empresas, empresaActiva, vendedoresOcultos, getRows, saveToStore]);
 
-  const handleMesChange = useCallback((mes: string) => {
-    setMesSeleccionado(mes);
-    if (!filtroPeriodo.desde) return;
-    const limpio: FiltroState = { desde: null, hasta: null, label: null };
-    setFiltroPeriodo(limpio);
-    saveFiltroPeriodo(limpio);
-    if (!parsed) return;
-    const s = processVentas(
-      getRows(parsed.rows, empresaActiva, vendedoresOcultos, limpio),
-      mapping,
-      empresaActiva,
-    );
-    setStats(s);
-    saveToStore({ data: s, parsed, mapping, empresas, empresaActiva, nombreArchivo: parsed.fileName });
-  }, [filtroPeriodo, parsed, mapping, empresas, empresaActiva, vendedoresOcultos, getRows, saveToStore]);
+  // Cambio del selector de mes. "Todos los meses" → sin filtro. Un mes concreto
+  // → filtra a ese mes completo, salvo que haya una pill re-mapeable activa
+  // (Semana N / quincena), en cuyo caso se re-aplica esa pill al mes nuevo.
+  const handleMesChange = useCallback((valor: string) => {
+    const nuevoMes = valor === OPCION_TODOS_MESES ? null : valor;
+    setMesSeleccionado(nuevoMes);
+
+    if (!nuevoMes) {
+      aplicarFiltro({ desde: null, hasta: null, label: null });
+      return;
+    }
+    const label = filtroPeriodo.label && rangoParaLabel(nuevoMes, filtroPeriodo.label)
+      ? filtroPeriodo.label
+      : 'Todo';
+    const r = rangoParaLabel(nuevoMes, label)!; // 'Todo' siempre devuelve rango
+    aplicarFiltro({ desde: r.desde, hasta: r.hasta, label });
+  }, [filtroPeriodo, aplicarFiltro]);
 
   const handleExport = useCallback(() => {
     if (!stats) return;
@@ -1259,7 +1262,7 @@ export default function VentasModule() {
             {/* Filtro de período */}
             <FiltroPeriodo
               filtro={filtroPeriodo}
-              onChange={handleFiltroPeriodo}
+              onChange={aplicarFiltro}
               mesSeleccionado={mesSeleccionado}
               onMesChange={handleMesChange}
               mesesDisponibles={mesesDisponibles}

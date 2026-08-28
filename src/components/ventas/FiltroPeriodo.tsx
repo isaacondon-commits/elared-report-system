@@ -18,20 +18,6 @@ interface Props {
   totalSinFiltro: number;
 }
 
-function getSemanaActual(): { desde: string; hasta: string } {
-  const hoy = new Date();
-  const dia = hoy.getDay();
-  const diff = dia === 0 ? -6 : 1 - dia;
-  const lunes = new Date(hoy);
-  lunes.setDate(hoy.getDate() + diff);
-  const domingo = new Date(lunes);
-  domingo.setDate(lunes.getDate() + 6);
-  return {
-    desde: lunes.toISOString().split('T')[0],
-    hasta: domingo.toISOString().split('T')[0],
-  };
-}
-
 function formatMes(mes: string): string {
   const [year, month] = mes.split('-').map(Number);
   const nombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -66,10 +52,8 @@ export default function FiltroPeriodo({
   );
 
   const pills: PillDef[] = useMemo(() => {
-    const semAct = getSemanaActual();
     return [
       { label: 'Todo',         rango: null },
-      { label: 'Esta semana',  rango: semAct },
       { label: 'Semana 1',     rango: rangos?.semana1   ?? null },
       { label: 'Semana 2',     rango: rangos?.semana2   ?? null },
       { label: 'Semana 3',     rango: rangos?.semana3   ?? null },
@@ -158,7 +142,7 @@ export default function FiltroPeriodo({
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: '1 1 0', minWidth: 0 }}>
         {pills.map(pill => {
           const active = isActive(pill);
-          const disabled = pill.label !== 'Todo' && pill.label !== 'Esta semana' && !rangos;
+          const disabled = pill.label !== 'Todo' && !rangos;
           return (
             <button
               key={pill.label}

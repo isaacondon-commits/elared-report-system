@@ -27,8 +27,7 @@ export function calcularRangos(mes: string) {
 
 // Rango que corresponde a una pill, para un mes dado. Se usa también desde
 // VentasModule al cambiar de mes: re-mapea la pill activa al mes nuevo.
-// 'Todo' / 'Este mes' → mes completo. Devuelve null para pills no re-mapeables
-// (ej. 'Esta semana', que es absoluta).
+// 'Todo' / 'Este mes' → mes completo. Devuelve null para labels desconocidos.
 export function rangoParaLabel(mes: string, label: string): { desde: string; hasta: string } | null {
   const r = calcularRangos(mes);
   switch (label) {
